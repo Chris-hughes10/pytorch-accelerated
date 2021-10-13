@@ -183,15 +183,15 @@ class SaveBestModelCallback(TrainerCallback):
             self.save_dir = str(datetime.now()).split(".")[0].replace(" ", "_")
 
     def save_model(self, trainer):
-        if trainer.run_config["is_local_process_zero"]:
-            torch.save(
-                {
-                    "loss": self.best_metric,
-                    "model_state_dict": trainer.model.state_dict(),
-                    "optimizer_state_dict": trainer.optimizer.state_dict(),
-                },
-                self.save_dir,
-            )
+        trainer._accelerator.wait_for_everyone()
+        trainer._accelerator.save(
+            {
+                "loss": self.best_metric,
+                "model_state_dict": trainer._accelerator.unwrap_model(trainer.model).state_dict(),
+                "optimizer_state_dict": trainer.optimizer.state_dict(),
+            },
+            self.save_dir,
+        )
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         current_metric = trainer.run_history["metrics"][self.watch_metric][-1]
