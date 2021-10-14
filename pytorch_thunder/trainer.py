@@ -1,5 +1,4 @@
 import math
-from collections import UserDict, defaultdict
 
 import torch
 from accelerate import Accelerator
@@ -12,7 +11,7 @@ from pytorch_thunder.callbacks import (
     TerminateOnNaNCallback,
     StopTrainingError,
 )
-
+from pytorch_thunder.tracking import RunHistory, InMemoryRunHistory
 
 DEFAULT_CALLBACKS = (
     PrintMetricsCallback,
@@ -42,10 +41,7 @@ class Trainer:
         self._train_dataloader = None
         self._eval_dataloader = None
         self.run_config = None
-        self.run_history = {
-            "metrics": defaultdict(list),
-            "epoch": 0,
-        }  # TODO create interface for this + in memory implementation
+        self.run_history: RunHistory = InMemoryRunHistory()
 
         self.callback_handler = CallbackHandler(
             callbacks,
@@ -75,7 +71,7 @@ class Trainer:
         batch_losses = self._aggregate_losses(train_batch_outputs)
         losses = torch.cat(batch_losses)
         average_train_loss = losses.mean().item()
-        self.run_history["metrics"]["train_loss_epoch"].append(average_train_loss)
+        self.run_history.update_metric("train_loss_epoch", average_train_loss)
 
     def _aggregate_losses(self, batch_outputs, move_to_cpu=False):
         losses = []
@@ -105,7 +101,7 @@ class Trainer:
         batch_losses = self._aggregate_losses(eval_batch_outputs)
         losses = torch.cat(batch_losses)
         average_eval_loss = losses.mean().item()
-        self.run_history["metrics"]["eval_loss_epoch"].append(average_eval_loss)
+        self.run_history.update_metric("eval_loss_epoch", average_eval_loss)
 
     def backward_step(self, loss):
         self._accelerator.backward(loss)
@@ -209,7 +205,7 @@ class Trainer:
             try:
                 self._run_train_epoch(self._train_dataloader)
                 self._run_eval_epoch(self._eval_dataloader)
-                self.run_history["epoch"] += 1
+                self.run_history.increment_epoch()
             except StopTrainingError as e:
                 self._accelerator.print(e)
                 self.callback_handler.call_event(
