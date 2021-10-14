@@ -30,6 +30,7 @@ class Trainer:
         eval_dataset,
         scheduler_type=None,
         callbacks=DEFAULT_CALLBACKS,
+        collate_fn=None,
     ):
         self.model = model
         self.loss_func = loss_func
@@ -37,6 +38,7 @@ class Trainer:
         self.scheduler = scheduler_type
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+        self.collate_fn = collate_fn
         self._accelerator = None
         self._train_dataloader = None
         self._eval_dataloader = None
@@ -48,12 +50,16 @@ class Trainer:
         )
         self.callback_handler.call_event("on_init_end", self)
 
-    def create_train_dataloader(self, shuffle=True, batch_size=4, **kwargs):
+    def create_train_dataloader(
+        self, shuffle=True, batch_size=4, collate_fn=None, **kwargs
+    ):
         return DataLoader(
             self.train_dataset, batch_size=batch_size, shuffle=shuffle, **kwargs
         )
 
-    def create_eval_dataloader(self, shuffle=False, batch_size=4, **kwargs):
+    def create_eval_dataloader(
+        self, shuffle=False, batch_size=4, collate_fn=None, **kwargs
+    ):
         return DataLoader(
             self.eval_dataset, batch_size=batch_size, shuffle=shuffle, **kwargs
         )
@@ -174,10 +180,14 @@ class Trainer:
             self.model,
             self.optimizer,
             self.create_train_dataloader(
-                self.train_dataset, batch_size=per_device_batch_size
+                self.train_dataset,
+                batch_size=per_device_batch_size,
+                collate_fn=self.collate_fn,
             ),
             self.create_eval_dataloader(
-                self.eval_dataset, batch_size=per_device_batch_size
+                self.eval_dataset,
+                batch_size=per_device_batch_size,
+                collate_fn=self.collate_fn,
             ),
         )
 
