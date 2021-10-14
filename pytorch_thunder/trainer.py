@@ -50,18 +50,22 @@ class Trainer:
         )
         self.callback_handler.call_event("on_init_end", self)
 
-    def create_train_dataloader(
-        self, shuffle=True, batch_size=4, collate_fn=None, **kwargs
-    ):
+    def create_train_dataloader(self, shuffle=True, batch_size=4, **kwargs):
         return DataLoader(
-            self.train_dataset, batch_size=batch_size, shuffle=shuffle, **kwargs
+            self.train_dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            collate_fn=self.collate_fn,
+            **kwargs
         )
 
-    def create_eval_dataloader(
-        self, shuffle=False, batch_size=4, collate_fn=None, **kwargs
-    ):
+    def create_eval_dataloader(self, shuffle=False, batch_size=4, **kwargs):
         return DataLoader(
-            self.eval_dataset, batch_size=batch_size, shuffle=shuffle, **kwargs
+            self.eval_dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            collate_fn=self.collate_fn,
+            **kwargs
         )
 
     def train_epoch_start(self):
@@ -182,12 +186,10 @@ class Trainer:
             self.create_train_dataloader(
                 self.train_dataset,
                 batch_size=per_device_batch_size,
-                collate_fn=self.collate_fn,
             ),
             self.create_eval_dataloader(
                 self.eval_dataset,
                 batch_size=per_device_batch_size,
-                collate_fn=self.collate_fn,
             ),
         )
 
