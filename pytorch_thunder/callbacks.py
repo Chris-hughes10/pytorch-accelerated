@@ -139,12 +139,12 @@ class CallbackHandler(TrainerCallback):
 class PrintMetricsCallback(TrainerCallback):
     def on_train_epoch_end(self, trainer, **kwargs):
         trainer._accelerator.print(
-            f"training loss: {trainer.run_history['metrics']['train_loss_epoch'][-1]}"
+            f"training loss: {trainer.run_history.get_latest_metric('train_loss_epoch')}"
         )
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         trainer._accelerator.print(
-            f"validation loss: {trainer.run_history['metrics']['eval_loss_epoch'][-1]}"
+            f"validation loss: {trainer.run_history.get_latest_metric('eval_loss_epoch')}"
         )
 
 
@@ -158,7 +158,7 @@ class PrintProgressCallback(TrainerCallback):
         self.print(trainer, "Starting run")
 
     def on_train_epoch_begin(self, trainer, **kwargs):
-        self.print(trainer, f"Starting epoch {trainer.run_history['epoch']}")
+        self.print(trainer, f"Starting epoch {trainer.run_history.current_epoch}")
 
     def on_train_run_end(self, trainer, **kwargs):
         self.print(trainer, "Finishing run")
@@ -187,14 +187,16 @@ class SaveBestModelCallback(TrainerCallback):
         trainer._accelerator.save(
             {
                 "loss": self.best_metric,
-                "model_state_dict": trainer._accelerator.unwrap_model(trainer.model).state_dict(),
+                "model_state_dict": trainer._accelerator.unwrap_model(
+                    trainer.model
+                ).state_dict(),
                 "optimizer_state_dict": trainer.optimizer.state_dict(),
             },
             self.save_dir,
         )
 
     def on_eval_epoch_end(self, trainer, **kwargs):
-        current_metric = trainer.run_history["metrics"][self.watch_metric][-1]
+        current_metric = trainer.run_history.get_latest_metric(self.watch_metric)
         if self.best_metric is None:
             self.best_metric = current_metric
             self.save_model(trainer)
@@ -230,7 +232,7 @@ class EarlyStoppingCallback(TrainerCallback):
             self.early_stopping_patience_counter = 0
 
     def on_eval_epoch_end(self, trainer, **kwargs):
-        current_metric = trainer.run_history["metrics"][self.watch_metric][-1]
+        current_metric = trainer.run_history.get_latest_metric(self.watch_metric)
         if self.best_metric is None:
             self.best_metric = current_metric
         else:
