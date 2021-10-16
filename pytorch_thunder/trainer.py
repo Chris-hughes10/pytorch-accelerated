@@ -31,6 +31,7 @@ class Trainer:
         scheduler_type=None,
         callbacks=DEFAULT_CALLBACKS,
         collate_fn=None,
+        run_history=None,
     ):
         self.model = model
         self.loss_func = loss_func
@@ -43,7 +44,9 @@ class Trainer:
         self._train_dataloader = None
         self._eval_dataloader = None
         self.run_config = None
-        self.run_history: RunHistory = InMemoryRunHistory()
+        self.run_history: RunHistory = (
+            run_history if run_history is not None else InMemoryRunHistory()
+        )
 
         self.callback_handler = CallbackHandler(
             callbacks,
@@ -175,23 +178,11 @@ class Trainer:
     ):
         self._accelerator = Accelerator(fp16=fp16)
 
-        (
+        (self.model, self.optimizer,) = self._accelerator.prepare(
             self.model,
             self.optimizer,
-            self._train_dataloader,
-            self._eval_dataloader,
-        ) = self._accelerator.prepare(
-            self.model,
-            self.optimizer,
-            self.create_train_dataloader(
-                self.train_dataset,
-                batch_size=per_device_batch_size,
-            ),
-            self.create_eval_dataloader(
-                self.eval_dataset,
-                batch_size=per_device_batch_size,
-            ),
         )
+        self._prepare_dataloaders(per_device_batch_size=per_device_batch_size)
 
         self.scheduler = self.create_scheduler(self.optimizer)
         self.run_config = self._create_run_config(
@@ -210,6 +201,22 @@ class Trainer:
         self.callback_handler.call_event(
             "on_train_run_end",
             self,
+        )
+
+    def _prepare_dataloaders(self, per_device_batch_size):
+
+        train_dataloader = self.create_train_dataloader(
+            self.train_dataset,
+            batch_size=per_device_batch_size,
+        )
+
+        eval_dataloader = self.create_eval_dataloader(
+            self.eval_dataset,
+            batch_size=per_device_batch_size,
+        )
+
+        self._train_dataloader, self._eval_dataloader = self._accelerator.prepare(
+            train_dataloader, eval_dataloader
         )
 
     def _run_training(self):
