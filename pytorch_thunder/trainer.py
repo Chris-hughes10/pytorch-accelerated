@@ -26,8 +26,6 @@ class Trainer:
         model,
         loss_func,
         optimizer,
-        train_dataset,
-        eval_dataset,
         scheduler_type=None,
         callbacks=DEFAULT_CALLBACKS,
         collate_fn=None,
@@ -36,10 +34,11 @@ class Trainer:
         self.model = model
         self.loss_func = loss_func
         self.optimizer = optimizer
-        self.scheduler = scheduler_type
-        self.train_dataset = train_dataset
-        self.eval_dataset = eval_dataset
+        self.scheduler_type = scheduler_type
+        self.scheduler = None
         self.collate_fn = collate_fn
+        self.train_dataset = None
+        self.eval_dataset = None
         self._accelerator = None
         self._train_dataloader = None
         self._eval_dataloader = None
@@ -130,7 +129,7 @@ class Trainer:
             self.scheduler.step()
 
     def create_scheduler(self, optimizer):
-        return self.scheduler(optimizer)
+        return self.scheduler_type(optimizer)
 
     def _create_run_config(
         self,
@@ -170,13 +169,18 @@ class Trainer:
 
     def train(
         self,
+        train_dataset,
         num_epochs,
+        eval_dataset=None,
         per_device_batch_size=8,
         max_num_train_steps=None,
         fp16=True,
         gradient_accumulation_steps=1,
+        create_scheduler=True,
     ):
         self._accelerator = Accelerator(fp16=fp16)
+        self.train_dataset = train_dataset
+        self.eval_dataset = eval_dataset
 
         (self.model, self.optimizer,) = self._accelerator.prepare(
             self.model,
@@ -184,7 +188,10 @@ class Trainer:
         )
         self._prepare_dataloaders(per_device_batch_size=per_device_batch_size)
 
-        self.scheduler = self.create_scheduler(self.optimizer)
+        # only create if doesn't exist
+        if create_scheduler:
+            self.scheduler = self.create_scheduler(self.optimizer)
+
         self.run_config = self._create_run_config(
             num_epochs=num_epochs,
             per_device_batch_size=per_device_batch_size,
@@ -210,20 +217,23 @@ class Trainer:
             batch_size=per_device_batch_size,
         )
 
-        eval_dataloader = self.create_eval_dataloader(
-            self.eval_dataset,
-            batch_size=per_device_batch_size,
-        )
+        self._train_dataloader = self._accelerator.prepare(train_dataloader)
 
-        self._train_dataloader, self._eval_dataloader = self._accelerator.prepare(
-            train_dataloader, eval_dataloader
-        )
+        if self.eval_dataset is not None:
+
+            eval_dataloader = self.create_eval_dataloader(
+                self.eval_dataset,
+                batch_size=per_device_batch_size,
+            )
+
+            self._eval_dataloader = self._accelerator.prepare(eval_dataloader)
 
     def _run_training(self):
         for epoch in range(self.run_config["num_epochs"]):
             try:
                 self._run_train_epoch(self._train_dataloader)
-                self._run_eval_epoch(self._eval_dataloader)
+                if self.eval_dataset is not None:
+                    self._run_eval_epoch(self._eval_dataloader)
                 self.run_history.increment_epoch()
             except StopTrainingError as e:
                 self._accelerator.print(e)
