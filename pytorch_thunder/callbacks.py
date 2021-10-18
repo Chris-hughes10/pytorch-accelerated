@@ -256,14 +256,14 @@ class EarlyStoppingCallback(TrainerCallback):
 class TerminateOnNaNCallback(TrainerCallback):
     """A callback that terminates training if loss is NaN."""
 
-    def check_for_nan_after_batch(self, batch_output):
+    def check_for_nan_after_batch(self, batch_output, step=None):
         """Test if loss is NaN and interrupts training."""
         loss = batch_output["loss"]
         if torch.isinf(loss) or torch.isnan(loss):
-            raise StopTrainingError("Stopping training due to NaN loss")
+            raise StopTrainingError(f"Stopping training due to NaN loss in {step} step")
 
     def on_train_step_end(self, trainer, batch_output, **kwargs):
-        self.check_for_nan_after_batch(batch_output)
+        self.check_for_nan_after_batch(batch_output, step='training')
 
     def on_eval_step_end(self, trainer, batch_output, **kwargs):
-        self.check_for_nan_after_batch(batch_output)
+        self.check_for_nan_after_batch(batch_output, step='validation')
