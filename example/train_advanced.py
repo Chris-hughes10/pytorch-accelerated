@@ -1,4 +1,5 @@
 import os
+from collections import namedtuple
 from functools import partial
 from typing import Optional, Generator
 
@@ -138,15 +139,8 @@ def main():
     data_dir = (
         r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
     )
-    image_datasets = {
-        x: datasets.ImageFolder(
-            os.path.join(data_dir, x),
-            create_transforms(train_image_size=150, val_image_size=150)[x],
-        )
-        for x in ["train", "val"]
-    }
 
-    model = create_model(number_of_classes=len(image_datasets["train"].classes))
+    model = create_model(number_of_classes=2)
 
     # Define loss function
     loss_func = nn.CrossEntropyLoss()
@@ -162,29 +156,33 @@ def main():
         scheduler_type=exp_lr_scheduler,
     )
 
-    trainer.train(
-        train_dataset=image_datasets["train"],
-        eval_dataset=image_datasets["val"],
-        num_epochs=3,
-        per_device_batch_size=4,
-        fp16=True,
+    EpochConfig = namedtuple(
+        "EpochConfig", ["num_epochs", "train_image_size", "eval_image_size"]
     )
 
-    resized_image_datasets = {
-        x: datasets.ImageFolder(
-            os.path.join(data_dir, x),
-            create_transforms(train_image_size=225, val_image_size=250)[x],
+    epoch_configs = [
+        EpochConfig(num_epochs=3, train_image_size=150, eval_image_size=150),
+        EpochConfig(num_epochs=6, train_image_size=224, eval_image_size=250),
+    ]
+
+    for e_config in epoch_configs:
+        image_datasets = {
+            x: datasets.ImageFolder(
+                os.path.join(data_dir, x),
+                create_transforms(
+                    train_image_size=e_config.train_image_size,
+                    val_image_size=e_config.eval_image_size,
+                )[x],
+            )
+            for x in ["train", "val"]
+        }
+        trainer.train(
+            train_dataset=image_datasets["train"],
+            eval_dataset=image_datasets["val"],
+            num_epochs=e_config.num_epochs,
+            per_device_batch_size=4,
+            fp16=True,
         )
-        for x in ["train", "val"]
-    }
-
-    trainer.train(
-        train_dataset=resized_image_datasets["train"],
-        eval_dataset=resized_image_datasets["val"],
-        num_epochs=8,
-        per_device_batch_size=4,
-        fp16=True,
-    )
 
 
 if __name__ == "__main__":
