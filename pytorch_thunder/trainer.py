@@ -189,7 +189,7 @@ class Trainer:
         self._prepare_dataloaders(per_device_batch_size=per_device_batch_size)
 
         # only create if doesn't exist
-        if create_scheduler:
+        if self.scheduler_type is not None and create_scheduler:
             self.scheduler = self.create_scheduler(self.optimizer)
 
         self.run_config = self._create_run_config(
@@ -269,7 +269,8 @@ class Trainer:
                 step + 1 == len(train_dl)
             ):
                 self.optimizer_step()
-                self.scheduler_step()
+                if self.scheduler is not None:
+                    self.scheduler_step()
                 self.optimizer_zero_grad()
 
         self.train_epoch_end(train_batch_outputs)
