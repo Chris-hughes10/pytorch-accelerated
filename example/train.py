@@ -58,11 +58,15 @@ def main():
         loss_func=loss_func,
         optimizer=optimizer,
         scheduler_type=exp_lr_scheduler,
-        train_dataset=image_datasets["train"],
-        eval_dataset=image_datasets["val"],
     )
 
-    trainer.train(num_epochs=8, per_device_batch_size=4, fp16=True)
+    trainer.train(
+        train_dataset=image_datasets["train"],
+        eval_dataset=image_datasets["val"],
+        num_epochs=8,
+        per_device_batch_size=4,
+        fp16=True,
+    )
 
 
 if __name__ == "__main__":
