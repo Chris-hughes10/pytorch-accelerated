@@ -263,7 +263,7 @@ class TerminateOnNaNCallback(TrainerCallback):
             raise StopTrainingError(f"Stopping training due to NaN loss in {step} step")
 
     def on_train_step_end(self, trainer, batch_output, **kwargs):
-        self.check_for_nan_after_batch(batch_output, step='training')
+        self.check_for_nan_after_batch(batch_output, step="training")
 
     def on_eval_step_end(self, trainer, batch_output, **kwargs):
-        self.check_for_nan_after_batch(batch_output, step='validation')
+        self.check_for_nan_after_batch(batch_output, step="validation")
