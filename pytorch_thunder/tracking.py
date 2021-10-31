@@ -58,6 +58,7 @@ class InMemoryRunHistory(RunHistory):
 class AverageMeter:
     """Computes and stores the average and current value
     Taken from timm"""
+
     def __init__(self):
         self.reset()
 

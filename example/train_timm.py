@@ -16,20 +16,25 @@ from pytorch_thunder.trainer import Trainer
 
 # Taken from timm master branch - not yet released
 class BinaryCrossEntropy(nn.Module):
-    """ BCE with optional one-hot from dense targets, label smoothing, thresholding
+    """BCE with optional one-hot from dense targets, label smoothing, thresholding
     NOTE for experiments comparing CE to BCE /w label smoothing, may remove
     """
 
     def __init__(
-            self, smoothing=0.1, target_threshold=None, weight=None,
-            reduction: str = 'mean', pos_weight=None):
+        self,
+        smoothing=0.1,
+        target_threshold=None,
+        weight=None,
+        reduction: str = "mean",
+        pos_weight=None,
+    ):
         super(BinaryCrossEntropy, self).__init__()
-        assert 0. <= smoothing < 1.0
+        assert 0.0 <= smoothing < 1.0
         self.smoothing = smoothing
         self.target_threshold = target_threshold
         self.reduction = reduction
-        self.register_buffer('weight', weight)
-        self.register_buffer('pos_weight', pos_weight)
+        self.register_buffer("weight", weight)
+        self.register_buffer("pos_weight", pos_weight)
 
     def forward(self, x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         assert x.shape[0] == target.shape[0]
@@ -38,20 +43,20 @@ class BinaryCrossEntropy(nn.Module):
             num_classes = x.shape[-1]
             # FIXME should off/on be different for smoothing w/ BCE? Other impl out there differ
             off_value = self.smoothing / num_classes
-            on_value = 1. - self.smoothing + off_value
+            on_value = 1.0 - self.smoothing + off_value
             target = target.long().view(-1, 1)
             target = torch.full(
                 (target.size()[0], num_classes),
                 off_value,
-                device=x.device, dtype=x.dtype).scatter_(1, target, on_value)
+                device=x.device,
+                dtype=x.dtype,
+            ).scatter_(1, target, on_value)
         if self.target_threshold is not None:
             # Make target 0, or 1 if threshold set
             target = target.gt(self.target_threshold).to(dtype=target.dtype)
         return F.binary_cross_entropy_with_logits(
-            x, target,
-            self.weight,
-            pos_weight=self.pos_weight,
-            reduction=self.reduction)
+            x, target, self.weight, pos_weight=self.pos_weight, reduction=self.reduction
+        )
 
 
 class TimmTrainer(Trainer):
@@ -61,32 +66,24 @@ class TimmTrainer(Trainer):
         self.num_updates = None
         self.mixup_fn = mixup_fn
         self.cm_metrics = ConfusionMatrix(num_classes=num_classes)
-        self.cm_metrics_dist = ConfusionMatrix(num_classes=num_classes, dist_sync_on_step=True)
+        self.cm_metrics_dist = ConfusionMatrix(
+            num_classes=num_classes, dist_sync_on_step=True
+        )
 
     def create_train_dataloader(self, **kwargs):
 
-        kwargs.pop('shuffle')
+        kwargs.pop("shuffle")
 
         return create_loader(
             dataset=self.train_dataset, collate_fn=self.collate_fn, **kwargs
         )
 
-    def create_eval_dataloader(self, shuffle=False, batch_size=4, **kwargs):
-        data_config = resolve_data_config({}, model=self.model, verbose=True)
+    def create_eval_dataloader(self, **kwargs):
+
+        kwargs.pop("shuffle")
 
         return create_loader(
-            self.eval_dataset,
-            input_size=data_config["input_size"],
-            batch_size=batch_size,
-            is_training=False,
-            interpolation=data_config["interpolation"],
-            mean=data_config["mean"],
-            std=data_config["std"],
-            num_workers=2,
-            distributed=False,
-            crop_pct=data_config["crop_pct"],
-            pin_memory=True,
-            use_prefetcher=False,
+            dataset=self.train_dataset, collate_fn=self.collate_fn, **kwargs
         )
 
     def train_epoch_start(self):
@@ -108,7 +105,9 @@ class TimmTrainer(Trainer):
             val_loss = self.eval_loss_fn(preds, yb)
 
             self.cm_metrics_dist.update(preds, yb)
-            self.cm_metrics.update(self._accelerator.gather(preds), self._accelerator.gather(yb))
+            self.cm_metrics.update(
+                self._accelerator.gather(preds), self._accelerator.gather(yb)
+            )
 
         return {
             "loss": val_loss,
@@ -122,8 +121,8 @@ class TimmTrainer(Trainer):
         cm = self.cm_metrics.compute()
         cm_dist = self.cm_metrics_dist.compute()
 
-        print(f'Confusion matrix: {cm}')
-        print(f'Confusion matrix dist: {cm_dist}')
+        print(f"Confusion matrix: {cm}")
+        print(f"Confusion matrix dist: {cm_dist}")
 
     def scheduler_step(self):
         self.num_updates += 1
@@ -132,21 +131,19 @@ class TimmTrainer(Trainer):
 
 
 def main():
-    data_path = Path(r"C:\Users\hughesc\Documents\imagenette2-320\imagenette2-320")
+    # data_path = Path(r"C:\Users\hughesc\Documents\imagenette2-320\imagenette2-320")
 
-    data_path = Path(
-        r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
-    )
+    data_path = Path(r"/home/chris/notebooks/hymenoptera_data/")
 
     train_path = data_path / "train"
     val_path = data_path / "val"
 
     #####
-    aa = 'rand-m7-mstd0.5-inc1'
+    aa = "rand-m7-mstd0.5-inc1"
     # batch_size = 2048
     batch_size = 16
     # opt = 'lamb'
-    opt = 'adamp'
+    opt = "adamp"
     lr = 5e-3
     smoothing = 0.1
     drop_path = 0.05
@@ -170,16 +167,16 @@ def main():
     # augs hflip, random resized crop
 
     mixup_args = dict(
-        mixup_alpha=mixup, cutmix_alpha=cutmix,
-        label_smoothing=smoothing, num_classes=num_classes)
+        mixup_alpha=mixup,
+        cutmix_alpha=cutmix,
+        label_smoothing=smoothing,
+        num_classes=num_classes,
+    )
 
     mixup_fn = Mixup(**mixup_args)
 
     model = create_model(
-        model,
-        pretrained=pretrained,
-        num_classes=num_classes,
-        drop_path_rate=drop_path
+        model, pretrained=pretrained, num_classes=num_classes, drop_path_rate=drop_path
     )
 
     data_config = resolve_data_config({}, model=model, verbose=True)
@@ -211,7 +208,7 @@ def main():
         "interpolation": train_interpolation,
         "mean": data_config["mean"],
         "std": data_config["std"],
-        "num_workers": 2,
+        "num_workers": 1,
         "distributed": False,
         "use_prefetcher": False,
     }
@@ -222,7 +219,7 @@ def main():
         "interpolation": data_config["interpolation"],
         "mean": data_config["mean"],
         "std": data_config["std"],
-        "num_workers": 2,
+        "num_workers": 1,
         "distributed": False,
         # "crop_pct": data_config["crop_pct"],
         "crop_pct": crop_pct,
@@ -231,15 +228,19 @@ def main():
     }
 
     optimizer = create_optimizer_v2(
-        model, opt, lr, weight_decay,
+        model,
+        opt,
+        lr,
+        weight_decay,
     )
 
     num_epochs = 10
 
     lr_scheduler_type = partial(CosineLRScheduler, t_initial=num_epochs)
 
-    train_loss_fn = BinaryCrossEntropy(target_threshold=bce_target_thresh,
-                                       smoothing=smoothing)
+    train_loss_fn = BinaryCrossEntropy(
+        target_threshold=bce_target_thresh, smoothing=smoothing
+    )
     validate_loss_fn = torch.nn.CrossEntropyLoss()
 
     trainer = TimmTrainer(
@@ -249,7 +250,7 @@ def main():
         eval_loss_fn=validate_loss_fn,
         scheduler_type=lr_scheduler_type,
         mixup_fn=mixup_fn,
-        num_classes=num_classes
+        num_classes=num_classes,
     )
 
     trainer.train(

@@ -1,13 +1,43 @@
 import os
 from functools import partial
 
+import torch
 from accelerate import notebook_launcher
 from accelerate.utils import set_seed
 from torch import nn, optim
 from torch.optim import lr_scheduler
+from torchmetrics import ConfusionMatrix
 from torchvision import transforms, datasets, models
 
 from pytorch_thunder.trainer import Trainer
+
+
+class TrainerWithMetrics(Trainer):
+    def __init__(self, num_classes, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cm_metrics = ConfusionMatrix(num_classes=num_classes)
+
+    def train_epoch_start(self):
+        super().train_epoch_start()
+        self.cm_metrics.to(self._eval_dataloader.device)
+
+    def calculate_eval_batch_step(self, batch):
+        batch_output = super().calculate_eval_batch_step(batch)
+
+        preds = batch_output["model_outputs"].argmax(dim=-1)
+        all_preds = self._accelerator.gather(preds)
+        all_labels = self._accelerator.gather(batch[1])
+
+        self.cm_metrics.update(all_preds, all_labels)
+
+        return batch_output
+
+    def eval_epoch_end(self):
+        super().eval_epoch_end()
+
+        cm = self.cm_metrics.compute()
+        self.run_history.update_metric("confusion_matrix", cm.cpu())
+        self.cm_metrics.reset()
 
 
 def main():
@@ -55,8 +85,9 @@ def main():
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
     exp_lr_scheduler = partial(lr_scheduler.StepLR, step_size=7, gamma=0.1)
 
-    trainer = Trainer(
-        model,
+    trainer = TrainerWithMetrics(
+        num_classes=2,
+        model=model,
         loss_func=loss_func,
         optimizer=optimizer,
         scheduler_type=exp_lr_scheduler,
@@ -72,4 +103,4 @@ def main():
 
 
 if __name__ == "__main__":
-    notebook_launcher(main, num_processes=1)
+    notebook_launcher(main, num_processes=2)

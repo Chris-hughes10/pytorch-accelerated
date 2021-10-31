@@ -31,9 +31,7 @@
 
 # loss - BCE loss
 
-#mixup and cutmix
+# mixup and cutmix
 
 # repeated augmentation + stochastic depth : tend to improve the results at convergence, but they slow
 # down the training in the early stages
-
-

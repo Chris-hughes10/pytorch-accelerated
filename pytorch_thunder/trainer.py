@@ -69,18 +69,19 @@ class Trainer:
 
     def calculate_train_batch_loss(self, batch):
         xb, yb = batch
-        loss = self.loss_func(self.model(xb), yb)
 
-        self.loss_tracker.update(self._accelerator.gather(loss).detach().mean().item(), xb.size(0))
+        model_outputs = self.model(xb)
+        loss = self.loss_func(model_outputs, yb)
 
+        return {
+            "loss": loss,
+            "model_outputs": self._accelerator.gather(model_outputs),
+            "batch_size": xb.size(0),
+        }
 
-        return {"loss": loss,
-                # "xb": xb,
-                # "yb": yb
-                # Add these for easier override?
-                }
-
-    def train_epoch_end(self, ):
+    def train_epoch_end(
+        self,
+    ):
         self.run_history.update_metric("train_loss_epoch", self.loss_tracker.avg)
         # TODO: move to step
         # batch_losses = self._aggregate_losses(train_batch_outputs)
@@ -106,14 +107,17 @@ class Trainer:
     def calculate_eval_batch_step(self, batch):
         with torch.no_grad():
             xb, yb = batch
-            val_loss = self.loss_func(self.model(xb), yb)
+            model_outputs = self.model(xb)
+            val_loss = self.loss_func(model_outputs, yb)
 
-            self.loss_tracker.update(self._accelerator.gather(val_loss).detach().mean().item(), xb.size(0))
+            self.loss_tracker.update(
+                self._accelerator.gather(val_loss).detach().mean().item(), xb.size(0)
+            )  # move to body of loop?
 
         return {
             "loss": val_loss,
-            "xb": xb,
-            "yb": yb
+            "model_outputs": model_outputs,
+            "batch_size": xb.size(0),
         }
 
     def eval_epoch_end(self):
@@ -272,6 +276,9 @@ class Trainer:
         if "batch_size" not in default_train_dl_kwargs:
             default_train_dl_kwargs["batch_size"] = per_device_batch_size
 
+        if "batch_size" not in default_eval_dl_kwargs:
+            default_eval_dl_kwargs["batch_size"] = per_device_batch_size
+
         train_dataloader = self.create_train_dataloader(**default_train_dl_kwargs)
         self._train_dataloader = self._accelerator.prepare(train_dataloader)
 
@@ -301,16 +308,19 @@ class Trainer:
         )
         self.train_epoch_start()
 
-        # train_batch_outputs = []
         for step, batch in enumerate(train_dl):
             self.callback_handler.call_event(
                 "on_train_step_begin",
                 self,
             )
             batch_output = self.calculate_train_batch_loss(batch)
+            self.loss_tracker.update(
+                self._accelerator.gather(batch_output["loss"]).detach().mean().item(),
+                batch_output["batch_size"],
+            )
             if self.run_config["gradient_accumulation_steps"] > 1:
                 batch_output["loss"] /= self.run_config["gradient_accumulation_steps"]
-            # train_batch_outputs.append(batch_output)
+
             self.callback_handler.call_event(
                 "on_train_step_end", self, batch_output=batch_output
             )
@@ -326,7 +336,9 @@ class Trainer:
 
         self.train_epoch_end()
         self.callback_handler.call_event(
-            "on_train_epoch_end", self,)
+            "on_train_epoch_end",
+            self,
+        )
 
     def _run_eval_epoch(self, valid_dl):
         self.callback_handler.call_event(
@@ -334,18 +346,22 @@ class Trainer:
             self,
         )
         self.eval_epoch_start()
-        # eval_batch_outputs = []
+
         for batch in valid_dl:
             self.callback_handler.call_event(
                 "on_eval_step_begin",
                 self,
             )
             batch_output = self.calculate_eval_batch_step(batch)
-            # eval_batch_outputs.append(batch_output)
+            self.loss_tracker.update(
+                self._accelerator.gather(batch_output["loss"]).detach().mean().item(),
+                batch_output["batch_size"],
+            )
             self.callback_handler.call_event(
                 "on_eval_step_end", self, batch_output=batch_output
             )
         self.eval_epoch_end()
         self.callback_handler.call_event(
-            "on_eval_epoch_end", self,
+            "on_eval_epoch_end",
+            self,
         )

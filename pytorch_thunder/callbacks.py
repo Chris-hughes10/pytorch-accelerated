@@ -137,16 +137,29 @@ class CallbackHandler(TrainerCallback):
 
 
 class PrintMetricsCallback(TrainerCallback):
+    def _print_metrics(self, trainer, metric_names):
+
+        for metric_name in metric_names:
+            trainer._accelerator.print(
+                f"{metric_name}: {trainer.run_history.get_latest_metric(metric_name)}"
+            )
+
     def on_train_epoch_end(self, trainer, **kwargs):
-        trainer._accelerator.print(
-            f"training loss: {trainer.run_history.get_latest_metric('train_loss_epoch')}"
-        )
+        metric_names = [
+            metric
+            for metric in trainer.run_history.get_metric_names()
+            if "train" in metric
+        ]
+
+        self._print_metrics(trainer, metric_names)
 
     def on_eval_epoch_end(self, trainer, **kwargs):
-        trainer._accelerator.print(
-            f"validation loss: {trainer.run_history.get_latest_metric('eval_loss_epoch')}"
-        )
-
+        metric_names = [
+            metric
+            for metric in trainer.run_history.get_metric_names()
+            if "train" not in metric
+        ]
+        self._print_metrics(trainer, metric_names)
 
 class PrintProgressCallback(TrainerCallback):
     @staticmethod
