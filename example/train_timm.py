@@ -1,167 +1,265 @@
+from functools import partial
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 from accelerate import notebook_launcher
-
-from timm.data import create_dataset, create_loader, resolve_data_config, Mixup, FastCollateMixup, AugMixDataset
-from timm.models import create_model, safe_model_name, resume_checkpoint, load_checkpoint, \
-    convert_splitbn_model, model_parameters
-from timm.utils import *
-from timm.loss import *
-from timm.optim import create_optimizer_v2, optimizer_kwargs
-from timm.scheduler import create_scheduler, StepLRScheduler
+from timm.data import create_dataset, create_loader, resolve_data_config, Mixup
+from timm.models import create_model
+from timm.optim import create_optimizer_v2
+from timm.scheduler import CosineLRScheduler
+from torch import nn
+from torchmetrics import ConfusionMatrix
 
 from pytorch_thunder.trainer import Trainer
 
 
+# Taken from timm master branch - not yet released
+class BinaryCrossEntropy(nn.Module):
+    """ BCE with optional one-hot from dense targets, label smoothing, thresholding
+    NOTE for experiments comparing CE to BCE /w label smoothing, may remove
+    """
+
+    def __init__(
+            self, smoothing=0.1, target_threshold=None, weight=None,
+            reduction: str = 'mean', pos_weight=None):
+        super(BinaryCrossEntropy, self).__init__()
+        assert 0. <= smoothing < 1.0
+        self.smoothing = smoothing
+        self.target_threshold = target_threshold
+        self.reduction = reduction
+        self.register_buffer('weight', weight)
+        self.register_buffer('pos_weight', pos_weight)
+
+    def forward(self, x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        assert x.shape[0] == target.shape[0]
+        if target.shape != x.shape:
+            # NOTE currently assume smoothing or other label softening is applied upstream if targets are already sparse
+            num_classes = x.shape[-1]
+            # FIXME should off/on be different for smoothing w/ BCE? Other impl out there differ
+            off_value = self.smoothing / num_classes
+            on_value = 1. - self.smoothing + off_value
+            target = target.long().view(-1, 1)
+            target = torch.full(
+                (target.size()[0], num_classes),
+                off_value,
+                device=x.device, dtype=x.dtype).scatter_(1, target, on_value)
+        if self.target_threshold is not None:
+            # Make target 0, or 1 if threshold set
+            target = target.gt(self.target_threshold).to(dtype=target.dtype)
+        return F.binary_cross_entropy_with_logits(
+            x, target,
+            self.weight,
+            pos_weight=self.pos_weight,
+            reduction=self.reduction)
+
+
 class TimmTrainer(Trainer):
-
-    def __init__(self, eval_loss_fn, *args, **kwargs):
-        self.eval_loss_fn = eval_loss_fn
+    def __init__(self, eval_loss_fn, mixup_fn, num_classes, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.eval_loss_fn = eval_loss_fn
+        self.num_updates = None
+        self.mixup_fn = mixup_fn
+        self.cm_metrics = ConfusionMatrix(num_classes=num_classes)
+        self.cm_metrics_dist = ConfusionMatrix(num_classes=num_classes, dist_sync_on_step=True)
 
+    def create_train_dataloader(self, **kwargs):
 
-    def create_train_dataloader(self, shuffle=True, batch_size=8, **kwargs):
-        args_scale = [0.08, 1.0]  # Random resize scale
-        args_ratio = [3. / 4., 4. / 3.]  # Random resize aspect ratio
-        args_hflip = 0.5
-        args_vflip = 0.
-        args_color_jitter = 0.4
-        args_aug_repeats = 0
-        args_aug_splits = 0
-
-        args_aa = 'rand-m9-mstd0.5'  # auto augment policy
-        args_remode = 'pixel'  # random erase mode
-        args_reprob = 0.2
-
-        data_config = resolve_data_config({}, model=self.model, verbose=True)
-        train_interpolation = data_config['interpolation']
+        kwargs.pop('shuffle')
 
         return create_loader(
-            self.train_dataset,
-            input_size=data_config['input_size'],
-            batch_size=batch_size,
-            is_training=True,
-            re_prob=args_reprob,
-            re_mode=args_remode,
-            scale=args_scale,
-            ratio=args_ratio,
-            hflip=args_hflip,
-            vflip=args_vflip,
-            color_jitter=args_color_jitter,
-            auto_augment=args_aa,
-            num_aug_splits=0,
-            interpolation=train_interpolation,
-            mean=data_config['mean'],
-            std=data_config['std'],
-            num_workers=8,
-            distributed=False,
-            collate_fn=None,
-            pin_memory=True,
-            use_prefetcher=False
+            dataset=self.train_dataset, collate_fn=self.collate_fn, **kwargs
         )
 
-    def create_eval_dataloader(self, shuffle=False, batch_size=8, **kwargs):
+    def create_eval_dataloader(self, shuffle=False, batch_size=4, **kwargs):
         data_config = resolve_data_config({}, model=self.model, verbose=True)
 
         return create_loader(
             self.eval_dataset,
-            input_size=data_config['input_size'],
+            input_size=data_config["input_size"],
             batch_size=batch_size,
             is_training=False,
-            interpolation=data_config['interpolation'],
-            mean=data_config['mean'],
-            std=data_config['std'],
-            num_workers=8,
+            interpolation=data_config["interpolation"],
+            mean=data_config["mean"],
+            std=data_config["std"],
+            num_workers=2,
             distributed=False,
-            crop_pct=data_config['crop_pct'],
+            crop_pct=data_config["crop_pct"],
             pin_memory=True,
-            use_prefetcher=False
+            use_prefetcher=False,
         )
+
+    def train_epoch_start(self):
+        super().train_epoch_start()
+        self.num_updates = self.run_history.current_epoch * len(self._train_dataloader)
+
+        self.cm_metrics.to(self._eval_dataloader.device)
+        self.cm_metrics_dist.to(self._eval_dataloader.device)
+
+    def calculate_train_batch_loss(self, batch):
+        xb, yb = batch
+        mixup_xb, mixup_yb = self.mixup_fn(xb, yb)
+        return super().calculate_train_batch_loss((mixup_xb, mixup_yb))
 
     def calculate_eval_batch_step(self, batch):
         with torch.no_grad():
             xb, yb = batch
-            val_loss = self.eval_loss_fn(self.model(xb), yb)
+            preds = self.model(xb)
+            val_loss = self.eval_loss_fn(preds, yb)
+
+            self.cm_metrics_dist.update(preds, yb)
+            self.cm_metrics.update(self._accelerator.gather(preds), self._accelerator.gather(yb))
 
         return {
             "loss": val_loss,
         }
 
+    def eval_epoch_end(self):
+        super().eval_epoch_end()
+        if self.scheduler is not None:
+            self.scheduler.step(self.run_history.current_epoch + 1)
+
+        cm = self.cm_metrics.compute()
+        cm_dist = self.cm_metrics_dist.compute()
+
+        print(f'Confusion matrix: {cm}')
+        print(f'Confusion matrix dist: {cm_dist}')
+
+    def scheduler_step(self):
+        self.num_updates += 1
+        if self.scheduler is not None:
+            self.scheduler.step_update(num_updates=self.num_updates)
+
 
 def main():
-    data_path = Path('/home/chris/notebooks/imagenette2')
-    train_path = data_path / 'train'
-    val_path = data_path / 'val'
+    data_path = Path(r"C:\Users\hughesc\Documents\imagenette2-320\imagenette2-320")
 
-    # set arguments - TODO cleanup
-    args_model = 'efficientnet_b0'
-    args_num_classes = len(list(train_path.iterdir()))
-    args_pretrained = True
-    args_drop = 0.0
-    args_drop_path = None
-    args_drop_block = None
-    args_bn_momentum = None
-    args_bn_eps = None
+    data_path = Path(
+        r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
+    )
 
-    args_train_split = 'train'
-    args_val_split = 'val'
+    train_path = data_path / "train"
+    val_path = data_path / "val"
 
-    args_batch_size = 8
-    args_sched = 'step'
-    args_epochs = 20
-    args_decay_epochs = 2.4
-    args_decay_rate = 0.97
-    args_opt = 'rmsproptf'
-    args_opt_eps = .001
-    args_workers = 8
-    args_warmup_lr = 1e-6
-    args_weight_decay = 1e-5
-    args_drop = 0.2
-    args_drop_connect = 0.2
+    #####
+    aa = 'rand-m7-mstd0.5-inc1'
+    # batch_size = 2048
+    batch_size = 16
+    # opt = 'lamb'
+    opt = 'adamp'
+    lr = 5e-3
+    smoothing = 0.1
+    drop_path = 0.05
+    aug_repeats = 3  # what does this do?
+    hflip = 0.5
+    mixup = 0.2
+    cutmix = 1.0
+    color_jitter = 0
+    weight_decay = 0.02
+    crop_pct = 0.95
+    bce_loss = True
+    bce_target_thresh = 0.2
+    # model = "resnet-rs"
+    model = "resnet50"
+    num_classes = len(list(train_path.iterdir()))
+    pretrained = True
 
-    args_lr = 0.001
+    args_train_split = "train"
+    args_val_split = "val"
 
+    # augs hflip, random resized crop
 
+    mixup_args = dict(
+        mixup_alpha=mixup, cutmix_alpha=cutmix,
+        label_smoothing=smoothing, num_classes=num_classes)
+
+    mixup_fn = Mixup(**mixup_args)
 
     model = create_model(
-        args_model,
-        pretrained=args_pretrained,
-        num_classes=args_num_classes,
-        bn_momentum=args_bn_momentum,
-        bn_eps=args_bn_eps,
+        model,
+        pretrained=pretrained,
+        num_classes=num_classes,
+        drop_path_rate=drop_path
     )
 
     data_config = resolve_data_config({}, model=model, verbose=True)
-    train_interpolation = data_config['interpolation']
-
-    optimizer = create_optimizer_v2(model, args_opt, args_lr,
-                                    args_weight_decay, args_opt_eps
-                                    )
-
-    lr_scheduler = StepLRScheduler(
-        optimizer,
-        decay_t=args_decay_epochs,
-        decay_rate=args_decay_rate,
-        warmup_lr_init=args_warmup_lr,
-    )
-
-    num_epochs = args_epochs
+    train_interpolation = data_config["interpolation"]
 
     dataset_train = create_dataset(
-        'imagenette',
-        root=data_path, split=args_train_split, is_training=True,
-        batch_size=args_batch_size)
+        "imagenette",
+        root=data_path,
+        split=args_train_split,
+        is_training=True,
+        batch_size=batch_size,
+    )
     dataset_eval = create_dataset(
-        'imagenette', root=data_path, split=args_val_split, is_training=False, batch_size=args_batch_size)
+        "imagenette",
+        root=data_path,
+        split=args_val_split,
+        is_training=False,
+        batch_size=batch_size,
+    )
 
-    train_loss_fn = LabelSmoothingCrossEntropy(smoothing=0.1)
+    train_dl_kwargs = {
+        "input_size": data_config["input_size"],
+        "is_training": True,
+        "auto_augment": aa,
+        # "num_aug_repeats": aug_repeats,
+        "hflip": hflip,
+        "color_jitter": color_jitter,
+        "num_aug_splits": 0,
+        "interpolation": train_interpolation,
+        "mean": data_config["mean"],
+        "std": data_config["std"],
+        "num_workers": 2,
+        "distributed": False,
+        "use_prefetcher": False,
+    }
+
+    eval_dl_kwargs = {
+        "input_size": data_config["input_size"],
+        "is_training": False,
+        "interpolation": data_config["interpolation"],
+        "mean": data_config["mean"],
+        "std": data_config["std"],
+        "num_workers": 2,
+        "distributed": False,
+        # "crop_pct": data_config["crop_pct"],
+        "crop_pct": crop_pct,
+        "pin_memory": True,
+        "use_prefetcher": False,
+    }
+
+    optimizer = create_optimizer_v2(
+        model, opt, lr, weight_decay,
+    )
+
+    num_epochs = 10
+
+    lr_scheduler_type = partial(CosineLRScheduler, t_initial=num_epochs)
+
+    train_loss_fn = BinaryCrossEntropy(target_threshold=bce_target_thresh,
+                                       smoothing=smoothing)
     validate_loss_fn = torch.nn.CrossEntropyLoss()
 
-    trainer = TimmTrainer(model=model, optimizer=optimizer, loss_func=train_loss_fn, eval_loss_fn=validate_loss_fn)
+    trainer = TimmTrainer(
+        model=model,
+        optimizer=optimizer,
+        loss_func=train_loss_fn,
+        eval_loss_fn=validate_loss_fn,
+        scheduler_type=lr_scheduler_type,
+        mixup_fn=mixup_fn,
+        num_classes=num_classes
+    )
 
-    trainer.train(train_dataset=dataset_train, eval_dataset=dataset_eval, num_epochs=10)
+    trainer.train(
+        train_dataset=dataset_train,
+        eval_dataset=dataset_eval,
+        num_epochs=num_epochs,
+        train_dataloader_kwargs=train_dl_kwargs,
+        eval_dataloader_kwargs=eval_dl_kwargs,
+    )
 
 
-if __name__ == '__main__':
-    notebook_launcher(main, num_processes=2)
+if __name__ == "__main__":
+    notebook_launcher(main, num_processes=1)

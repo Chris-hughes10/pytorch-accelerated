@@ -11,7 +11,7 @@ from pytorch_thunder.callbacks import (
     TerminateOnNaNCallback,
     StopTrainingError,
 )
-from pytorch_thunder.tracking import RunHistory, InMemoryRunHistory
+from pytorch_thunder.tracking import RunHistory, InMemoryRunHistory, AverageMeter
 
 DEFAULT_CALLBACKS = (
     PrintMetricsCallback,
@@ -43,6 +43,7 @@ class Trainer:
         self._train_dataloader = None
         self._eval_dataloader = None
         self.run_config = None
+        self.loss_tracker = AverageMeter()
         self.run_history: RunHistory = (
             run_history if run_history is not None else InMemoryRunHistory()
         )
@@ -64,18 +65,28 @@ class Trainer:
 
     def train_epoch_start(self):
         self.model.train()
+        self.loss_tracker.reset()
 
     def calculate_train_batch_loss(self, batch):
         xb, yb = batch
         loss = self.loss_func(self.model(xb), yb)
 
-        return {"loss": loss}
+        self.loss_tracker.update(self._accelerator.gather(loss).detach().mean().item(), xb.size(0))
 
-    def train_epoch_end(self, train_batch_outputs):
-        batch_losses = self._aggregate_losses(train_batch_outputs)
-        losses = torch.cat(batch_losses)
-        average_train_loss = losses.mean().item()
-        self.run_history.update_metric("train_loss_epoch", average_train_loss)
+
+        return {"loss": loss,
+                # "xb": xb,
+                # "yb": yb
+                # Add these for easier override?
+                }
+
+    def train_epoch_end(self, ):
+        self.run_history.update_metric("train_loss_epoch", self.loss_tracker.avg)
+        # TODO: move to step
+        # batch_losses = self._aggregate_losses(train_batch_outputs)
+        # losses = torch.cat(batch_losses)
+        # average_train_loss = losses.mean().item()
+        # self.run_history.update_metric("train_loss_epoch", average_train_loss)
 
     def _aggregate_losses(self, batch_outputs, move_to_cpu=False):
         losses = []
@@ -90,22 +101,28 @@ class Trainer:
 
     def eval_epoch_start(self):
         self.model.eval()
+        self.loss_tracker.reset()
 
     def calculate_eval_batch_step(self, batch):
         with torch.no_grad():
             xb, yb = batch
             val_loss = self.loss_func(self.model(xb), yb)
 
+            self.loss_tracker.update(self._accelerator.gather(val_loss).detach().mean().item(), xb.size(0))
+
         return {
             "loss": val_loss,
-            "batch_size": len(xb),
+            "xb": xb,
+            "yb": yb
         }
 
-    def eval_epoch_end(self, eval_batch_outputs):
-        batch_losses = self._aggregate_losses(eval_batch_outputs)
-        losses = torch.cat(batch_losses)
-        average_eval_loss = losses.mean().item()
-        self.run_history.update_metric("eval_loss_epoch", average_eval_loss)
+    def eval_epoch_end(self):
+        self.run_history.update_metric("eval_loss_epoch", self.loss_tracker.avg)
+        # TODO move to step
+        # batch_losses = self._aggregate_losses(eval_batch_outputs)
+        # losses = torch.cat(batch_losses)
+        # average_eval_loss = losses.mean().item()
+        # self.run_history.update_metric("eval_loss_epoch", average_eval_loss)
 
     def backward_step(self, loss):
         self._accelerator.backward(loss)
@@ -284,7 +301,7 @@ class Trainer:
         )
         self.train_epoch_start()
 
-        train_batch_outputs = []
+        # train_batch_outputs = []
         for step, batch in enumerate(train_dl):
             self.callback_handler.call_event(
                 "on_train_step_begin",
@@ -293,7 +310,7 @@ class Trainer:
             batch_output = self.calculate_train_batch_loss(batch)
             if self.run_config["gradient_accumulation_steps"] > 1:
                 batch_output["loss"] /= self.run_config["gradient_accumulation_steps"]
-            train_batch_outputs.append(batch_output)
+            # train_batch_outputs.append(batch_output)
             self.callback_handler.call_event(
                 "on_train_step_end", self, batch_output=batch_output
             )
@@ -307,10 +324,9 @@ class Trainer:
                     self.scheduler_step()
                 self.optimizer_zero_grad()
 
-        self.train_epoch_end(train_batch_outputs)
+        self.train_epoch_end()
         self.callback_handler.call_event(
-            "on_train_epoch_end", self, train_batch_outputs=train_batch_outputs
-        )
+            "on_train_epoch_end", self,)
 
     def _run_eval_epoch(self, valid_dl):
         self.callback_handler.call_event(
@@ -318,18 +334,18 @@ class Trainer:
             self,
         )
         self.eval_epoch_start()
-        eval_batch_outputs = []
+        # eval_batch_outputs = []
         for batch in valid_dl:
             self.callback_handler.call_event(
                 "on_eval_step_begin",
                 self,
             )
             batch_output = self.calculate_eval_batch_step(batch)
-            eval_batch_outputs.append(batch_output)
+            # eval_batch_outputs.append(batch_output)
             self.callback_handler.call_event(
                 "on_eval_step_end", self, batch_output=batch_output
             )
-        self.eval_epoch_end(eval_batch_outputs)
+        self.eval_epoch_end()
         self.callback_handler.call_event(
-            "on_eval_epoch_end", self, eval_batch_outputs=eval_batch_outputs
+            "on_eval_epoch_end", self,
         )
