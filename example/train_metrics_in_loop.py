@@ -34,10 +34,10 @@ class TrainerWithMetrics(Trainer):
 
         tn, fp, fn, tp = cm.ravel()
 
-        self.run_history.update_metric("confusion_matrix", cm)
+        # self.run_history.update_metric("confusion_matrix", cm)
         self.run_history.update_metric("accuracy", (tp + fn) / (tn + fp + fn + tp))
-        self.run_history.update_metric("precision", tp / (tp + fp))
-        self.run_history.update_metric("recall", tp / (tp + fn))
+        # self.run_history.update_metric("precision", tp / (tp + fp))
+        # self.run_history.update_metric("recall", tp / (tp + fn))
         self.cm_metrics.reset()
 
 
@@ -78,9 +78,6 @@ def main():
     # Create model
     model = models.resnet18(pretrained=True)
 
-    for param in model.parameters():
-        param.requires_grad = False
-
     model.fc = nn.Linear(model.fc.in_features, len(image_datasets["train"].classes))
 
     # Define loss function
@@ -102,10 +99,10 @@ def main():
         train_dataset=image_datasets["train"],
         eval_dataset=image_datasets["val"],
         num_epochs=8,
-        per_device_batch_size=4,
+        per_device_batch_size=32,
         fp16=True,
     )
 
 
 if __name__ == "__main__":
-    notebook_launcher(main, num_processes=1)
+    notebook_launcher(main, num_processes=2)

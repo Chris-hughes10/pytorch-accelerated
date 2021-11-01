@@ -260,6 +260,7 @@ class Trainer:
             self._eval_dataloader = self._accelerator.prepare(eval_dataloader)
 
     def _run_training(self):
+        self.training_run_start()
         for epoch in range(self.run_config["num_epochs"]):
             try:
                 self._run_train_epoch(self._train_dataloader)
@@ -273,6 +274,13 @@ class Trainer:
                     self,
                 )
                 raise e
+        self.training_run_end()
+
+    def training_run_start(self):
+        pass
+
+    def training_run_end(self):
+        pass
 
     def _run_train_epoch(self, train_dl):
         self.callback_handler.call_event(
@@ -342,3 +350,9 @@ class Trainer:
             "on_eval_epoch_end",
             self,
         )
+
+    def print(self, *args, **kwargs):
+        if self._accelerator is not None:
+            self._accelerator.print(*args, **kwargs)
+        else:
+            print(*args, **kwargs)

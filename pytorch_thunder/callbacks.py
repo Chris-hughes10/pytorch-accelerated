@@ -5,6 +5,7 @@ from typing import Optional
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +141,8 @@ class PrintMetricsCallback(TrainerCallback):
     def _print_metrics(self, trainer, metric_names):
 
         for metric_name in metric_names:
-            trainer._accelerator.print(
-                f"{metric_name}: {trainer.run_history.get_latest_metric(metric_name)}"
+            trainer.print(
+                f"\n{metric_name}: {trainer.run_history.get_latest_metric(metric_name)}"
             )
 
     def on_train_epoch_end(self, trainer, **kwargs):
@@ -161,6 +162,30 @@ class PrintMetricsCallback(TrainerCallback):
         ]
         self._print_metrics(trainer, metric_names)
 
+class ProgressBarCallback(TrainerCallback):
+
+
+    def __init__(self):
+        self.pbar = None
+
+    def on_train_epoch_begin(self, trainer, **kwargs):
+        self.pbar = tqdm(total=len(trainer._train_dataloader), disable=not trainer._accelerator.is_local_main_process)
+
+    def on_train_step_end(self, trainer, **kwargs):
+        self.pbar.update(1)
+
+    def on_train_epoch_end(self, trainer, **kwargs):
+        self.pbar.close()
+
+    def on_eval_epoch_begin(self, trainer, **kwargs):
+        self.pbar = tqdm(total=len(trainer._eval_dataloader), disable=not trainer._accelerator.is_local_main_process)
+
+    def on_eval_step_end(self, trainer, **kwargs):
+        self.pbar.update(1)
+
+    def on_eval_epoch_end(self, trainer, **kwargs):
+        self.pbar.close()
+
 
 class PrintProgressCallback(TrainerCallback):
     @staticmethod
@@ -169,13 +194,13 @@ class PrintProgressCallback(TrainerCallback):
             trainer._accelerator.print(message)
 
     def on_train_run_begin(self, trainer, **kwargs):
-        self.print(trainer, "Starting run")
+        self.print(trainer, "\nStarting run")
 
     def on_train_epoch_begin(self, trainer, **kwargs):
-        self.print(trainer, f"Starting epoch {trainer.run_history.current_epoch}")
+        self.print(trainer, f"\nStarting epoch {trainer.run_history.current_epoch}")
 
     def on_train_run_end(self, trainer, **kwargs):
-        self.print(trainer, "Finishing run")
+        self.print(trainer, "\nFinishing run")
 
 
 class SaveBestModelCallback(TrainerCallback):
