@@ -1,7 +1,14 @@
+########################################################################
+# This is an accelerated example of the PyTorch "Transfer Learning for Computer Vision Tutorial"
+# written by Sasank Chilamkurthy, available here:
+# https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html,
+# which demonstrates fine-tuning a ResNet18 model to classify ants and bees.
+#
+########################################################################
+import argparse
 import os
 from functools import partial
 
-from accelerate import notebook_launcher
 from accelerate.utils import set_seed
 from torch import nn, optim
 from torch.optim import lr_scheduler
@@ -10,7 +17,7 @@ from torchvision import transforms, datasets, models
 from pytorch_accelerated.trainer import Trainer
 
 
-def main():
+def main(data_dir):
     set_seed(42)
 
     # Data augmentation and normalization for training
@@ -35,11 +42,6 @@ def main():
     }
 
     # Create datasets
-    data_dir = (
-        r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
-    )
-    data_dir = r"/home/chris/notebooks/hymenoptera_data/"
-
     image_datasets = {
         x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x])
         for x in ["train", "val"]
@@ -72,4 +74,7 @@ def main():
 
 
 if __name__ == "__main__":
-    notebook_launcher(main, num_processes=1)
+    parser = argparse.ArgumentParser(description="Simple example of training script.")
+    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
+    args = parser.parse_args()
+    main(args.data_dir)

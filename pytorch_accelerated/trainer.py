@@ -227,6 +227,7 @@ class Trainer:
         self, per_device_batch_size, train_dl_kwargs=None, eval_dl_kwargs=None
     ):
 
+        #TODO move these to hooks?
         default_train_dl_kwargs = {
             "shuffle": True,
             "pin_memory": True if torch.cuda.is_available() else False,
@@ -356,3 +357,20 @@ class Trainer:
             self._accelerator.print(*args, **kwargs)
         else:
             print(*args, **kwargs)
+
+    def save_model(self, trainer, save_dir, checkpoint_kwargs=None):
+        self._accelerator.wait_for_everyone()
+
+        checkpoint = {
+                "model_state_dict": trainer._accelerator.unwrap_model(
+                    trainer.model
+                ).state_dict(),
+                "optimizer_state_dict": trainer.optimizer.state_dict(),
+            }
+
+        if checkpoint_kwargs is not None:
+            checkpoint.update(checkpoint_kwargs)
+
+        self._accelerator.save(
+            checkpoint,
+            save_dir,)

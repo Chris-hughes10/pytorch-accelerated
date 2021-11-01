@@ -19,7 +19,7 @@ VERSION = 0.01
 FILEPATH = os.path.abspath(os.path.dirname(__file__))
 REQUIRED = []
 
-with open("requirements.build.txt", "r") as f:
+with open("requirements.txt", "r") as f:
     for line in f.readlines():
         try:
             REQUIRED.append(str(Requirement.parse(line)))

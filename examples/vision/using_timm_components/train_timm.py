@@ -101,15 +101,9 @@ class TimmTrainer(Trainer):
             val_loss = self.eval_loss_fn(outputs, yb)
             preds = outputs.argmax(-1)
 
-            self.cm_metrics.update(
-                preds, yb
-            )
+            self.cm_metrics.update(preds, yb)
 
-        return {
-            "loss": val_loss,
-            "model_outputs": outputs,
-            "batch_size": xb.size(0)
-        }
+        return {"loss": val_loss, "model_outputs": outputs, "batch_size": xb.size(0)}
 
     def eval_epoch_end(self):
         super().eval_epoch_end()
@@ -121,7 +115,6 @@ class TimmTrainer(Trainer):
         self.cm_metrics.reset()
 
         print(f"lr: {self.optimizer.param_groups[0]['lr']}")
-
 
     def scheduler_step(self):
         self.num_updates += 1
@@ -213,7 +206,7 @@ def main():
         "num_workers": 0,
         "distributed": False,
         "use_prefetcher": False,
-        "persistent_workers": False
+        "persistent_workers": False,
     }
 
     eval_dl_kwargs = {
@@ -228,7 +221,7 @@ def main():
         "crop_pct": crop_pct,
         "pin_memory": True,
         "use_prefetcher": False,
-        "persistent_workers": False
+        "persistent_workers": False,
     }
 
     optimizer = create_optimizer_v2(

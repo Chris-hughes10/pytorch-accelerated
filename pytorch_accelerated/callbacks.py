@@ -221,30 +221,17 @@ class SaveBestModelCallback(TrainerCallback):
         if self.save_dir is None:
             self.save_dir = str(datetime.now()).split(".")[0].replace(" ", "_")
 
-    def save_model(self, trainer):
-        trainer._accelerator.wait_for_everyone()
-        trainer._accelerator.save(
-            {
-                "loss": self.best_metric,
-                "model_state_dict": trainer._accelerator.unwrap_model(
-                    trainer.model
-                ).state_dict(),
-                "optimizer_state_dict": trainer.optimizer.state_dict(),
-            },
-            self.save_dir,
-        )
-
     def on_eval_epoch_end(self, trainer, **kwargs):
         current_metric = trainer.run_history.get_latest_metric(self.watch_metric)
         if self.best_metric is None:
             self.best_metric = current_metric
-            self.save_model(trainer)
+            trainer.save_model(save_dir=self.save_dir, checkpoint_kwargs={"loss": self.best_metric})
         else:
             is_improvement = self.operator(current_metric, self.best_metric)
 
             if is_improvement:
                 self.best_metric = current_metric
-                self.save_model(trainer)
+                trainer.save_model(save_dir=self.save_dir, checkpoint_kwargs={"loss": self.best_metric})
 
 
 class EarlyStoppingCallback(TrainerCallback):
