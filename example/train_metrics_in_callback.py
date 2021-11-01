@@ -25,8 +25,8 @@ class ConfusionMatrixCallback(TrainerCallback):
     def on_train_run_begin(self, trainer, **kwargs):
         self.cm_metrics.to(trainer._eval_dataloader.device)
 
-    def on_eval_epoch_end(self, trainer, batch, batch_outputs, **kwargs):
-        preds = batch_outputs["model_outputs"].argmax(dim=-1)
+    def on_eval_step_end(self, trainer, batch, batch_output, **kwargs):
+        preds = batch_output["model_outputs"].argmax(dim=-1)
         all_preds = trainer._accelerator.gather(preds)
         all_labels = trainer._accelerator.gather(batch[1])
         self.cm_metrics.update(all_preds, all_labels)
@@ -109,7 +109,4 @@ def main():
 
 
 if __name__ == "__main__":
-
-    print(torch.cuda.is_available())
-
     notebook_launcher(main, num_processes=2)

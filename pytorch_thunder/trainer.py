@@ -358,7 +358,7 @@ class Trainer:
                 batch_output["batch_size"],
             )
             self.callback_handler.call_event(
-                "on_eval_step_end", self, batch_output=batch_output
+                "on_eval_step_end", self, batch_output=batch_output, batch=batch
             )
         self.eval_epoch_end()
         self.callback_handler.call_event(
