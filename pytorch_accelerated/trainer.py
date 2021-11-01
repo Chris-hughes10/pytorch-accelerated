@@ -4,14 +4,14 @@ import torch
 from accelerate import Accelerator
 from torch.utils.data import DataLoader
 
-from pytorch_thunder.callbacks import (
+from pytorch_accelerated.callbacks import (
     CallbackHandler,
     PrintMetricsCallback,
     PrintProgressCallback,
     TerminateOnNaNCallback,
     StopTrainingError,
 )
-from pytorch_thunder.tracking import RunHistory, InMemoryRunHistory, AverageMeter
+from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, AverageMeter
 
 DEFAULT_CALLBACKS = (
     TerminateOnNaNCallback,

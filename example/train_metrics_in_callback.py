@@ -9,13 +9,13 @@ from torch.optim import lr_scheduler
 from torchmetrics import ConfusionMatrix
 from torchvision import transforms, datasets, models
 
-from pytorch_thunder.callbacks import (
+from pytorch_accelerated.callbacks import (
     TrainerCallback,
     PrintMetricsCallback,
     TerminateOnNaNCallback,
     PrintProgressCallback,
 )
-from pytorch_thunder.trainer import Trainer
+from pytorch_accelerated.trainer import Trainer
 
 
 class ConfusionMatrixCallback(TrainerCallback):
