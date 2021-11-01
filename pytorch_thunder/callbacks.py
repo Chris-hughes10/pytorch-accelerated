@@ -161,6 +161,7 @@ class PrintMetricsCallback(TrainerCallback):
         ]
         self._print_metrics(trainer, metric_names)
 
+
 class PrintProgressCallback(TrainerCallback):
     @staticmethod
     def print(trainer, message):

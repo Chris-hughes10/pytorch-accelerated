@@ -14,8 +14,8 @@ from pytorch_thunder.callbacks import (
 from pytorch_thunder.tracking import RunHistory, InMemoryRunHistory, AverageMeter
 
 DEFAULT_CALLBACKS = (
-    PrintMetricsCallback,
     TerminateOnNaNCallback,
+    PrintMetricsCallback,
     PrintProgressCallback,
 )
 
@@ -322,7 +322,7 @@ class Trainer:
                 batch_output["loss"] /= self.run_config["gradient_accumulation_steps"]
 
             self.callback_handler.call_event(
-                "on_train_step_end", self, batch_output=batch_output
+                "on_train_step_end", self, batch_output=batch_output, batch=batch
             )
             self.backward_step(batch_output["loss"])
 

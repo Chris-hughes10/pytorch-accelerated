@@ -66,9 +66,6 @@ class TimmTrainer(Trainer):
         self.num_updates = None
         self.mixup_fn = mixup_fn
         self.cm_metrics = ConfusionMatrix(num_classes=num_classes)
-        self.cm_metrics_dist = ConfusionMatrix(
-            num_classes=num_classes, dist_sync_on_step=True
-        )
 
     def create_train_dataloader(self, **kwargs):
 
@@ -91,7 +88,6 @@ class TimmTrainer(Trainer):
         self.num_updates = self.run_history.current_epoch * len(self._train_dataloader)
 
         self.cm_metrics.to(self._eval_dataloader.device)
-        self.cm_metrics_dist.to(self._eval_dataloader.device)
 
     def calculate_train_batch_loss(self, batch):
         xb, yb = batch
@@ -101,10 +97,10 @@ class TimmTrainer(Trainer):
     def calculate_eval_batch_step(self, batch):
         with torch.no_grad():
             xb, yb = batch
-            preds = self.model(xb)
-            val_loss = self.eval_loss_fn(preds, yb)
+            outputs = self.model(xb)
+            val_loss = self.eval_loss_fn(outputs, yb)
+            preds = outputs.argmax(-1)
 
-            self.cm_metrics_dist.update(preds, yb)
             self.cm_metrics.update(
                 self._accelerator.gather(preds), self._accelerator.gather(yb)
             )
@@ -119,10 +115,8 @@ class TimmTrainer(Trainer):
             self.scheduler.step(self.run_history.current_epoch + 1)
 
         cm = self.cm_metrics.compute()
-        cm_dist = self.cm_metrics_dist.compute()
 
         print(f"Confusion matrix: {cm}")
-        print(f"Confusion matrix dist: {cm_dist}")
 
     def scheduler_step(self):
         self.num_updates += 1
@@ -134,6 +128,9 @@ def main():
     # data_path = Path(r"C:\Users\hughesc\Documents\imagenette2-320\imagenette2-320")
 
     data_path = Path(r"/home/chris/notebooks/hymenoptera_data/")
+    data_path = Path(
+        r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
+    )
 
     train_path = data_path / "train"
     val_path = data_path / "val"
