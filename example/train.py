@@ -7,7 +7,7 @@ from torch import nn, optim
 from torch.optim import lr_scheduler
 from torchvision import transforms, datasets, models
 
-from pytorch_thunder.trainer import Trainer
+from pytorch_accelerated.trainer import Trainer
 
 
 def main():

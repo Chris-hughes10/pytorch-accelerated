@@ -11,7 +11,7 @@ from timm.scheduler import CosineLRScheduler
 from torch import nn
 from torchmetrics import ConfusionMatrix
 
-from pytorch_thunder.trainer import Trainer
+from pytorch_accelerated.trainer import Trainer
 
 
 # Taken from timm master branch - not yet released
