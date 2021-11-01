@@ -27,9 +27,7 @@ class ConfusionMatrixCallback(TrainerCallback):
 
     def on_eval_step_end(self, trainer, batch, batch_output, **kwargs):
         preds = batch_output["model_outputs"].argmax(dim=-1)
-        all_preds = trainer._accelerator.gather(preds)
-        all_labels = trainer._accelerator.gather(batch[1])
-        self.cm_metrics.update(all_preds, all_labels)
+        self.cm_metrics.update(preds, batch[1])
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         cm = self.cm_metrics.compute()

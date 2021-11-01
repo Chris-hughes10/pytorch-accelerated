@@ -1,7 +1,6 @@
 import os
 from functools import partial
 
-import torch
 from accelerate import notebook_launcher
 from accelerate.utils import set_seed
 from torch import nn, optim
@@ -25,18 +24,20 @@ class TrainerWithMetrics(Trainer):
         batch_output = super().calculate_eval_batch_step(batch)
 
         preds = batch_output["model_outputs"].argmax(dim=-1)
-        all_preds = self._accelerator.gather(preds)
-        all_labels = self._accelerator.gather(batch[1])
 
-        self.cm_metrics.update(all_preds, all_labels)
+        self.cm_metrics.update(preds, batch[1])
 
         return batch_output
 
     def eval_epoch_end(self):
-        super().eval_epoch_end()
+        cm = self.cm_metrics.compute().cpu()
 
-        cm = self.cm_metrics.compute()
-        self.run_history.update_metric("confusion_matrix", cm.cpu())
+        tn, fp, fn, tp = cm.ravel()
+
+        self.run_history.update_metric("confusion_matrix", cm)
+        self.run_history.update_metric("accuracy", (tp + fn) / (tn + fp + fn + tp))
+        self.run_history.update_metric("precision", tp / (tp + fp))
+        self.run_history.update_metric("recall", tp / (tp + fn))
         self.cm_metrics.reset()
 
 
@@ -76,6 +77,10 @@ def main():
     }
     # Create model
     model = models.resnet18(pretrained=True)
+
+    for param in model.parameters():
+        param.requires_grad = False
+
     model.fc = nn.Linear(model.fc.in_features, len(image_datasets["train"].classes))
 
     # Define loss function
@@ -103,4 +108,4 @@ def main():
 
 
 if __name__ == "__main__":
-    notebook_launcher(main, num_processes=2)
+    notebook_launcher(main, num_processes=1)

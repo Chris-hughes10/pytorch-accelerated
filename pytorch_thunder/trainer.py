@@ -43,7 +43,7 @@ class Trainer:
         self._train_dataloader = None
         self._eval_dataloader = None
         self.run_config = None
-        self.loss_tracker = AverageMeter()
+        self._loss_tracker = AverageMeter()
         self.run_history: RunHistory = (
             run_history if run_history is not None else InMemoryRunHistory()
         )
@@ -65,7 +65,6 @@ class Trainer:
 
     def train_epoch_start(self):
         self.model.train()
-        self.loss_tracker.reset()
 
     def calculate_train_batch_loss(self, batch):
         xb, yb = batch
@@ -82,37 +81,16 @@ class Trainer:
     def train_epoch_end(
         self,
     ):
-        self.run_history.update_metric("train_loss_epoch", self.loss_tracker.avg)
-        # TODO: move to step
-        # batch_losses = self._aggregate_losses(train_batch_outputs)
-        # losses = torch.cat(batch_losses)
-        # average_train_loss = losses.mean().item()
-        # self.run_history.update_metric("train_loss_epoch", average_train_loss)
-
-    def _aggregate_losses(self, batch_outputs, move_to_cpu=False):
-        losses = []
-        for batch_output in batch_outputs:
-            loss = self._accelerator.gather(batch_output["loss"]).detach()
-            if move_to_cpu:
-                loss = loss.cpu()
-            if len(loss.shape) == 0:
-                loss = loss[None]
-            losses.append(loss)
-        return losses
+        pass
 
     def eval_epoch_start(self):
         self.model.eval()
-        self.loss_tracker.reset()
 
     def calculate_eval_batch_step(self, batch):
         with torch.no_grad():
             xb, yb = batch
             model_outputs = self.model(xb)
             val_loss = self.loss_func(model_outputs, yb)
-
-            self.loss_tracker.update(
-                self._accelerator.gather(val_loss).detach().mean().item(), xb.size(0)
-            )  # move to body of loop?
 
         return {
             "loss": val_loss,
@@ -121,12 +99,7 @@ class Trainer:
         }
 
     def eval_epoch_end(self):
-        self.run_history.update_metric("eval_loss_epoch", self.loss_tracker.avg)
-        # TODO move to step
-        # batch_losses = self._aggregate_losses(eval_batch_outputs)
-        # losses = torch.cat(batch_losses)
-        # average_eval_loss = losses.mean().item()
-        # self.run_history.update_metric("eval_loss_epoch", average_eval_loss)
+        pass
 
     def backward_step(self, loss):
         self._accelerator.backward(loss)
@@ -307,6 +280,7 @@ class Trainer:
             self,
         )
         self.train_epoch_start()
+        self._loss_tracker.reset()
 
         for step, batch in enumerate(train_dl):
             self.callback_handler.call_event(
@@ -314,7 +288,7 @@ class Trainer:
                 self,
             )
             batch_output = self.calculate_train_batch_loss(batch)
-            self.loss_tracker.update(
+            self._loss_tracker.update(
                 self._accelerator.gather(batch_output["loss"]).detach().mean().item(),
                 batch_output["batch_size"],
             )
@@ -335,6 +309,7 @@ class Trainer:
                 self.optimizer_zero_grad()
 
         self.train_epoch_end()
+        self.run_history.update_metric("train_loss_epoch", self._loss_tracker.avg)
         self.callback_handler.call_event(
             "on_train_epoch_end",
             self,
@@ -346,6 +321,7 @@ class Trainer:
             self,
         )
         self.eval_epoch_start()
+        self._loss_tracker.reset()
 
         for batch in valid_dl:
             self.callback_handler.call_event(
@@ -353,7 +329,7 @@ class Trainer:
                 self,
             )
             batch_output = self.calculate_eval_batch_step(batch)
-            self.loss_tracker.update(
+            self._loss_tracker.update(
                 self._accelerator.gather(batch_output["loss"]).detach().mean().item(),
                 batch_output["batch_size"],
             )
@@ -361,6 +337,7 @@ class Trainer:
                 "on_eval_step_end", self, batch_output=batch_output, batch=batch
             )
         self.eval_epoch_end()
+        self.run_history.update_metric("eval_loss_epoch", self._loss_tracker.avg)
         self.callback_handler.call_event(
             "on_eval_epoch_end",
             self,

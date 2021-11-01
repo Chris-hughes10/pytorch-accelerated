@@ -102,11 +102,13 @@ class TimmTrainer(Trainer):
             preds = outputs.argmax(-1)
 
             self.cm_metrics.update(
-                self._accelerator.gather(preds), self._accelerator.gather(yb)
+                preds, yb
             )
 
         return {
             "loss": val_loss,
+            "model_outputs": outputs,
+            "batch_size": xb.size(0)
         }
 
     def eval_epoch_end(self):
@@ -115,8 +117,11 @@ class TimmTrainer(Trainer):
             self.scheduler.step(self.run_history.current_epoch + 1)
 
         cm = self.cm_metrics.compute()
+        self.run_history.update_metric("confusion_matrix", cm.cpu())
+        self.cm_metrics.reset()
 
-        print(f"Confusion matrix: {cm}")
+        print(f"lr: {self.optimizer.param_groups[0]['lr']}")
+
 
     def scheduler_step(self):
         self.num_updates += 1
@@ -128,9 +133,9 @@ def main():
     # data_path = Path(r"C:\Users\hughesc\Documents\imagenette2-320\imagenette2-320")
 
     data_path = Path(r"/home/chris/notebooks/hymenoptera_data/")
-    data_path = Path(
-        r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
-    )
+    # data_path = Path(
+    #     r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
+    # )
 
     train_path = data_path / "train"
     val_path = data_path / "val"
@@ -205,9 +210,10 @@ def main():
         "interpolation": train_interpolation,
         "mean": data_config["mean"],
         "std": data_config["std"],
-        "num_workers": 1,
+        "num_workers": 0,
         "distributed": False,
         "use_prefetcher": False,
+        "persistent_workers": False
     }
 
     eval_dl_kwargs = {
@@ -216,12 +222,13 @@ def main():
         "interpolation": data_config["interpolation"],
         "mean": data_config["mean"],
         "std": data_config["std"],
-        "num_workers": 1,
+        "num_workers": 0,
         "distributed": False,
         # "crop_pct": data_config["crop_pct"],
         "crop_pct": crop_pct,
         "pin_memory": True,
         "use_prefetcher": False,
+        "persistent_workers": False
     }
 
     optimizer = create_optimizer_v2(
