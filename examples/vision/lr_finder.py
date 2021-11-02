@@ -26,6 +26,7 @@ def find_lr(init_value = 1e-8, final_value=10., beta = 0.98):
         #As before, get the loss for this mini-batch of inputs/outputs
         inputs,labels = data
         inputs, labels = Variable(inputs), Variable(labels)
+        # disable gradients?
         optimizer.zero_grad()
         outputs = net(inputs)
         loss = criterion(outputs, labels)
@@ -51,3 +52,12 @@ def find_lr(init_value = 1e-8, final_value=10., beta = 0.98):
 
 logs,losses = find_lr()
 plt.plot(logs[10:-5],losses[10:-5])
+
+#perform on validation set or train set?
+
+if suggest_lr:
+    # 'steepest': the point with steepest gradient (minimal gradient)
+    print("LR suggestion: steepest gradient")
+    min_grad_idx = None
+    try:
+        min_grad_idx = (np.gradient(np.array(losses))).argmin()
