@@ -48,7 +48,7 @@ class PetsTrainer(Trainer):
         self.accurate = 0
         self.num_elems = 0
 
-    def calculate_eval_batch_step(self, batch):
+    def calculate_eval_batch_loss(self, batch):
         inputs = (batch["image"] - self.mean) / self.std
 
         with torch.no_grad():

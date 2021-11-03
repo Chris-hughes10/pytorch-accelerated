@@ -219,19 +219,24 @@ class SaveBestModelCallback(TrainerCallback):
     def on_train_run_begin(self, args, **kwargs):
         self.best_metric = None
         if self.save_dir is None:
-            self.save_dir = str(datetime.now()).split(".")[0].replace(" ", "_")
+            self.save_dir = 'model.pt'
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         current_metric = trainer.run_history.get_latest_metric(self.watch_metric)
         if self.best_metric is None:
             self.best_metric = current_metric
-            trainer.save_model(save_dir=self.save_dir, checkpoint_kwargs={"loss": self.best_metric})
+            trainer.save_model(save_dir=self.save_dir, checkpoint_kwargs={self.watch_metric: self.best_metric})
         else:
             is_improvement = self.operator(current_metric, self.best_metric)
 
             if is_improvement:
                 self.best_metric = current_metric
                 trainer.save_model(save_dir=self.save_dir, checkpoint_kwargs={"loss": self.best_metric})
+
+    def on_train_run_end(self, trainer, **kwargs):
+        trainer.print(f'Loading checkpoint with {self.watch_metric}: {self.best_metric}')
+        trainer.load_checkpoint(self.save_dir)
+
 
 
 class EarlyStoppingCallback(TrainerCallback):

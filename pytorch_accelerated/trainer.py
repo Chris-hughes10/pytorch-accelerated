@@ -1,4 +1,5 @@
 import math
+import os
 
 import torch
 from accelerate import Accelerator
@@ -19,7 +20,6 @@ DEFAULT_CALLBACKS = (
     PrintProgressCallback,
 )
 
-
 class Trainer:
     def __init__(
         self,
@@ -39,7 +39,7 @@ class Trainer:
         self.collate_fn = collate_fn
         self.train_dataset = None
         self.eval_dataset = None
-        self._accelerator = None
+        self._accelerator = Accelerator()
         self._train_dataloader = None
         self._eval_dataloader = None
         self.run_config = None
@@ -53,15 +53,41 @@ class Trainer:
         )
         self.callback_handler.call_event("on_init_end", self)
 
-    def create_train_dataloader(self, **kwargs):
+    def create_train_dataloader(self, per_device_batch_size, train_dl_kwargs):
+        default_train_dl_kwargs = {
+            "shuffle": True,
+            "pin_memory": True if torch.cuda.is_available() else False,
+            "batch_size": per_device_batch_size,
+            "num_workers": max(os.cpu_count()//torch.cuda.device_count(), 1)
+        }
+
+        if train_dl_kwargs is not None:
+            default_train_dl_kwargs.update(train_dl_kwargs)
+
         return DataLoader(
-            dataset=self.train_dataset, collate_fn=self.collate_fn, **kwargs
+            dataset=self.train_dataset, collate_fn=self.collate_fn, **train_dl_kwargs
         )
 
-    def create_eval_dataloader(self, **kwargs):
+    def create_eval_dataloader(self, per_device_batch_size, eval_dl_kwargs):
+        default_eval_dl_kwargs = {
+            "shuffle": False,
+            "pin_memory": True if torch.cuda.is_available() else False,
+            "batch_size": per_device_batch_size,
+            "num_workers": max(os.cpu_count()//torch.cuda.device_count(), 1)
+        }
+
+        if eval_dl_kwargs is not None:
+            default_eval_dl_kwargs.update(eval_dl_kwargs)
+
         return DataLoader(
-            dataset=self.eval_dataset, collate_fn=self.collate_fn, **kwargs
+            dataset=self.eval_dataset, collate_fn=self.collate_fn, **eval_dl_kwargs
         )
+
+    def create_scheduler(self, optimizer):
+        return self.scheduler_type(optimizer)
+
+    def training_run_start(self):
+        pass
 
     def train_epoch_start(self):
         self.model.train()
@@ -78,6 +104,19 @@ class Trainer:
             "batch_size": xb.size(0),
         }
 
+    def backward_step(self, loss):
+        self._accelerator.backward(loss)
+
+    def optimizer_step(self):
+        self.optimizer.step()
+
+    def scheduler_step(self):
+        if self.scheduler is not None:
+            self.scheduler.step()
+
+    def optimizer_zero_grad(self):
+        self.optimizer.zero_grad()
+
     def train_epoch_end(
         self,
     ):
@@ -86,7 +125,7 @@ class Trainer:
     def eval_epoch_start(self):
         self.model.eval()
 
-    def calculate_eval_batch_step(self, batch):
+    def calculate_eval_batch_loss(self, batch):
         with torch.no_grad():
             xb, yb = batch
             model_outputs = self.model(xb)
@@ -101,21 +140,8 @@ class Trainer:
     def eval_epoch_end(self):
         pass
 
-    def backward_step(self, loss):
-        self._accelerator.backward(loss)
-
-    def optimizer_zero_grad(self):
-        self.optimizer.zero_grad()
-
-    def optimizer_step(self):
-        self.optimizer.step()
-
-    def scheduler_step(self):
-        if self.scheduler is not None:
-            self.scheduler.step()
-
-    def create_scheduler(self, optimizer):
-        return self.scheduler_type(optimizer)
+    def training_run_end(self):
+        pass
 
     def _create_run_config(
         self,
@@ -123,7 +149,6 @@ class Trainer:
         per_device_batch_size,
         gradient_accumulation_steps,
         max_num_train_steps,
-        fp16,
         train_dl_kwargs=None,
         eval_dl_kwargs=None,
     ):
@@ -166,7 +191,7 @@ class Trainer:
             "max_num_train_steps": max_num_train_steps,
             "is_local_process_zero": self._accelerator.is_local_main_process,
             "is_world_process_zero": self._accelerator.is_main_process,
-            "fp16": fp16,
+            "fp16": self._accelerator.use_fp16,
         }
         # use SimpleNamespace or dotdict instead of dict?
 
@@ -179,13 +204,11 @@ class Trainer:
         eval_dataset=None,
         per_device_batch_size=8,
         max_num_train_steps=None,
-        fp16=True,
         gradient_accumulation_steps=1,
         create_scheduler=True,
         train_dataloader_kwargs: dict = None,
         eval_dataloader_kwargs: dict = None,
     ):
-        self._accelerator = Accelerator(fp16=fp16)
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
 
@@ -208,7 +231,6 @@ class Trainer:
             per_device_batch_size=per_device_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             max_num_train_steps=max_num_train_steps,
-            fp16=fp16,
             train_dl_kwargs=train_dataloader_kwargs,
             eval_dl_kwargs=eval_dataloader_kwargs,
         )
@@ -227,37 +249,11 @@ class Trainer:
         self, per_device_batch_size, train_dl_kwargs=None, eval_dl_kwargs=None
     ):
 
-        #TODO move these to hooks?
-        default_train_dl_kwargs = {
-            "shuffle": True,
-            "pin_memory": True if torch.cuda.is_available() else False,
-        }
-
-        if train_dl_kwargs is not None:
-            default_train_dl_kwargs.update(train_dl_kwargs)
-
-        if "batch_size" not in default_train_dl_kwargs:
-            default_train_dl_kwargs["batch_size"] = per_device_batch_size
-
-        default_eval_dl_kwargs = {
-            "shuffle": False,
-            "pin_memory": True if torch.cuda.is_available() else False,
-        }
-
-        if eval_dl_kwargs is not None:
-            default_eval_dl_kwargs.update(eval_dl_kwargs)
-
-        if "batch_size" not in default_train_dl_kwargs:
-            default_train_dl_kwargs["batch_size"] = per_device_batch_size
-
-        if "batch_size" not in default_eval_dl_kwargs:
-            default_eval_dl_kwargs["batch_size"] = per_device_batch_size
-
-        train_dataloader = self.create_train_dataloader(**default_train_dl_kwargs)
+        train_dataloader = self.create_train_dataloader(per_device_batch_size, train_dl_kwargs)
         self._train_dataloader = self._accelerator.prepare(train_dataloader)
 
         if self.eval_dataset is not None:
-            eval_dataloader = self.create_eval_dataloader(**default_eval_dl_kwargs)
+            eval_dataloader = self.create_eval_dataloader(per_device_batch_size, eval_dl_kwargs)
             self._eval_dataloader = self._accelerator.prepare(eval_dataloader)
 
     def _run_training(self):
@@ -274,14 +270,8 @@ class Trainer:
                     "on_stop_training_error",
                     self,
                 )
-                raise e
+                break
         self.training_run_end()
-
-    def training_run_start(self):
-        pass
-
-    def training_run_end(self):
-        pass
 
     def _run_train_epoch(self, train_dl):
         self.callback_handler.call_event(
@@ -337,7 +327,7 @@ class Trainer:
                 "on_eval_step_begin",
                 self,
             )
-            batch_output = self.calculate_eval_batch_step(batch)
+            batch_output = self.calculate_eval_batch_loss(batch)
             self._loss_tracker.update(
                 self._accelerator.gather(batch_output["loss"]).detach().mean().item(),
                 batch_output["batch_size"],
@@ -358,15 +348,18 @@ class Trainer:
         else:
             print(*args, **kwargs)
 
-    def save_model(self, trainer, save_dir, checkpoint_kwargs=None):
+    def save_model(self, save_dir, checkpoint_kwargs=None, save_optimizer=True):
+        # TODO: add save method for run history?
         self._accelerator.wait_for_everyone()
 
         checkpoint = {
-                "model_state_dict": trainer._accelerator.unwrap_model(
-                    trainer.model
+                "model_state_dict": self._accelerator.unwrap_model(
+                    self.model
                 ).state_dict(),
-                "optimizer_state_dict": trainer.optimizer.state_dict(),
             }
+
+        if save_optimizer:
+            checkpoint["optimizer_state_dict"] = self.optimizer.state_dict()
 
         if checkpoint_kwargs is not None:
             checkpoint.update(checkpoint_kwargs)
@@ -374,3 +367,11 @@ class Trainer:
         self._accelerator.save(
             checkpoint,
             save_dir,)
+
+    def load_checkpoint(self, checkpoint_dir):
+        checkpoint = torch.load(checkpoint_dir)
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        # epoch = checkpoint['epoch']
+        # loss = checkpoint['loss']
+        pass

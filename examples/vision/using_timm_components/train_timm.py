@@ -94,7 +94,7 @@ class TimmTrainer(Trainer):
         mixup_xb, mixup_yb = self.mixup_fn(xb, yb)
         return super().calculate_train_batch_loss((mixup_xb, mixup_yb))
 
-    def calculate_eval_batch_step(self, batch):
+    def calculate_eval_batch_loss(self, batch):
         with torch.no_grad():
             xb, yb = batch
             outputs = self.model(xb)

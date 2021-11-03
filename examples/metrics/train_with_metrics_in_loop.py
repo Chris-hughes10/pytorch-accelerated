@@ -32,8 +32,8 @@ class TrainerWithMetrics(Trainer):
         self.accuracy.to(self._eval_dataloader.device)
 
 
-    def calculate_eval_batch_step(self, batch):
-        batch_output = super().calculate_eval_batch_step(batch)
+    def calculate_eval_batch_loss(self, batch):
+        batch_output = super().calculate_eval_batch_loss(batch)
         preds = batch_output["model_outputs"].argmax(dim=-1)
 
         self.cm_metrics.update(preds, batch[1])
