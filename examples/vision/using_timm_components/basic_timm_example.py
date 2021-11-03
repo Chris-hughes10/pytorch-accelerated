@@ -23,7 +23,7 @@ class TimmTrainer(Trainer):
     def __init__(self, eval_loss_func, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.num_updates = None
-        self.train_loss_func = kwargs['loss_func']
+        self.train_loss_func = kwargs["loss_func"]
         self.eval_loss_func = eval_loss_func
 
     def create_train_dataloader(self, **kwargs):

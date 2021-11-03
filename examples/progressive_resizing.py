@@ -12,8 +12,15 @@ from torch.optim import lr_scheduler, Optimizer
 from torchmetrics import Accuracy
 from torchvision import transforms, datasets, models
 
-from pytorch_accelerated.callbacks import TerminateOnNaNCallback, PrintMetricsCallback, PrintProgressCallback, \
-    EarlyStoppingCallback, SaveBestModelCallback, ProgressBarCallback, TrainerCallback
+from pytorch_accelerated.callbacks import (
+    TerminateOnNaNCallback,
+    PrintMetricsCallback,
+    PrintProgressCallback,
+    EarlyStoppingCallback,
+    SaveBestModelCallback,
+    ProgressBarCallback,
+    TrainerCallback,
+)
 from pytorch_accelerated.trainer import Trainer
 
 
@@ -56,7 +63,6 @@ def create_transforms(train_image_size=224, val_image_size=224):
     }
 
 
-
 def main():
     set_seed(42)
 
@@ -87,13 +93,13 @@ def main():
         optimizer=optimizer,
         scheduler_type=exp_lr_scheduler,
         callbacks=(
-    TerminateOnNaNCallback,
-    AccuracyCallback(num_classes=2),
-    PrintMetricsCallback,
-    PrintProgressCallback,
-    EarlyStoppingCallback(early_stopping_patience=3),
-    SaveBestModelCallback(watch_metric='accuracy', greater_is_better=True)
-)
+            TerminateOnNaNCallback,
+            AccuracyCallback(num_classes=2),
+            PrintMetricsCallback,
+            PrintProgressCallback,
+            EarlyStoppingCallback(early_stopping_patience=3),
+            SaveBestModelCallback(watch_metric="accuracy", greater_is_better=True),
+        ),
     )
 
     EpochConfig = namedtuple(
@@ -108,7 +114,7 @@ def main():
 
     for e_config in epoch_configs:
 
-        trainer.print('Starting phase')
+        trainer.print("Starting phase")
 
         image_datasets = {
             x: datasets.ImageFolder(

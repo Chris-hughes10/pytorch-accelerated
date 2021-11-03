@@ -31,7 +31,6 @@ class TrainerWithMetrics(Trainer):
         self.cm_metrics.to(self._eval_dataloader.device)
         self.accuracy.to(self._eval_dataloader.device)
 
-
     def calculate_eval_batch_loss(self, batch):
         batch_output = super().calculate_eval_batch_loss(batch)
         preds = batch_output["model_outputs"].argmax(dim=-1)
@@ -42,7 +41,9 @@ class TrainerWithMetrics(Trainer):
         return batch_output
 
     def eval_epoch_end(self):
-        self.run_history.update_metric("confusion_matrix", self.cm_metrics.compute().cpu())
+        self.run_history.update_metric(
+            "confusion_matrix", self.cm_metrics.compute().cpu()
+        )
         self.run_history.update_metric("accuracy", self.accuracy.compute().item())
 
         self.cm_metrics.reset()

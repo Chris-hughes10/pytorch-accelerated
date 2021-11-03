@@ -41,7 +41,9 @@ class ClassificationMetricsCallback(TrainerCallback):
         self.accuracy.update(preds, batch[1])
 
     def on_eval_epoch_end(self, trainer, **kwargs):
-        trainer.run_history.update_metric("confusion_matrix", self.cm_metrics.compute().cpu())
+        trainer.run_history.update_metric(
+            "confusion_matrix", self.cm_metrics.compute().cpu()
+        )
         trainer.run_history.update_metric("accuracy", self.accuracy.compute().item())
 
         self.cm_metrics.reset()
