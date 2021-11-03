@@ -1,11 +1,11 @@
 from functools import partial
 from pathlib import Path
 
-import torch
 import timm.data
+import timm.loss
 import timm.optim
 import timm.scheduler
-import timm.loss
+import torch
 from accelerate import notebook_launcher
 from torchmetrics import Accuracy
 
@@ -16,7 +16,7 @@ from pytorch_accelerated.callbacks import (
     PrintProgressCallback,
     ProgressBarCallback,
 )
-from pytorch_accelerated.trainer import Trainer, DEFAULT_CALLBACKS
+from pytorch_accelerated.trainer import Trainer
 
 
 class TimmTrainer(Trainer):
@@ -27,14 +27,12 @@ class TimmTrainer(Trainer):
         self.eval_loss_func = eval_loss_func
 
     def create_train_dataloader(self, **kwargs):
-        kwargs.pop("shuffle")
 
         return timm.data.create_loader(
             dataset=self.train_dataset, collate_fn=self.collate_fn, **kwargs
         )
 
     def create_eval_dataloader(self, **kwargs):
-        kwargs.pop("shuffle")
 
         return timm.data.create_loader(
             dataset=self.eval_dataset, collate_fn=self.collate_fn, **kwargs
