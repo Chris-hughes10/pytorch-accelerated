@@ -35,3 +35,5 @@
 
 # repeated augmentation + stochastic depth : tend to improve the results at convergence, but they slow
 # down the training in the early stages
+
+# sync batchnorm

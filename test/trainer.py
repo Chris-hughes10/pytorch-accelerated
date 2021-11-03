@@ -14,6 +14,9 @@ def optimizer(model):
 def test_can_load_model_and_optimizer(model, optimizer):
     pass
 
+def test_can_save_checkpoint():
+    pass
+
 def test_skip_eval_if_not_present():
     pass
 
@@ -21,4 +24,10 @@ def test_skip_scheduler_step_if_not_present():
     pass
 
 def test_can_override_dataloader_kwargs():
+    pass
+
+def test_model_is_in_correct_mode():
+    pass
+
+def test_gradient_accumulation():
     pass

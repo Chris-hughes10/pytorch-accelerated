@@ -31,7 +31,7 @@ class RunHistory(ABC):
 
 class InMemoryRunHistory(RunHistory):
     def __init__(self):
-        self._current_epoch = 0
+        self._current_epoch = 1
         self._metrics = defaultdict(list)
 
     def get_metric_names(self):

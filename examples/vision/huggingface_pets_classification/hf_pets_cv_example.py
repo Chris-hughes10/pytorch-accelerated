@@ -13,6 +13,7 @@ from functools import partial
 import PIL
 import numpy as np
 import torch
+from accelerate import notebook_launcher
 from timm import create_model
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import Dataset
@@ -29,10 +30,13 @@ from pytorch_accelerated.trainer import Trainer
 
 class PetsTrainer(Trainer):
     def training_run_start(self):
-        self.mean = torch.tensor(self.model.default_cfg["mean"])[
+
+        # TODO if isinstance distributed data parallel, get config from model.module
+
+        self.mean = torch.tensor(self.model.module.default_cfg["mean"])[
             None, :, None, None
         ].to(self._accelerator.device)
-        self.std = torch.tensor(self.model.default_cfg["std"])[None, :, None, None].to(
+        self.std = torch.tensor(self.model.module.default_cfg["std"])[None, :, None, None].to(
             self._accelerator.device
         )
 
@@ -106,7 +110,18 @@ class PetsDataset(Dataset):
         return {"image": image, "label": label}
 
 
-def training_function(data_dir, config):
+# def training_function(data_dir, config):
+def training_function():
+
+    data_dir = '/home/chris/notebooks/pets'
+
+    config = {
+        "lr": 3e-2,
+        "num_epochs": 3,
+        "seed": 42,
+        "batch_size": 64,
+        "image_size": 224,
+    }
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     seed = int(config["seed"])
@@ -197,16 +212,17 @@ def training_function(data_dir, config):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simple examples of training script.")
-    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
-    args = parser.parse_args()
-    # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
-    config = {
-        "lr": 3e-2,
-        "num_epochs": 3,
-        "seed": 42,
-        "batch_size": 64,
-        "image_size": 224,
-    }
+    # parser = argparse.ArgumentParser(description="Simple examples of training script.")
+    # parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
+    # args = parser.parse_args()
+    # # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
+    # config = {
+    #     "lr": 3e-2,
+    #     "num_epochs": 3,
+    #     "seed": 42,
+    #     "batch_size": 64,
+    #     "image_size": 224,
+    # }
 
-    training_function(args.data_dir, config)
+    # training_function(args.data_dir, config)
+    notebook_launcher(training_function, num_processes=2)

@@ -1,16 +1,15 @@
 import os
 from collections import namedtuple
 from functools import partial
-from typing import Optional, Generator
+from pathlib import Path
 
 import torch
 from accelerate import notebook_launcher
-from accelerate.utils import set_seed
 from timm import create_model
-from torch import nn, optim
-from torch.optim import lr_scheduler, Optimizer
+from torch import nn
+from torch.optim.lr_scheduler import OneCycleLR, StepLR
 from torchmetrics import Accuracy
-from torchvision import transforms, datasets, models
+from torchvision import transforms, datasets
 
 from pytorch_accelerated.callbacks import (
     TerminateOnNaNCallback,
@@ -18,9 +17,8 @@ from pytorch_accelerated.callbacks import (
     PrintProgressCallback,
     EarlyStoppingCallback,
     SaveBestModelCallback,
-    ProgressBarCallback,
     TrainerCallback,
-)
+    ProgressBarCallback)
 from pytorch_accelerated.trainer import Trainer
 
 
@@ -64,56 +62,69 @@ def create_transforms(train_image_size=224, val_image_size=224):
 
 
 def main():
-
-
     # Create datasets
-    data_dir = (
-        r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
-    )
+    # data_dir = (
+    #     r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
+    # )
+
+    data_dir = Path(r"/home/chris/notebooks/imagenette2/")
+    data_dir = Path(r"/home/chris/notebooks/hymenoptera_data/")
+
+    num_classes = 2
 
     # model = create_model(number_of_classes=2)
-    model = create_model("resnet50d", pretrained=True, num_classes=2)
+    model = create_model("resnet50d", pretrained=False, num_classes=num_classes)
 
     # Freezing the base model
-    for param in model.parameters():
-        param.requires_grad = False
-    for param in model.get_classifier().parameters():
-        param.requires_grad = True
+    # for param in model.parameters():
+    #     param.requires_grad = False
+    # for param in model.get_classifier().parameters():
+    #     param.requires_grad = True
 
     # Define loss function
     loss_func = nn.CrossEntropyLoss()
 
     # Create optimizer and scheduler
-    optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-    exp_lr_scheduler = partial(lr_scheduler.StepLR, step_size=7, gamma=0.1)
+    # optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    lr_scheduler = partial(StepLR, step_size=7, gamma=0.1)
+
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01/25)
+    # lr_scheduler = partial(
+    #     OneCycleLR,
+    #     max_lr=0.01,
+    #     epochs=8,
+    #     steps_per_epoch=148
+    # )
 
     trainer = Trainer(
         model,
         loss_func=loss_func,
         optimizer=optimizer,
-        scheduler_type=exp_lr_scheduler,
+        scheduler_type=lr_scheduler,
         callbacks=(
             TerminateOnNaNCallback,
-            AccuracyCallback(num_classes=2),
+            AccuracyCallback(num_classes=num_classes),
             PrintMetricsCallback,
             PrintProgressCallback,
-            EarlyStoppingCallback(early_stopping_patience=3),
+            ProgressBarCallback(),
+            EarlyStoppingCallback(early_stopping_patience=2),
             SaveBestModelCallback(watch_metric="accuracy", greater_is_better=True),
         ),
     )
+
 
     EpochConfig = namedtuple(
         "EpochConfig", ["num_epochs", "train_image_size", "eval_image_size"]
     )
 
     epoch_configs = [
-        EpochConfig(num_epochs=3, train_image_size=150, eval_image_size=150),
-        EpochConfig(num_epochs=6, train_image_size=224, eval_image_size=224),
-        EpochConfig(num_epochs=6, train_image_size=350, eval_image_size=350),
+        EpochConfig(num_epochs=3, train_image_size=64, eval_image_size=64),
+        EpochConfig(num_epochs=3, train_image_size=128, eval_image_size=128),
+        EpochConfig(num_epochs=3, train_image_size=224, eval_image_size=224),
     ]
 
-    for e_config in epoch_configs:
 
+    for e_config in epoch_configs:
         trainer.print("Starting phase")
 
         image_datasets = {
@@ -130,9 +141,10 @@ def main():
             train_dataset=image_datasets["train"],
             eval_dataset=image_datasets["val"],
             num_epochs=e_config.num_epochs,
-            per_device_batch_size=8,
+            per_device_batch_size=32,
         )
 
 
 if __name__ == "__main__":
-    notebook_launcher(main, num_processes=1)
+    # notebook_launcher(main, num_processes=2)
+    main()

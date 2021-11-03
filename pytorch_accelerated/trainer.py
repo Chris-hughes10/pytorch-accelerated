@@ -192,6 +192,7 @@ class Trainer:
         )
 
     def _prepare_model_and_optimizer(self):
+        self._accelerator.free_memory()
         (self.model, self.optimizer,) = self._accelerator.prepare(
             self.model,
             self.optimizer,
@@ -350,7 +351,6 @@ class Trainer:
 
     def save_model(self, save_dir, checkpoint_kwargs=None, save_optimizer=True):
         # TODO: add save method for run history?
-        self._accelerator.wait_for_everyone()
 
         checkpoint = {
                 "model_state_dict": self._accelerator.unwrap_model(
@@ -364,13 +364,18 @@ class Trainer:
         if checkpoint_kwargs is not None:
             checkpoint.update(checkpoint_kwargs)
 
+        self._accelerator.wait_for_everyone()
+
         self._accelerator.save(
             checkpoint,
             save_dir,)
 
     def load_checkpoint(self, checkpoint_dir):
-        checkpoint = torch.load(checkpoint_dir)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self._accelerator.wait_for_everyone()
+        checkpoint = torch.load(checkpoint_dir, map_location='cpu')
+        self._accelerator.unwrap_model(
+            self.model
+        ).load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         # epoch = checkpoint['epoch']
         # loss = checkpoint['loss']
