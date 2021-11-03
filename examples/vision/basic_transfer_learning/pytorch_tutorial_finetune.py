@@ -69,7 +69,6 @@ def main(data_dir):
         eval_dataset=image_datasets["val"],
         num_epochs=8,
         per_device_batch_size=4,
-        fp16=True,
     )
 
 
