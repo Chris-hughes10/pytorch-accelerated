@@ -41,6 +41,8 @@ class Trainer:
         self.eval_dataset = None
         self._accelerator = Accelerator()
         self._train_dataloader = None
+        self._train_dl_kwargs = None
+        self._eval_dl_kwargs = None
         self._eval_dataloader = None
         self.run_config = None
         self._loss_tracker = AverageMeter()
@@ -64,8 +66,10 @@ class Trainer:
         if train_dl_kwargs is not None:
             default_train_dl_kwargs.update(train_dl_kwargs)
 
+        self._train_dl_kwargs = default_train_dl_kwargs
+
         return DataLoader(
-            dataset=self.train_dataset, collate_fn=self.collate_fn, **train_dl_kwargs
+            dataset=self.train_dataset, collate_fn=self.collate_fn, **self._train_dl_kwargs
         )
 
     def create_eval_dataloader(self, per_device_batch_size, eval_dl_kwargs):
@@ -79,8 +83,10 @@ class Trainer:
         if eval_dl_kwargs is not None:
             default_eval_dl_kwargs.update(eval_dl_kwargs)
 
+        self._eval_dl_kwargs = default_eval_dl_kwargs
+
         return DataLoader(
-            dataset=self.eval_dataset, collate_fn=self.collate_fn, **eval_dl_kwargs
+            dataset=self.eval_dataset, collate_fn=self.collate_fn, **self._eval_dl_kwargs
         )
 
     def create_scheduler(self, optimizer):
@@ -143,60 +149,6 @@ class Trainer:
     def training_run_end(self):
         pass
 
-    def _create_run_config(
-        self,
-        num_epochs,
-        per_device_batch_size,
-        gradient_accumulation_steps,
-        max_num_train_steps,
-        train_dl_kwargs=None,
-        eval_dl_kwargs=None,
-    ):
-
-        if train_dl_kwargs is not None:
-            train_per_device_batch_size = train_dl_kwargs.get(
-                "batch_size", per_device_batch_size
-            )
-        else:
-            train_per_device_batch_size = per_device_batch_size
-
-        if eval_dl_kwargs is not None:
-            eval_per_device_batch_size = eval_dl_kwargs.get(
-                "batch_size", per_device_batch_size
-            )
-        else:
-            eval_per_device_batch_size = per_device_batch_size
-
-        num_update_steps_per_epoch = math.ceil(
-            len(self._train_dataloader) / gradient_accumulation_steps
-        )
-
-        if max_num_train_steps is None:
-            max_num_train_steps = num_epochs * num_update_steps_per_epoch
-        else:
-            # override num epochs
-            num_epochs = math.ceil(max_num_train_steps / num_update_steps_per_epoch)
-
-        config = {
-            "num_epochs": num_epochs,
-            "train_per_device_batch_size": train_per_device_batch_size,
-            "eval_per_device_batch_size": eval_per_device_batch_size,
-            "gradient_accumulation_steps": gradient_accumulation_steps,
-            "train_total_batch_size": train_per_device_batch_size
-            * self._accelerator.num_processes
-            * gradient_accumulation_steps,
-            "eval_total_batch_size": eval_per_device_batch_size
-            * self._accelerator.num_processes,
-            "num_update_steps_per_epoch": num_update_steps_per_epoch,
-            "max_num_train_steps": max_num_train_steps,
-            "is_local_process_zero": self._accelerator.is_local_main_process,
-            "is_world_process_zero": self._accelerator.is_main_process,
-            "fp16": self._accelerator.use_fp16,
-        }
-        # use SimpleNamespace or dotdict instead of dict?
-
-        return config
-
     def train(
         self,
         train_dataset,
@@ -212,27 +164,21 @@ class Trainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
 
-        (self.model, self.optimizer,) = self._accelerator.prepare(
-            self.model,
-            self.optimizer,
-        )
+        self._prepare_model_and_optimizer()
+
         self._prepare_dataloaders(
             per_device_batch_size=per_device_batch_size,
             train_dl_kwargs=train_dataloader_kwargs,
             eval_dl_kwargs=eval_dataloader_kwargs,
         )
 
-        # only create if doesn't exist
         if self.scheduler_type is not None and create_scheduler:
             self.scheduler = self.create_scheduler(self.optimizer)
 
         self.run_config = self._create_run_config(
             num_epochs=num_epochs,
-            per_device_batch_size=per_device_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             max_num_train_steps=max_num_train_steps,
-            train_dl_kwargs=train_dataloader_kwargs,
-            eval_dl_kwargs=eval_dataloader_kwargs,
         )
 
         self.callback_handler.call_event(
@@ -245,6 +191,12 @@ class Trainer:
             self,
         )
 
+    def _prepare_model_and_optimizer(self):
+        (self.model, self.optimizer,) = self._accelerator.prepare(
+            self.model,
+            self.optimizer,
+        )
+
     def _prepare_dataloaders(
         self, per_device_batch_size, train_dl_kwargs=None, eval_dl_kwargs=None
     ):
@@ -255,6 +207,54 @@ class Trainer:
         if self.eval_dataset is not None:
             eval_dataloader = self.create_eval_dataloader(per_device_batch_size, eval_dl_kwargs)
             self._eval_dataloader = self._accelerator.prepare(eval_dataloader)
+
+    def _create_run_config(
+        self,
+        num_epochs,
+        gradient_accumulation_steps,
+        max_num_train_steps,
+    ):
+
+        train_per_device_batch_size = self._train_dl_kwargs['batch_size']
+
+        if self._eval_dl_kwargs is not None:
+            eval_per_device_batch_size = self._eval_dl_kwargs.get(
+                "batch_size", train_per_device_batch_size
+            )
+        else:
+            eval_per_device_batch_size = train_per_device_batch_size
+
+        num_update_steps_per_epoch = math.ceil(
+            len(self._train_dataloader) / gradient_accumulation_steps
+        )
+
+        if max_num_train_steps is None:
+            max_num_train_steps = num_epochs * num_update_steps_per_epoch
+        else:
+            # override num epochs
+            num_epochs = math.ceil(max_num_train_steps / num_update_steps_per_epoch)
+
+        config = {
+            "num_epochs": num_epochs,
+            "train_per_device_batch_size": train_per_device_batch_size,
+            "train_dl_kwargs": self._train_dl_kwargs,
+            "eval_per_device_batch_size": eval_per_device_batch_size,
+            "eval_dl_kwargs": self._eval_dl_kwargs,
+            "gradient_accumulation_steps": gradient_accumulation_steps,
+            "train_total_batch_size": train_per_device_batch_size
+            * self._accelerator.num_processes
+            * gradient_accumulation_steps,
+            "eval_total_batch_size": eval_per_device_batch_size
+            * self._accelerator.num_processes,
+            "num_update_steps_per_epoch": num_update_steps_per_epoch,
+            "max_num_train_steps": max_num_train_steps,
+            "is_local_process_zero": self._accelerator.is_local_main_process,
+            "is_world_process_zero": self._accelerator.is_main_process,
+            "fp16": self._accelerator.use_fp16,
+        }
+        # use SimpleNamespace or dotdict instead of dict?
+
+        return config
 
     def _run_training(self):
         self.training_run_start()

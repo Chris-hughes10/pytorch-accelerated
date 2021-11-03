@@ -64,7 +64,7 @@ def create_transforms(train_image_size=224, val_image_size=224):
 
 
 def main():
-    set_seed(42)
+
 
     # Create datasets
     data_dir = (
