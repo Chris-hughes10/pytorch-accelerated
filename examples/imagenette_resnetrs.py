@@ -37,3 +37,12 @@
 # down the training in the early stages
 
 # sync batchnorm
+from pathlib import Path
+
+
+def main():
+    data_path = Path(r"/home/chris/notebooks/imagenette2/")
+
+
+if __name__ == '__main__':
+    main()

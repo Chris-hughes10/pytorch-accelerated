@@ -47,9 +47,7 @@ class PetsTrainer(Trainer):
     def calculate_train_batch_loss(self, batch):
         inputs = (batch["image"] - self.mean) / self.std
 
-        return super().calculate_train_batch_loss(
-            (inputs, batch["label"])
-        )
+        return super().calculate_train_batch_loss((inputs, batch["label"]))
 
     def eval_epoch_start(self):
         super().eval_epoch_start()

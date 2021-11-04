@@ -100,7 +100,6 @@ def main(data_dir):
         model=model,
         loss_func=loss_func,
         optimizer=optimizer,
-
         callbacks=(
             cm_callback,
             TerminateOnNaNCallback,
