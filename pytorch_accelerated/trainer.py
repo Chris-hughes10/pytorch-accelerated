@@ -13,15 +13,16 @@ from pytorch_accelerated.callbacks import (
     PrintProgressCallback,
     TerminateOnNaNCallback,
     StopTrainingError,
-)
+    ProgressBarCallback)
 from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, LossTracker
 
 DEFAULT_CALLBACKS = (
     TerminateOnNaNCallback,
-    PrintMetricsCallback,
     PrintProgressCallback,
-)
+    ProgressBarCallback,
+    PrintMetricsCallback,
 
+)
 
 class TrainerPlaceholderValues(Enum):
     NUM_EPOCHS = 'trainer.run_config["num_epochs"]'

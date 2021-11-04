@@ -8,6 +8,7 @@
 
 
 import argparse
+import os
 from functools import partial
 
 import torch
@@ -17,7 +18,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
-)
+    set_seed)
 
 from pytorch_accelerated.trainer import Trainer
 
@@ -41,7 +42,7 @@ class TransformersTrainer(Trainer):
         return {
             "loss": outputs.loss,
             "model_outputs": outputs.logits,
-            "batch_size": batch[0].size(0),
+            "batch_size": batch['attention_mask'].size(0),
         }
 
     def calculate_eval_batch_loss(self, batch):
@@ -55,11 +56,11 @@ class TransformersTrainer(Trainer):
         return {
             "loss": outputs.loss,
             "model_outputs": outputs.logits,
-            "batch_size": batch[0].size(0),
+            "batch_size": batch['attention_mask'].size(0),
         }
 
     def eval_epoch_end(self):
-        self.run_history.update_metric('metric', self.metric.compute())
+        self.run_history.update_metric('metrics', self.metric.compute())
 
     def create_scheduler(self, optimizer):
         self.scheduler_type(optimizer=self.optimizer,
@@ -71,6 +72,7 @@ def training_function(config, args):
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     correct_bias = config["correct_bias"]
+    seed = int(config["seed"])
     batch_size = int(config["batch_size"])
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
@@ -102,27 +104,31 @@ def training_function(config, args):
     def collate_fn(examples):
         return tokenizer.pad(examples, padding="longest", return_tensors="pt")
 
-    # Instantiate the model (we build the model here so that the seed also control new weights initialization)
+    set_seed(seed)
+
+    # Instantiate the model
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
 
     # Instantiate optimizer
     optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
 
+    # Create an instance of our trainer
     trainer = TransformersTrainer(model=model,
                                   optimizer=optimizer,
                                   collate_fn=collate_fn,
                                   metric=metric)
 
-    # Instantiate learning rate scheduler after preparing the training dataloader as the prepare method
-    # may change its length.
+    # Wrap the scheduler factory function as a higher order function so that it will be created inside the trainer
     lr_scheduler = partial(get_linear_schedule_with_warmup,
                            num_warmup_steps=100,
                            )
 
+    # start training
     trainer.train(num_epochs=num_epochs,
                   train_dataset=tokenized_datasets["train"],
                   eval_dataset=tokenized_datasets["validation"],
                   per_device_batch_size=batch_size,
+                  train_dataloader_kwargs={'shuffle': False},
                   eval_dataloader_kwargs={'batch_size': EVAL_BATCH_SIZE},
                   scheduler_type=lr_scheduler,
                   gradient_accumulation_steps=gradient_accumulation_steps)
@@ -138,4 +144,5 @@ def main():
 
 
 if __name__ == "__main__":
+    os.environ['TOKENIZERS_PARALLELISM'] = 'false'
     main()
