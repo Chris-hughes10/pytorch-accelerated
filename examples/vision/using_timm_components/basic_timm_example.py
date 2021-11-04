@@ -160,7 +160,6 @@ def main():
         optimizer=optimizer,
         loss_func=train_loss_fn,
         eval_loss_func=validate_loss_fn,
-        scheduler_type=lr_scheduler_type,
         callbacks=(
             TerminateOnNaNCallback,
             AccuracyCallback(num_classes=num_classes),
@@ -177,6 +176,7 @@ def main():
         num_epochs=num_epochs,
         train_dataloader_kwargs=train_dl_kwargs,
         eval_dataloader_kwargs=eval_dl_kwargs,
+        scheduler_type=lr_scheduler_type,
     )
 
 

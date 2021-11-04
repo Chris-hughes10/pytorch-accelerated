@@ -18,7 +18,8 @@ from pytorch_accelerated.callbacks import (
     EarlyStoppingCallback,
     SaveBestModelCallback,
     TrainerCallback,
-    ProgressBarCallback)
+    ProgressBarCallback,
+)
 from pytorch_accelerated.trainer import Trainer, TrainerPlaceholderValues
 
 
@@ -64,7 +65,7 @@ def create_transforms(train_image_size=224, val_image_size=224):
 def main():
 
     data_dir = Path(r"/home/chris/notebooks/imagenette2/")
-    num_classes = len(list((data_dir / 'train').iterdir()))
+    num_classes = len(list((data_dir / "train").iterdir()))
 
     # model = create_model(number_of_classes=2)
     model = create_model("resnet50d", pretrained=False, num_classes=num_classes)
@@ -72,18 +73,8 @@ def main():
     # Define loss function
     loss_func = nn.CrossEntropyLoss()
 
-    # Define optimizer and scheduler
+    # Define optimizer
     optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01 / 25)
-
-    # Here we use placeholders for the number of epochs and number of steps per epoch, so that the
-    # trainer can inject those values later. This is key especially key for the number of update steps
-    # which will change depending on whether training is distributed or not
-    lr_scheduler = partial(
-        OneCycleLR,
-        max_lr=0.01,
-        epochs=TrainerPlaceholderValues.NUM_EPOCHS,
-        steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH
-    )
 
     trainer = Trainer(
         model,
@@ -124,11 +115,14 @@ def main():
             for x in ["train", "val"]
         }
 
+        # Here we use placeholders for the number of epochs and number of steps per epoch, so that the
+        # trainer can inject those values later. This is key especially key for the number of update steps
+        # which will change depending on whether training is distributed or not
         lr_scheduler = partial(
             OneCycleLR,
             max_lr=e_config.lr,
             epochs=TrainerPlaceholderValues.NUM_EPOCHS,
-            steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH
+            steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
         )
 
         trainer.train(
@@ -137,7 +131,7 @@ def main():
             num_epochs=e_config.num_epochs,
             scheduler_type=lr_scheduler,
             per_device_batch_size=32,
-            reset_run_history=False
+            reset_run_history=False,
         )
 
 

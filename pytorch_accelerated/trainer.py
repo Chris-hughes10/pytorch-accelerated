@@ -22,15 +22,17 @@ DEFAULT_CALLBACKS = (
     PrintProgressCallback,
 )
 
+
 class TrainerPlaceholderValues(Enum):
     NUM_EPOCHS = 'trainer.run_config["num_epochs"]'
     NUM_UPDATE_STEPS_PER_EPOCH = 'trainer.run_config["num_update_steps_per_epoch"]'
-    TRAIN_DATALOADER_LEN = 'len(trainer._train_dataloader)'
-    EVAL_DATALOADER_LEN = 'len(trainer._eval_dataloader)'
+    TRAIN_DATALOADER_LEN = "len(trainer._train_dataloader)"
+    EVAL_DATALOADER_LEN = "len(trainer._eval_dataloader)"
 
     @classmethod
     def placeholder_set(cls):
         return {placeholder for placeholder in cls}
+
 
 def replace_trainer_placeholder_values(trainer, instance):
     "If the instance is partial and contains keywords, will replace these, returning a new function"
@@ -91,7 +93,7 @@ class Trainer:
             "shuffle": True,
             "pin_memory": True if torch.cuda.is_available() else False,
             "batch_size": per_device_batch_size,
-            "num_workers": max(os.cpu_count()//torch.cuda.device_count(), 1)
+            "num_workers": max(os.cpu_count() // torch.cuda.device_count(), 1),
         }
 
         if train_dl_kwargs is not None:
@@ -100,7 +102,9 @@ class Trainer:
         self._train_dl_kwargs = default_train_dl_kwargs
 
         return DataLoader(
-            dataset=self.train_dataset, collate_fn=self.collate_fn, **self._train_dl_kwargs
+            dataset=self.train_dataset,
+            collate_fn=self.collate_fn,
+            **self._train_dl_kwargs
         )
 
     def create_eval_dataloader(self, per_device_batch_size, eval_dl_kwargs):
@@ -108,7 +112,7 @@ class Trainer:
             "shuffle": False,
             "pin_memory": True if torch.cuda.is_available() else False,
             "batch_size": per_device_batch_size,
-            "num_workers": max(os.cpu_count()//torch.cuda.device_count(), 1)
+            "num_workers": max(os.cpu_count() // torch.cuda.device_count(), 1),
         }
 
         if eval_dl_kwargs is not None:
@@ -117,7 +121,9 @@ class Trainer:
         self._eval_dl_kwargs = default_eval_dl_kwargs
 
         return DataLoader(
-            dataset=self.eval_dataset, collate_fn=self.collate_fn, **self._eval_dl_kwargs
+            dataset=self.eval_dataset,
+            collate_fn=self.collate_fn,
+            **self._eval_dl_kwargs
         )
 
     def create_scheduler(self, optimizer):
@@ -138,7 +144,7 @@ class Trainer:
 
         return {
             "loss": loss,
-            "model_outputs": self._accelerator.gather(model_outputs),
+            "model_outputs": model_outputs,
             "batch_size": xb.size(0),
         }
 
@@ -192,7 +198,7 @@ class Trainer:
         scheduler_type=None,
         train_dataloader_kwargs: dict = None,
         eval_dataloader_kwargs: dict = None,
-        reset_run_history=True
+        reset_run_history=True,
     ):
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
@@ -218,7 +224,6 @@ class Trainer:
         if self.scheduler_type is not None:
             self.scheduler = self.create_scheduler(self.optimizer)
 
-
         self.callback_handler.call_event(
             "on_train_run_begin",
             self,
@@ -240,11 +245,15 @@ class Trainer:
         self, per_device_batch_size, train_dl_kwargs=None, eval_dl_kwargs=None
     ):
 
-        train_dataloader = self.create_train_dataloader(per_device_batch_size, train_dl_kwargs)
+        train_dataloader = self.create_train_dataloader(
+            per_device_batch_size, train_dl_kwargs
+        )
         self._train_dataloader = self._accelerator.prepare(train_dataloader)
 
         if self.eval_dataset is not None:
-            eval_dataloader = self.create_eval_dataloader(per_device_batch_size, eval_dl_kwargs)
+            eval_dataloader = self.create_eval_dataloader(
+                per_device_batch_size, eval_dl_kwargs
+            )
             self._eval_dataloader = self._accelerator.prepare(eval_dataloader)
 
     def _create_run_config(
@@ -254,7 +263,7 @@ class Trainer:
         max_num_train_steps,
     ):
 
-        train_per_device_batch_size = self._train_dl_kwargs['batch_size']
+        train_per_device_batch_size = self._train_dl_kwargs["batch_size"]
 
         if self._eval_dl_kwargs is not None:
             eval_per_device_batch_size = self._eval_dl_kwargs.get(
@@ -342,7 +351,10 @@ class Trainer:
                 step + 1 == len(train_dl)
             ):
                 self.optimizer_step()
-                if self.scheduler is not None and not self._accelerator.optimizer_step_was_skipped:
+                if (
+                    self.scheduler is not None
+                    and not self._accelerator.optimizer_step_was_skipped
+                ):
                     self.scheduler_step()
                 self.optimizer_zero_grad()
 
@@ -391,10 +403,8 @@ class Trainer:
         # TODO: add save method for run history?
 
         checkpoint = {
-                "model_state_dict": self._accelerator.unwrap_model(
-                    self.model
-                ).state_dict(),
-            }
+            "model_state_dict": self._accelerator.unwrap_model(self.model).state_dict(),
+        }
 
         if save_optimizer:
             checkpoint["optimizer_state_dict"] = self.optimizer.state_dict()
@@ -406,15 +416,14 @@ class Trainer:
 
         self._accelerator.save(
             checkpoint,
-            save_dir,)
+            save_dir,
+        )
 
     def load_checkpoint(self, checkpoint_dir):
         self._accelerator.wait_for_everyone()
-        checkpoint = torch.load(checkpoint_dir, map_location='cpu')
-        self._accelerator.unwrap_model(
-            self.model
-        ).load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        # epoch = checkpoint['epoch']
-        # loss = checkpoint['loss']
+        checkpoint = torch.load(checkpoint_dir, map_location="cpu")
+        self._accelerator.unwrap_model(self.model).load_state_dict(
+            checkpoint["model_state_dict"]
+        )
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         pass

@@ -1,7 +1,6 @@
 import logging
 import time
 from abc import ABC
-from datetime import datetime
 from typing import Optional
 
 import numpy as np
@@ -16,7 +15,6 @@ class StopTrainingError(Exception):
 
 
 class TrainerCallback(ABC):
-
     def on_init_end(self, trainer, **kwargs):
         """
         Event called at the end of trainer initialisation.
@@ -144,7 +142,6 @@ class CallbackHandler(TrainerCallback):
 
 class PrintMetricsCallback(TrainerCallback):
     def _print_metrics(self, trainer, metric_names):
-
         for metric_name in metric_names:
             trainer.print(
                 f"\n{metric_name}: {trainer.run_history.get_latest_metric(metric_name)}"
@@ -167,14 +164,16 @@ class PrintMetricsCallback(TrainerCallback):
         ]
         self._print_metrics(trainer, metric_names)
 
+
 class ProgressBarCallback(TrainerCallback):
-
-
     def __init__(self):
         self.pbar = None
 
     def on_train_epoch_begin(self, trainer, **kwargs):
-        self.pbar = tqdm(total=len(trainer._train_dataloader), disable=not trainer._accelerator.is_local_main_process)
+        self.pbar = tqdm(
+            total=len(trainer._train_dataloader),
+            disable=not trainer._accelerator.is_local_main_process,
+        )
 
     def on_train_step_end(self, trainer, **kwargs):
         self.pbar.update(1)
@@ -184,7 +183,10 @@ class ProgressBarCallback(TrainerCallback):
         time.sleep(0.01)
 
     def on_eval_epoch_begin(self, trainer, **kwargs):
-        self.pbar = tqdm(total=len(trainer._eval_dataloader), disable=not trainer._accelerator.is_local_main_process)
+        self.pbar = tqdm(
+            total=len(trainer._eval_dataloader),
+            disable=not trainer._accelerator.is_local_main_process,
+        )
 
     def on_eval_step_end(self, trainer, **kwargs):
         self.pbar.update(1)
@@ -193,8 +195,8 @@ class ProgressBarCallback(TrainerCallback):
         self.pbar.close()
         time.sleep(0.01)
 
-class PrintProgressCallback(TrainerCallback):
 
+class PrintProgressCallback(TrainerCallback):
     def on_train_run_begin(self, trainer, **kwargs):
         trainer.print("\nStarting training run")
 
@@ -208,11 +210,11 @@ class PrintProgressCallback(TrainerCallback):
 
 class SaveBestModelCallback(TrainerCallback):
     def __init__(
-        self,
-        save_dir=None,
-        watch_metric="eval_loss_epoch",
-        greater_is_better=False,
-        reset_on_train =True
+            self,
+            save_dir=None,
+            watch_metric="eval_loss_epoch",
+            greater_is_better=False,
+            reset_on_train=True,
     ):
         self.watch_metric = watch_metric
         self.greater_is_better = greater_is_better
@@ -223,7 +225,7 @@ class SaveBestModelCallback(TrainerCallback):
 
     def on_train_run_begin(self, args, **kwargs):
         if self.save_dir is None:
-            self.save_dir = 'model.pt'
+            self.save_dir = "model.pt"
 
         if self.reset_on_train:
             self.best_metric = None
@@ -232,28 +234,34 @@ class SaveBestModelCallback(TrainerCallback):
         current_metric = trainer.run_history.get_latest_metric(self.watch_metric)
         if self.best_metric is None:
             self.best_metric = current_metric
-            trainer.save_model(save_dir=self.save_dir, checkpoint_kwargs={self.watch_metric: self.best_metric})
+            trainer.save_model(
+                save_dir=self.save_dir,
+                checkpoint_kwargs={self.watch_metric: self.best_metric},
+            )
         else:
             is_improvement = self.operator(current_metric, self.best_metric)
 
             if is_improvement:
                 self.best_metric = current_metric
-                trainer.save_model(save_dir=self.save_dir, checkpoint_kwargs={"loss": self.best_metric})
+                trainer.save_model(
+                    save_dir=self.save_dir, checkpoint_kwargs={"loss": self.best_metric}
+                )
 
     def on_train_run_end(self, trainer, **kwargs):
-        trainer.print(f'Loading checkpoint with {self.watch_metric}: {self.best_metric}')
+        trainer.print(
+            f"Loading checkpoint with {self.watch_metric}: {self.best_metric}"
+        )
         trainer.load_checkpoint(self.save_dir)
-
 
 
 class EarlyStoppingCallback(TrainerCallback):
     def __init__(
-        self,
-        early_stopping_patience: int = 1,
-        early_stopping_threshold: Optional[float] = 0.01,
-        watch_metric="eval_loss_epoch",
-        greater_is_better=False,
-        reset_on_train=True,
+            self,
+            early_stopping_patience: int = 1,
+            early_stopping_threshold: Optional[float] = 0.01,
+            watch_metric="eval_loss_epoch",
+            greater_is_better=False,
+            reset_on_train=True,
     ):
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_threshold = early_stopping_threshold
@@ -276,7 +284,7 @@ class EarlyStoppingCallback(TrainerCallback):
         else:
             is_improvement = self.operator(current_metric, self.best_metric)
             improvement_above_threshold = (
-                abs(current_metric - self.best_metric) > self.early_stopping_threshold
+                    abs(current_metric - self.best_metric) > self.early_stopping_threshold
             )
 
             if is_improvement and improvement_above_threshold:

@@ -37,9 +37,9 @@ class PetsTrainer(Trainer):
         else:
             config = self.model.module
 
-        self.mean = torch.tensor(config["mean"])[
-            None, :, None, None
-        ].to(self._accelerator.device)
+        self.mean = torch.tensor(config["mean"])[None, :, None, None].to(
+            self._accelerator.device
+        )
         self.std = torch.tensor(config["std"])[None, :, None, None].to(
             self._accelerator.device
         )
@@ -47,7 +47,7 @@ class PetsTrainer(Trainer):
     def calculate_train_batch_loss(self, batch):
         inputs = (batch["image"] - self.mean) / self.std
 
-        return super(PetsTrainer, self).calculate_train_batch_loss(
+        return super().calculate_train_batch_loss(
             (inputs, batch["label"])
         )
 
@@ -117,7 +117,7 @@ class PetsDataset(Dataset):
 # def training_function(data_dir, config):
 def training_function():
 
-    data_dir = '/home/chris/notebooks/pets'
+    data_dir = "/home/chris/notebooks/pets"
 
     config = {
         "lr": 3e-2,
@@ -198,7 +198,6 @@ def training_function():
         model=model,
         loss_func=loss_func,
         optimizer=optimizer,
-        scheduler_type=lr_scheduler,
         callbacks=(
             TerminateOnNaNCallback,
             PrintProgressCallback,
@@ -212,6 +211,7 @@ def training_function():
         eval_dataset=eval_dataset,
         num_epochs=num_epochs,
         per_device_batch_size=batch_size,
+        scheduler_type=lr_scheduler,
     )
 
 

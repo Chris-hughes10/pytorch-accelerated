@@ -63,9 +63,7 @@ class InMemoryRunHistory(RunHistory):
         self._metrics = defaultdict(list)
 
 
-
 class LossTracker:
-
     def __init__(self):
         self.loss_value = 0
         self._average = 0

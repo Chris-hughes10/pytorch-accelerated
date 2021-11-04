@@ -100,7 +100,7 @@ def main(data_dir):
         model=model,
         loss_func=loss_func,
         optimizer=optimizer,
-        scheduler_type=exp_lr_scheduler,
+
         callbacks=(
             cm_callback,
             TerminateOnNaNCallback,
@@ -114,7 +114,7 @@ def main(data_dir):
         eval_dataset=image_datasets["val"],
         num_epochs=8,
         per_device_batch_size=4,
-        fp16=True,
+        scheduler_type=exp_lr_scheduler,
     )
 
 

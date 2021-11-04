@@ -9,7 +9,6 @@ import argparse
 import os
 from functools import partial
 
-from accelerate.utils import set_seed
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from torchvision import transforms, datasets, models
@@ -18,7 +17,6 @@ from pytorch_accelerated.trainer import Trainer
 
 
 def main(data_dir):
-
     # Data augmentation and normalization for training
     # Just normalization for validation
     data_transforms = {
@@ -67,7 +65,7 @@ def main(data_dir):
         eval_dataset=image_datasets["val"],
         num_epochs=8,
         per_device_batch_size=4,
-        scheduler_type=exp_lr_scheduler
+        scheduler_type=exp_lr_scheduler,
     )
 
 
