@@ -23,25 +23,31 @@ DEFAULT_CALLBACKS = (
 )
 
 class TrainerPlaceholderValues(Enum):
+    NUM_EPOCHS = 'trainer.run_config["num_epochs"]'
     NUM_UPDATE_STEPS_PER_EPOCH = 'trainer.run_config["num_update_steps_per_epoch"]'
     TRAIN_DATALOADER_LEN = 'len(trainer._train_dataloader)'
     EVAL_DATALOADER_LEN = 'len(trainer._eval_dataloader)'
 
     @classmethod
     def placeholder_set(cls):
-        return {cls.NUM_UPDATE_STEPS_PER_EPOCH,
-                cls.TRAIN_DATALOADER_LEN,
-                cls.EVAL_DATALOADER_LEN}
+        return {placeholder for placeholder in cls}
 
 def replace_trainer_placeholder_values(trainer, instance):
+    "If the instance is partial and contains keywords, will replace these, returning a new function"
 
     if isinstance(instance, partial):
         placeholders = TrainerPlaceholderValues.placeholder_set()
         keywords = list(instance.keywords.items())
 
+        new_keywords = {}
+
         for keyword, value in keywords:
             if value in placeholders:
-                instance.keywords[keyword] = eval(value.value)
+                new_keywords[keyword] = eval(value.value)
+            else:
+                new_keywords[keyword] = value
+
+        instance = partial(instance.func, *instance.args, **new_keywords)
 
     return instance
 
@@ -336,7 +342,7 @@ class Trainer:
                 step + 1 == len(train_dl)
             ):
                 self.optimizer_step()
-                if self.scheduler is not None:
+                if self.scheduler is not None and not self._accelerator.optimizer_step_was_skipped:
                     self.scheduler_step()
                 self.optimizer_zero_grad()
 

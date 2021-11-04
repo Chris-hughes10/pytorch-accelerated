@@ -7,7 +7,7 @@ import torch
 from accelerate import notebook_launcher
 from timm import create_model
 from torch import nn
-from torch.optim.lr_scheduler import OneCycleLR, StepLR
+from torch.optim.lr_scheduler import OneCycleLR
 from torchmetrics import Accuracy
 from torchvision import transforms, datasets
 
@@ -70,29 +70,23 @@ def main():
     data_dir = Path(r"/home/chris/notebooks/imagenette2/")
     # data_dir = Path(r"/home/chris/notebooks/hymenoptera_data/")
 
-    num_classes = len(list((data_dir/'train').iterdir()))
+    num_classes = len(list((data_dir / 'train').iterdir()))
 
     # model = create_model(number_of_classes=2)
     model = create_model("resnet50d", pretrained=False, num_classes=num_classes)
 
-    # Freezing the base model
-    # for param in model.parameters():
-    #     param.requires_grad = False
-    # for param in model.get_classifier().parameters():
-    #     param.requires_grad = True
-
     # Define loss function
     loss_func = nn.CrossEntropyLoss()
 
-    # Create optimizer and scheduler
-    # optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-    # lr_scheduler = partial(StepLR, step_size=7, gamma=0.1)
-
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01/25)
+    # Define optimizer and scheduler
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01 / 25)
+    # Here we use placeholders for the number of epochs and number of steps per epoch, so that the
+    # trainer can inject those values later. This is key especially key for the number of update steps
+    # which will change depending on whether training is distributed or not
     lr_scheduler = partial(
         OneCycleLR,
         max_lr=0.01,
-        epochs=8,
+        epochs=TrainerPlaceholderValues.NUM_EPOCHS,
         steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH
     )
 
@@ -112,7 +106,6 @@ def main():
         ),
     )
 
-
     EpochConfig = namedtuple(
         "EpochConfig", ["num_epochs", "train_image_size", "eval_image_size"]
     )
@@ -123,9 +116,8 @@ def main():
         EpochConfig(num_epochs=6, train_image_size=224, eval_image_size=224),
     ]
 
-
     for e_config in epoch_configs:
-        trainer.print(f"Starting training with image size: {e_config.train_image_size}")
+        trainer.print(f"Training with image size: {e_config.train_image_size}")
 
         image_datasets = {
             x: datasets.ImageFolder(
