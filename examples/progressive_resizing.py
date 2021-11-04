@@ -125,7 +125,7 @@ def main():
 
 
     for e_config in epoch_configs:
-        trainer.print("Starting phase")
+        trainer.print(f"Starting training with image size: {e_config.train_image_size}")
 
         image_datasets = {
             x: datasets.ImageFolder(
