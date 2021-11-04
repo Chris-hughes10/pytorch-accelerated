@@ -8,7 +8,6 @@
 
 
 import argparse
-import os
 from functools import partial
 
 import torch
@@ -18,7 +17,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
-    set_seed)
+)
 
 from pytorch_accelerated.trainer import Trainer
 
@@ -28,12 +27,14 @@ EVAL_BATCH_SIZE = 32
 
 class TransformersTrainer(Trainer):
     def __init__(self, model, optimizer, collate_fn, metric, *args, **kwargs):
-        super().__init__(model=model,
-                         optimizer=optimizer,
-                         loss_func=None,
-                         collate_fn=collate_fn,
-                         *args,
-                         **kwargs)
+        super().__init__(
+            model=model,
+            optimizer=optimizer,
+            loss_func=None,
+            collate_fn=collate_fn,
+            *args,
+            **kwargs
+        )
         self.metric = metric
 
     def calculate_train_batch_loss(self, batch):
@@ -42,7 +43,7 @@ class TransformersTrainer(Trainer):
         return {
             "loss": outputs.loss,
             "model_outputs": outputs.logits,
-            "batch_size": batch['attention_mask'].size(0),
+            "batch_size": batch["attention_mask"].size(0),
         }
 
     def calculate_eval_batch_loss(self, batch):
@@ -56,15 +57,18 @@ class TransformersTrainer(Trainer):
         return {
             "loss": outputs.loss,
             "model_outputs": outputs.logits,
-            "batch_size": batch['attention_mask'].size(0),
+            "batch_size": batch["attention_mask"].size(0),
         }
 
     def eval_epoch_end(self):
-        self.run_history.update_metric('metrics', self.metric.compute())
+        self.run_history.update_metric("metrics", self.metric.compute())
 
     def create_scheduler(self, optimizer):
-        self.scheduler_type(optimizer=self.optimizer,
-                            num_training_steps=len(self._train_dataloader) * self.run_config['num_epochs'])
+        return self.scheduler_type(
+            optimizer=self.optimizer,
+            num_training_steps=len(self._train_dataloader)
+            * self.run_config["num_epochs"],
+        )
 
 
 def training_function(config, args):
@@ -81,7 +85,12 @@ def training_function(config, args):
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
-        outputs = tokenizer(examples["sentence1"], examples["sentence2"], truncation=True, max_length=None)
+        outputs = tokenizer(
+            examples["sentence1"],
+            examples["sentence2"],
+            truncation=True,
+            max_length=None,
+        )
         return outputs
 
     # Apply the method we just defined to all the examples in all the splits of the dataset
@@ -104,45 +113,57 @@ def training_function(config, args):
     def collate_fn(examples):
         return tokenizer.pad(examples, padding="longest", return_tensors="pt")
 
-    set_seed(seed)
-
     # Instantiate the model
-    model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        "bert-base-cased", return_dict=True
+    )
 
     # Instantiate optimizer
     optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
 
     # Create an instance of our trainer
-    trainer = TransformersTrainer(model=model,
-                                  optimizer=optimizer,
-                                  collate_fn=collate_fn,
-                                  metric=metric)
+    trainer = TransformersTrainer(
+        model=model, optimizer=optimizer, collate_fn=collate_fn, metric=metric
+    )
 
     # Wrap the scheduler factory function as a higher order function so that it will be created inside the trainer
-    lr_scheduler = partial(get_linear_schedule_with_warmup,
-                           num_warmup_steps=100,
-                           )
+    lr_scheduler = partial(
+        get_linear_schedule_with_warmup,
+        num_warmup_steps=100,
+    )
 
     # start training
-    trainer.train(num_epochs=num_epochs,
-                  train_dataset=tokenized_datasets["train"],
-                  eval_dataset=tokenized_datasets["validation"],
-                  per_device_batch_size=batch_size,
-                  train_dataloader_kwargs={'shuffle': False},
-                  eval_dataloader_kwargs={'batch_size': EVAL_BATCH_SIZE},
-                  scheduler_type=lr_scheduler,
-                  gradient_accumulation_steps=gradient_accumulation_steps)
+    # Multiprocessing is handled by dataset, so override num workers
+    trainer.train(
+        num_epochs=num_epochs,
+        train_dataset=tokenized_datasets["train"],
+        eval_dataset=tokenized_datasets["validation"],
+        per_device_batch_size=batch_size,
+        train_dataloader_kwargs={"num_workers": 0},
+        eval_dataloader_kwargs={"batch_size": EVAL_BATCH_SIZE, "num_workers": 0},
+        scheduler_type=lr_scheduler,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
-    parser.add_argument("--fp16", action="store_true", help="If passed, will use FP16 training.")
-    parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
+    parser.add_argument(
+        "--fp16", action="store_true", help="If passed, will use FP16 training."
+    )
+    parser.add_argument(
+        "--cpu", action="store_true", help="If passed, will train on the CPU."
+    )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
+    config = {
+        "lr": 2e-5,
+        "num_epochs": 3,
+        "correct_bias": True,
+        "seed": 42,
+        "batch_size": 16,
+    }
     training_function(config, args)
 
 
 if __name__ == "__main__":
-    os.environ['TOKENIZERS_PARALLELISM'] = 'false'
     main()
