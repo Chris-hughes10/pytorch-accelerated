@@ -1,4 +1,5 @@
 import logging
+import time
 from abc import ABC
 from datetime import datetime
 from typing import Optional
@@ -180,6 +181,7 @@ class ProgressBarCallback(TrainerCallback):
 
     def on_train_epoch_end(self, trainer, **kwargs):
         self.pbar.close()
+        time.sleep(0.01)
 
     def on_eval_epoch_begin(self, trainer, **kwargs):
         self.pbar = tqdm(total=len(trainer._eval_dataloader), disable=not trainer._accelerator.is_local_main_process)
@@ -189,21 +191,19 @@ class ProgressBarCallback(TrainerCallback):
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         self.pbar.close()
+        time.sleep(0.01)
 
 class PrintProgressCallback(TrainerCallback):
-    @staticmethod
-    def print(trainer, message):
-        if trainer.run_config["is_local_process_zero"]:
-            trainer._accelerator.print(message)
 
     def on_train_run_begin(self, trainer, **kwargs):
-        self.print(trainer, "\nStarting training run")
+        trainer.print("\nStarting training run")
 
     def on_train_epoch_begin(self, trainer, **kwargs):
-        self.print(trainer, f"\nStarting epoch {trainer.run_history.current_epoch}")
+        trainer.print(f"\nStarting epoch {trainer.run_history.current_epoch}")
+        time.sleep(0.01)
 
     def on_train_run_end(self, trainer, **kwargs):
-        self.print(trainer, "\nFinishing training run")
+        trainer.print("Finishing training run")
 
 
 class SaveBestModelCallback(TrainerCallback):

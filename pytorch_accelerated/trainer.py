@@ -58,7 +58,6 @@ class Trainer:
         model,
         loss_func,
         optimizer,
-        scheduler_type=None,
         callbacks=DEFAULT_CALLBACKS,
         collate_fn=None,
         run_history=None,
@@ -66,7 +65,7 @@ class Trainer:
         self.model = model
         self.loss_func = loss_func
         self.optimizer = optimizer
-        self.scheduler_type = scheduler_type
+        self.scheduler_type = None
         self.scheduler = None
         self.collate_fn = collate_fn
         self.train_dataset = None
@@ -190,13 +189,14 @@ class Trainer:
         per_device_batch_size=8,
         max_num_train_steps=None,
         gradient_accumulation_steps=1,
-        create_scheduler=True,
+        scheduler_type=None,
         train_dataloader_kwargs: dict = None,
         eval_dataloader_kwargs: dict = None,
         reset_run_history=True
     ):
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+        self.scheduler_type = scheduler_type
 
         if reset_run_history:
             self.run_history.reset()
@@ -215,7 +215,7 @@ class Trainer:
             max_num_train_steps=max_num_train_steps,
         )
 
-        if self.scheduler_type is not None and create_scheduler:
+        if self.scheduler_type is not None:
             self.scheduler = self.create_scheduler(self.optimizer)
 
 

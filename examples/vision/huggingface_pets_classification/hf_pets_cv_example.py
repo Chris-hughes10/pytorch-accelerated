@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from accelerate import notebook_launcher
 from timm import create_model
+from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
@@ -31,12 +32,15 @@ from pytorch_accelerated.trainer import Trainer
 class PetsTrainer(Trainer):
     def training_run_start(self):
 
-        # TODO if isinstance distributed data parallel, get config from model.module
+        if isinstance(self.model, DistributedDataParallel):
+            config = self.model.module.default_cfg
+        else:
+            config = self.model.module
 
-        self.mean = torch.tensor(self.model.module.default_cfg["mean"])[
+        self.mean = torch.tensor(config["mean"])[
             None, :, None, None
         ].to(self._accelerator.device)
-        self.std = torch.tensor(self.model.module.default_cfg["std"])[None, :, None, None].to(
+        self.std = torch.tensor(config["std"])[None, :, None, None].to(
             self._accelerator.device
         )
 
@@ -48,7 +52,7 @@ class PetsTrainer(Trainer):
         )
 
     def eval_epoch_start(self):
-        super(PetsTrainer, self).eval_epoch_start()
+        super().eval_epoch_start()
         self.accurate = 0
         self.num_elems = 0
 

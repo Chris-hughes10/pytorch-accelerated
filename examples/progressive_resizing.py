@@ -62,14 +62,8 @@ def create_transforms(train_image_size=224, val_image_size=224):
 
 
 def main():
-    # Create datasets
-    # data_dir = (
-    #     r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
-    # )
 
     data_dir = Path(r"/home/chris/notebooks/imagenette2/")
-    # data_dir = Path(r"/home/chris/notebooks/hymenoptera_data/")
-
     num_classes = len(list((data_dir / 'train').iterdir()))
 
     # model = create_model(number_of_classes=2)
@@ -80,6 +74,7 @@ def main():
 
     # Define optimizer and scheduler
     optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01 / 25)
+
     # Here we use placeholders for the number of epochs and number of steps per epoch, so that the
     # trainer can inject those values later. This is key especially key for the number of update steps
     # which will change depending on whether training is distributed or not
@@ -94,26 +89,25 @@ def main():
         model,
         loss_func=loss_func,
         optimizer=optimizer,
-        scheduler_type=lr_scheduler,
         callbacks=(
             TerminateOnNaNCallback,
             AccuracyCallback(num_classes=num_classes),
-            PrintMetricsCallback,
             PrintProgressCallback,
-            ProgressBarCallback(),
+            ProgressBarCallback,
+            PrintMetricsCallback,
             EarlyStoppingCallback(early_stopping_patience=2),
             SaveBestModelCallback(watch_metric="accuracy", greater_is_better=True),
         ),
     )
 
     EpochConfig = namedtuple(
-        "EpochConfig", ["num_epochs", "train_image_size", "eval_image_size"]
+        "EpochConfig", ["num_epochs", "train_image_size", "eval_image_size", "lr"]
     )
 
     epoch_configs = [
-        EpochConfig(num_epochs=3, train_image_size=64, eval_image_size=64),
-        EpochConfig(num_epochs=4, train_image_size=128, eval_image_size=128),
-        EpochConfig(num_epochs=6, train_image_size=224, eval_image_size=224),
+        EpochConfig(num_epochs=2, train_image_size=64, eval_image_size=64, lr=0.01),
+        EpochConfig(num_epochs=3, train_image_size=128, eval_image_size=128, lr=0.01),
+        EpochConfig(num_epochs=6, train_image_size=224, eval_image_size=224, lr=0.001),
     ]
 
     for e_config in epoch_configs:
@@ -129,15 +123,24 @@ def main():
             )
             for x in ["train", "val"]
         }
+
+        lr_scheduler = partial(
+            OneCycleLR,
+            max_lr=e_config.lr,
+            epochs=TrainerPlaceholderValues.NUM_EPOCHS,
+            steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH
+        )
+
         trainer.train(
             train_dataset=image_datasets["train"],
             eval_dataset=image_datasets["val"],
             num_epochs=e_config.num_epochs,
+            scheduler_type=lr_scheduler,
             per_device_batch_size=32,
             reset_run_history=False
         )
 
 
 if __name__ == "__main__":
-    notebook_launcher(main, num_processes=2)
-    # main()
+    # notebook_launcher(main, num_processes=2)
+    main()
