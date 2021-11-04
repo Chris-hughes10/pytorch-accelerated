@@ -23,11 +23,17 @@ def test_skip_eval_if_not_present():
 def test_skip_scheduler_step_if_not_present():
     pass
 
-def test_can_override_dataloader_kwargs():
+def test_can_override_train_dataloader_kwargs():
+    pass
+
+def test_can_override_eval_dataloader_kwargs():
     pass
 
 def test_model_is_in_correct_mode():
     pass
 
 def test_gradient_accumulation():
+    pass
+
+def test_can_create_scheduler():
     pass

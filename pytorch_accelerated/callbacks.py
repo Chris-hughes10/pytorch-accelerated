@@ -15,9 +15,10 @@ class StopTrainingError(Exception):
 
 
 class TrainerCallback(ABC):
+
     def on_init_end(self, trainer, **kwargs):
         """
-        Event called at the end of the initialization.
+        Event called at the end of trainer initialisation.
         """
         pass
 
@@ -90,6 +91,9 @@ class CallbackHandler(TrainerCallback):
 
     def __init__(self, callbacks):
         self.callbacks = []
+        self.add_callbacks(callbacks)
+
+    def add_callbacks(self, callbacks):
         for cb in callbacks:
             self.add_callback(cb)
 
@@ -186,7 +190,6 @@ class ProgressBarCallback(TrainerCallback):
     def on_eval_epoch_end(self, trainer, **kwargs):
         self.pbar.close()
 
-
 class PrintProgressCallback(TrainerCallback):
     @staticmethod
     def print(trainer, message):
@@ -194,13 +197,13 @@ class PrintProgressCallback(TrainerCallback):
             trainer._accelerator.print(message)
 
     def on_train_run_begin(self, trainer, **kwargs):
-        self.print(trainer, "\nStarting run")
+        self.print(trainer, "\nStarting training run")
 
     def on_train_epoch_begin(self, trainer, **kwargs):
         self.print(trainer, f"\nStarting epoch {trainer.run_history.current_epoch}")
 
     def on_train_run_end(self, trainer, **kwargs):
-        self.print(trainer, "\nFinishing run")
+        self.print(trainer, "\nFinishing training run")
 
 
 class SaveBestModelCallback(TrainerCallback):
@@ -209,17 +212,21 @@ class SaveBestModelCallback(TrainerCallback):
         save_dir=None,
         watch_metric="eval_loss_epoch",
         greater_is_better=False,
+        reset_on_train =True
     ):
         self.watch_metric = watch_metric
         self.greater_is_better = greater_is_better
         self.operator = np.greater if self.greater_is_better else np.less
         self.best_metric = None
         self.save_dir = save_dir
+        self.reset_on_train = reset_on_train
 
     def on_train_run_begin(self, args, **kwargs):
-        self.best_metric = None
         if self.save_dir is None:
             self.save_dir = 'model.pt'
+
+        if self.reset_on_train:
+            self.best_metric = None
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         current_metric = trainer.run_history.get_latest_metric(self.watch_metric)

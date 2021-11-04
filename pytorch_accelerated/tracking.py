@@ -28,6 +28,10 @@ class RunHistory(ABC):
     def increment_epoch(self):
         pass
 
+    @abstractmethod
+    def reset(self):
+        pass
+
 
 class InMemoryRunHistory(RunHistory):
     def __init__(self):
@@ -54,22 +58,32 @@ class InMemoryRunHistory(RunHistory):
     def increment_epoch(self):
         self._current_epoch += 1
 
+    def reset(self):
+        self._current_epoch = 1
+        self._metrics = defaultdict(list)
 
-class AverageMeter:
-    """Computes and stores the average and current value
-    Taken from timm"""
+
+
+class LossTracker:
 
     def __init__(self):
-        self.reset()
+        self.loss_value = 0
+        self._average = 0
+        self.total_loss = 0
+        self.running_count = 0
 
     def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
+        self.loss_value = 0
+        self._average = 0
+        self.total_loss = 0
+        self.running_count = 0
 
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
+    def update(self, val, batch_size=1):
+        self.loss_value = val
+        self.total_loss += val * batch_size
+        self.running_count += batch_size
+        self._average = self.total_loss / self.running_count
+
+    @property
+    def average(self):
+        return self.average

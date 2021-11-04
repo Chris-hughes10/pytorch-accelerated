@@ -1,5 +1,7 @@
 import math
 import os
+from enum import Enum
+from functools import partial
 
 import torch
 from accelerate import Accelerator
@@ -12,13 +14,37 @@ from pytorch_accelerated.callbacks import (
     TerminateOnNaNCallback,
     StopTrainingError,
 )
-from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, AverageMeter
+from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, LossTracker
 
 DEFAULT_CALLBACKS = (
     TerminateOnNaNCallback,
     PrintMetricsCallback,
     PrintProgressCallback,
 )
+
+class TrainerPlaceholderValues(Enum):
+    NUM_UPDATE_STEPS_PER_EPOCH = 'trainer.run_config["num_update_steps_per_epoch"]'
+    TRAIN_DATALOADER_LEN = 'len(trainer._train_dataloader)'
+    EVAL_DATALOADER_LEN = 'len(trainer._eval_dataloader)'
+
+    @classmethod
+    def placeholder_set(cls):
+        return {cls.NUM_UPDATE_STEPS_PER_EPOCH,
+                cls.TRAIN_DATALOADER_LEN,
+                cls.EVAL_DATALOADER_LEN}
+
+def replace_trainer_placeholder_values(trainer, instance):
+
+    if isinstance(instance, partial):
+        placeholders = TrainerPlaceholderValues.placeholder_set()
+        keywords = list(instance.keywords.items())
+
+        for keyword, value in keywords:
+            if value in placeholders:
+                instance.keywords[keyword] = eval(value.value)
+
+    return instance
+
 
 class Trainer:
     def __init__(
@@ -45,7 +71,7 @@ class Trainer:
         self._eval_dl_kwargs = None
         self._eval_dataloader = None
         self.run_config = None
-        self._loss_tracker = AverageMeter()
+        self._loss_tracker = LossTracker()
         self.run_history: RunHistory = (
             run_history if run_history is not None else InMemoryRunHistory()
         )
@@ -90,7 +116,8 @@ class Trainer:
         )
 
     def create_scheduler(self, optimizer):
-        return self.scheduler_type(optimizer)
+        scheduler_type = replace_trainer_placeholder_values(self, self.scheduler_type)
+        return scheduler_type(optimizer)
 
     def training_run_start(self):
         pass
@@ -160,9 +187,13 @@ class Trainer:
         create_scheduler=True,
         train_dataloader_kwargs: dict = None,
         eval_dataloader_kwargs: dict = None,
+        reset_run_history=True
     ):
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+
+        if reset_run_history:
+            self.run_history.reset()
 
         self._prepare_model_and_optimizer()
 
@@ -172,14 +203,15 @@ class Trainer:
             eval_dl_kwargs=eval_dataloader_kwargs,
         )
 
-        if self.scheduler_type is not None and create_scheduler:
-            self.scheduler = self.create_scheduler(self.optimizer)
-
         self.run_config = self._create_run_config(
             num_epochs=num_epochs,
             gradient_accumulation_steps=gradient_accumulation_steps,
             max_num_train_steps=max_num_train_steps,
         )
+
+        if self.scheduler_type is not None and create_scheduler:
+            self.scheduler = self.create_scheduler(self.optimizer)
+
 
         self.callback_handler.call_event(
             "on_train_run_begin",
@@ -309,7 +341,7 @@ class Trainer:
                 self.optimizer_zero_grad()
 
         self.train_epoch_end()
-        self.run_history.update_metric("train_loss_epoch", self._loss_tracker.avg)
+        self.run_history.update_metric("train_loss_epoch", self._loss_tracker._average)
         self.callback_handler.call_event(
             "on_train_epoch_end",
             self,
@@ -337,7 +369,7 @@ class Trainer:
                 "on_eval_step_end", self, batch_output=batch_output, batch=batch
             )
         self.eval_epoch_end()
-        self.run_history.update_metric("eval_loss_epoch", self._loss_tracker.avg)
+        self.run_history.update_metric("eval_loss_epoch", self._loss_tracker._average)
         self.callback_handler.call_event(
             "on_eval_epoch_end",
             self,
