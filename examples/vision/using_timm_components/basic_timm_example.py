@@ -26,16 +26,16 @@ class TimmTrainer(Trainer):
         self.train_loss_func = kwargs["loss_func"]
         self.eval_loss_func = eval_loss_func
 
-    def create_train_dataloader(self, **kwargs):
+    def create_train_dataloader(self, batch_size, train_dl_kwargs):
 
         return timm.data.create_loader(
-            dataset=self.train_dataset, collate_fn=self.collate_fn, **kwargs
+            dataset=self.train_dataset, collate_fn=self.collate_fn, batch_size=batch_size, **train_dl_kwargs
         )
 
-    def create_eval_dataloader(self, **kwargs):
+    def create_eval_dataloader(self, batch_size, eval_dl_kwargs):
 
         return timm.data.create_loader(
-            dataset=self.eval_dataset, collate_fn=self.collate_fn, **kwargs
+            dataset=self.eval_dataset, collate_fn=self.collate_fn, batch_size=batch_size, **eval_dl_kwargs
         )
 
     def train_epoch_start(self):
