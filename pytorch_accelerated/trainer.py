@@ -89,11 +89,11 @@ class Trainer:
         )
         self.callback_handler.call_event("on_init_end", self)
 
-    def create_train_dataloader(self, per_device_batch_size, train_dl_kwargs):
+    def create_train_dataloader(self, batch_size, train_dl_kwargs):
         default_train_dl_kwargs = {
             "shuffle": True,
             "pin_memory": True if torch.cuda.is_available() else False,
-            "batch_size": per_device_batch_size,
+            "batch_size": batch_size,
             "num_workers": max(os.cpu_count() // torch.cuda.device_count(), 1),
         }
 
@@ -108,11 +108,11 @@ class Trainer:
             **self._train_dl_kwargs
         )
 
-    def create_eval_dataloader(self, per_device_batch_size, eval_dl_kwargs):
+    def create_eval_dataloader(self, batch_size, eval_dl_kwargs):
         default_eval_dl_kwargs = {
             "shuffle": False,
             "pin_memory": True if torch.cuda.is_available() else False,
-            "batch_size": per_device_batch_size,
+            "batch_size": batch_size,
             "num_workers": max(os.cpu_count() // torch.cuda.device_count(), 1),
         }
 
@@ -247,13 +247,13 @@ class Trainer:
     ):
 
         train_dataloader = self.create_train_dataloader(
-            per_device_batch_size, train_dl_kwargs
+            batch_size=per_device_batch_size, train_dl_kwargs=train_dl_kwargs
         )
         self._train_dataloader = self._accelerator.prepare(train_dataloader)
 
         if self.eval_dataset is not None:
             eval_dataloader = self.create_eval_dataloader(
-                per_device_batch_size, eval_dl_kwargs
+                batch_size=per_device_batch_size, eval_dl_kwargs=eval_dl_kwargs
             )
             self._eval_dataloader = self._accelerator.prepare(eval_dataloader)
 
@@ -280,7 +280,6 @@ class Trainer:
         if max_num_train_steps is None:
             max_num_train_steps = num_epochs * num_update_steps_per_epoch
         else:
-            # override num epochs
             num_epochs = math.ceil(max_num_train_steps / num_update_steps_per_epoch)
 
         config = {
@@ -301,7 +300,6 @@ class Trainer:
             "is_world_process_zero": self._accelerator.is_main_process,
             "fp16": self._accelerator.use_fp16,
         }
-        # use SimpleNamespace or dotdict instead of dict?
 
         return config
 
@@ -360,7 +358,7 @@ class Trainer:
                 self.optimizer_zero_grad()
 
         self.train_epoch_end()
-        self.run_history.update_metric("train_loss_epoch", self._loss_tracker._average)
+        self.run_history.update_metric("train_loss_epoch", self._loss_tracker.average)
         self.callback_handler.call_event(
             "on_train_epoch_end",
             self,
@@ -388,7 +386,7 @@ class Trainer:
                 "on_eval_step_end", self, batch_output=batch_output, batch=batch
             )
         self.eval_epoch_end()
-        self.run_history.update_metric("eval_loss_epoch", self._loss_tracker._average)
+        self.run_history.update_metric("eval_loss_epoch", self._loss_tracker.average)
         self.callback_handler.call_event(
             "on_eval_epoch_end",
             self,
@@ -427,4 +425,3 @@ class Trainer:
             checkpoint["model_state_dict"]
         )
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        pass

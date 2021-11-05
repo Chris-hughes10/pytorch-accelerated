@@ -76,7 +76,6 @@ def training_function(config, args):
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     correct_bias = config["correct_bias"]
-    seed = int(config["seed"])
     batch_size = int(config["batch_size"])
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
