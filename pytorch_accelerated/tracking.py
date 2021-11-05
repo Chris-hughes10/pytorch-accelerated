@@ -84,4 +84,4 @@ class LossTracker:
 
     @property
     def average(self):
-        return self.average
+        return self._average

@@ -19,6 +19,7 @@
 # down the training in the early stages
 
 # sync batchnorm
+import argparse
 import math
 from functools import partial
 from pathlib import Path
@@ -35,7 +36,7 @@ from timm.utils import ModelEmaV2
 from torch import nn
 from torchmetrics import Accuracy
 from torchvision import datasets
-from torchvision.transforms import transforms
+from torchvision.transforms import transforms, InterpolationMode
 
 from pytorch_accelerated.trainer import Trainer
 
@@ -51,8 +52,12 @@ def train_transforms(img_size, data_mean, data_std, rand_augment_config_str):
         img_mean=tuple([min(255, round(255 * x)) for x in data_mean]),
     )
 
+    # Manually override the interpolation mode to prevent warning being printed every epoch
+    rrc = RandomResizedCropAndInterpolation(img_size)
+    rrc.interpolation = InterpolationMode.BILINEAR
+
     pre_tensor_transforms = [
-        RandomResizedCropAndInterpolation(img_size),
+        rrc,
         transforms.RandomHorizontalFlip(p=0.5),
         rand_augment_transform(rand_augment_config_str, aa_params)
     ]
@@ -122,23 +127,27 @@ class BinaryCrossEntropy(nn.Module):
         )
 
 
-class TimmTrainer(Trainer):
+class MixupTrainer(Trainer):
     def __init__(self, eval_loss_fn, mixup_fn, num_classes, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.eval_loss_fn = eval_loss_fn
         self.num_updates = None
         self.mixup_fn = mixup_fn
         self.accuracy = Accuracy(num_classes=num_classes)
+        self.ema_accuracy = Accuracy(num_classes=num_classes)
         self.ema_model = None
 
     def training_run_start(self):
-        # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
-        self.ema_model = ModelEmaV2(self._accelerator.unwrap_model(self.model))
+        # Model EMA requires the model without a DDP wrapper and before sync batchnorm conversion
+        self.ema_model = ModelEmaV2(self._accelerator.unwrap_model(self.model), decay=0.5)
+        self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
 
     def train_epoch_start(self):
         super().train_epoch_start()
         self.num_updates = self.run_history.current_epoch * len(self._train_dataloader)
         self.accuracy.to(self._eval_dataloader.device)
+        self.ema_accuracy.to(self._eval_dataloader.device)
+        self.ema_model.to(self._eval_dataloader.device)
 
     def calculate_train_batch_loss(self, batch):
         xb, yb = batch
@@ -149,6 +158,7 @@ class TimmTrainer(Trainer):
             self,
     ):
         self.ema_model.update(self.model)
+        self.ema_model.eval()
 
     def calculate_eval_batch_loss(self, batch):
         with torch.no_grad():
@@ -156,8 +166,10 @@ class TimmTrainer(Trainer):
             outputs = self.model(xb)
             val_loss = self.eval_loss_fn(outputs, yb)
             preds = outputs.argmax(-1)
-
             self.accuracy.update(preds, yb)
+
+            ema_model_preds = self.ema_model.module(xb).argmax(-1)
+            self.ema_accuracy.update(ema_model_preds, yb)
 
         return {"loss": val_loss, "model_outputs": outputs, "batch_size": xb.size(0)}
 
@@ -167,9 +179,10 @@ class TimmTrainer(Trainer):
             self.scheduler.step(self.run_history.current_epoch + 1)
 
         self.run_history.update_metric("accuracy", self.accuracy.compute().cpu())
+        self.run_history.update_metric("ema_model_accuracy", self.ema_accuracy.compute().cpu())
         self.accuracy.reset()
+        self.ema_accuracy.reset()
 
-        print(f"lr: {self.optimizer.param_groups[0]['lr']}")
 
     def scheduler_step(self):
         self.num_updates += 1
@@ -177,35 +190,36 @@ class TimmTrainer(Trainer):
             self.scheduler.step_update(num_updates=self.num_updates)
 
 
-def main():
-    data_path = Path(r"/home/chris/notebooks/imagenette2/")
-    data_path = Path(r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data")
+def main(data_path):
+    # Set training arguments, hardcoded here for clarity
+    model = "resnetrs50"
+    pretrained = False
+    drop_path = 0.05
+    img_size = (224, 224)
+    lr = 5e-3
+    smoothing = 0.1
+    mixup = 0.2
+    cutmix = 1.0
+    batch_size = 16
+    bce_target_thresh = 0.2
+    num_epochs = 10
+
+    data_path = Path(data_path)
     train_path = data_path / 'train'
     val_path = data_path / 'val'
-
     num_classes = len(list(train_path.iterdir()))
 
-    model = "resnetrs50"
-    pretrained = True
-    drop_path = 0.05
-
+    # Create model using timm
     model = create_model(
         model, pretrained=pretrained, num_classes=num_classes, drop_path_rate=drop_path
     )
 
-    # Freezing the base model
-    for param in model.parameters():
-        param.requires_grad = False
-    for param in model.get_classifier().parameters():
-        param.requires_grad = True
-
+    # Load data config associated with the model to use in data augmentation pipeline
     data_config = resolve_data_config({}, model=model, verbose=True)
-
-    img_size = (224, 224)
-
     data_mean = data_config['mean']
     data_std = data_config['std']
 
+    # Create datasets using PyTorch factory function
     train_dataset = datasets.ImageFolder(train_path, train_transforms(img_size=img_size,
                                                                       data_mean=data_mean,
                                                                       data_std=data_std,
@@ -215,42 +229,34 @@ def main():
                                                                   data_mean=data_mean,
                                                                   data_std=data_std,
                                                                   crop_pct=0.95))
-    smoothing = 0.1
-    mixup = 0.2
-    cutmix = 1.0
 
+    # Create mixup function
     mixup_args = dict(
         mixup_alpha=mixup,
         cutmix_alpha=cutmix,
         label_smoothing=smoothing,
         num_classes=num_classes,
     )
-
     mixup_fn = Mixup(**mixup_args)
 
-    batch_size = 16
-    lr = 5e-3
-
-    bce_target_thresh = 0.2
-
+    # Create PyTorch optimizer
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr)
 
-    num_epochs = 10
-
-    # timm scheduler
+    # Create higher order function to create timm scheduler
     lr_scheduler_type = partial(timm.scheduler.CosineLRScheduler, t_initial=num_epochs)
 
+    # As we are using mixup, we can use BCE during training and CE for evaluation
     train_loss_fn = BinaryCrossEntropy(
         target_threshold=bce_target_thresh, smoothing=smoothing
     )
     validate_loss_fn = torch.nn.CrossEntropyLoss()
 
-    trainer = TimmTrainer(
+    # Create trainer and start training
+    trainer = MixupTrainer(
         model=model,
         optimizer=optimizer,
         loss_func=train_loss_fn,
         eval_loss_fn=validate_loss_fn,
-
         mixup_fn=mixup_fn,
         num_classes=num_classes,
     )
@@ -265,4 +271,7 @@ def main():
 
 
 if __name__ == '__main__':
-    notebook_launcher(main, num_processes=2)
+    parser = argparse.ArgumentParser(description="Simple example of training script.")
+    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
+    args = parser.parse_args()
+    main(args.data_dir)
