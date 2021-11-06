@@ -220,6 +220,7 @@ class Trainer:
             num_epochs=num_epochs,
             gradient_accumulation_steps=gradient_accumulation_steps,
             max_num_train_steps=max_num_train_steps,
+            per_device_batch_size=per_device_batch_size
         )
 
         if self.scheduler_type is not None:
@@ -259,12 +260,17 @@ class Trainer:
 
     def _create_run_config(
         self,
+        per_device_batch_size,
         num_epochs,
         gradient_accumulation_steps,
         max_num_train_steps,
     ):
 
-        train_per_device_batch_size = self._train_dl_kwargs["batch_size"]
+        if self._train_dl_kwargs is not None:
+            train_per_device_batch_size = self._train_dl_kwargs.get("batch_size", per_device_batch_size)
+        else:
+            train_per_device_batch_size = per_device_batch_size
+
 
         if self._eval_dl_kwargs is not None:
             eval_per_device_batch_size = self._eval_dl_kwargs.get(
