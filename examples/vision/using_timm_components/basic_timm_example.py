@@ -176,7 +176,7 @@ def main():
         num_epochs=num_epochs,
         train_dataloader_kwargs=train_dl_kwargs,
         eval_dataloader_kwargs=eval_dl_kwargs,
-        scheduler_type=lr_scheduler_type,
+        create_scheduler_fn=lr_scheduler_type,
     )
 
 

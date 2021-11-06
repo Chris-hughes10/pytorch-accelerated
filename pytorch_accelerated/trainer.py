@@ -196,14 +196,14 @@ class Trainer:
         per_device_batch_size=8,
         max_num_train_steps=None,
         gradient_accumulation_steps=1,
-        scheduler_type=None,
+        create_scheduler_fn=None,
         train_dataloader_kwargs: dict = None,
         eval_dataloader_kwargs: dict = None,
         reset_run_history=True,
     ):
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
-        self.scheduler_type = scheduler_type
+        self.scheduler_type = create_scheduler_fn
 
         if reset_run_history:
             self.run_history.reset()

@@ -266,7 +266,7 @@ def main(data_path):
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         num_epochs=num_epochs,
-        scheduler_type=lr_scheduler_type,
+        create_scheduler_fn=lr_scheduler_type,
     )
 
 

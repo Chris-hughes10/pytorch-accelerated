@@ -113,7 +113,7 @@ def main(data_dir):
         eval_dataset=image_datasets["val"],
         num_epochs=8,
         per_device_batch_size=4,
-        scheduler_type=exp_lr_scheduler,
+        create_scheduler_fn=exp_lr_scheduler,
     )
 
 

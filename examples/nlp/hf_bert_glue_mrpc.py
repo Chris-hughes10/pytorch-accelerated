@@ -140,7 +140,7 @@ def training_function(config, args):
         per_device_batch_size=batch_size,
         train_dataloader_kwargs={"num_workers": 0},
         eval_dataloader_kwargs={"batch_size": EVAL_BATCH_SIZE, "num_workers": 0},
-        scheduler_type=lr_scheduler,
+        create_scheduler_fn=lr_scheduler,
         gradient_accumulation_steps=gradient_accumulation_steps,
     )
 

@@ -107,26 +107,11 @@ class CallbackHandler(TrainerCallback):
             )
         self.callbacks.append(cb)
 
-    def pop_callback(self, callback):
-        if isinstance(callback, type):
-            for cb in self.callbacks:
-                if isinstance(cb, callback):
-                    self.callbacks.remove(cb)
-                    return cb
-        else:
-            for cb in self.callbacks:
-                if cb == callback:
-                    self.callbacks.remove(cb)
-                    return cb
+    def __iter__(self):
+        return self.callbacks
 
-    def remove_callback(self, callback):
-        if isinstance(callback, type):
-            for cb in self.callbacks:
-                if isinstance(cb, callback):
-                    self.callbacks.remove(cb)
-                    return
-        else:
-            self.callbacks.remove(callback)
+    def clear_callbacks(self):
+        self.callbacks = []
 
     @property
     def callback_list(self):

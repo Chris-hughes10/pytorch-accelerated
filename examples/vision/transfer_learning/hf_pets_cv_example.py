@@ -209,7 +209,7 @@ def training_function():
         eval_dataset=eval_dataset,
         num_epochs=num_epochs,
         per_device_batch_size=batch_size,
-        scheduler_type=lr_scheduler,
+        create_scheduler_fn=lr_scheduler,
     )
 
 

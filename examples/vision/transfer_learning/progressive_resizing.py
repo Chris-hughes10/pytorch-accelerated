@@ -129,7 +129,7 @@ def main():
             train_dataset=image_datasets["train"],
             eval_dataset=image_datasets["val"],
             num_epochs=e_config.num_epochs,
-            scheduler_type=lr_scheduler,
+            create_scheduler_fn=lr_scheduler,
             per_device_batch_size=32,
             reset_run_history=False,
         )
