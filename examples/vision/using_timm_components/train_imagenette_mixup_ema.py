@@ -59,12 +59,12 @@ def train_transforms(img_size, data_mean, data_std, rand_augment_config_str):
     pre_tensor_transforms = [
         rrc,
         transforms.RandomHorizontalFlip(p=0.5),
-        rand_augment_transform(rand_augment_config_str, aa_params)
+        rand_augment_transform(rand_augment_config_str, aa_params),
     ]
-    post_tensor_transforms = [transforms.ToTensor(),
-                              transforms.Normalize(
-                                  mean=torch.tensor(data_mean),
-                                  std=torch.tensor(data_std))]
+    post_tensor_transforms = [
+        transforms.ToTensor(),
+        transforms.Normalize(mean=torch.tensor(data_mean), std=torch.tensor(data_std)),
+    ]
 
     return transforms.Compose([*pre_tensor_transforms, *post_tensor_transforms])
 
@@ -72,14 +72,16 @@ def train_transforms(img_size, data_mean, data_std, rand_augment_config_str):
 def eval_transforms(img_size, crop_pct, data_mean, data_std):
     scale_size = int(math.floor(img_size[0] / crop_pct))
 
-    return transforms.Compose([
-        transforms.Resize(scale_size),
-        transforms.CenterCrop(img_size),
-        transforms.ToTensor(),
-        transforms.Normalize(
-            mean=torch.tensor(data_mean),
-            std=torch.tensor(data_std))
-    ])
+    return transforms.Compose(
+        [
+            transforms.Resize(scale_size),
+            transforms.CenterCrop(img_size),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=torch.tensor(data_mean), std=torch.tensor(data_std)
+            ),
+        ]
+    )
 
 
 # Taken from timm master branch - not yet released
@@ -89,12 +91,12 @@ class BinaryCrossEntropy(nn.Module):
     """
 
     def __init__(
-            self,
-            smoothing=0.1,
-            target_threshold=None,
-            weight=None,
-            reduction: str = "mean",
-            pos_weight=None,
+        self,
+        smoothing=0.1,
+        target_threshold=None,
+        weight=None,
+        reduction: str = "mean",
+        pos_weight=None,
     ):
         super(BinaryCrossEntropy, self).__init__()
         assert 0.0 <= smoothing < 1.0
@@ -139,7 +141,9 @@ class MixupTrainer(Trainer):
 
     def training_run_start(self):
         # Model EMA requires the model without a DDP wrapper and before sync batchnorm conversion
-        self.ema_model = ModelEmaV2(self._accelerator.unwrap_model(self.model), decay=0.5)
+        self.ema_model = ModelEmaV2(
+            self._accelerator.unwrap_model(self.model), decay=0.5
+        )
         self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
 
     def train_epoch_start(self):
@@ -155,7 +159,7 @@ class MixupTrainer(Trainer):
         return super().calculate_train_batch_loss((mixup_xb, mixup_yb))
 
     def train_epoch_end(
-            self,
+        self,
     ):
         self.ema_model.update(self.model)
         self.ema_model.eval()
@@ -179,10 +183,11 @@ class MixupTrainer(Trainer):
             self.scheduler.step(self.run_history.current_epoch + 1)
 
         self.run_history.update_metric("accuracy", self.accuracy.compute().cpu())
-        self.run_history.update_metric("ema_model_accuracy", self.ema_accuracy.compute().cpu())
+        self.run_history.update_metric(
+            "ema_model_accuracy", self.ema_accuracy.compute().cpu()
+        )
         self.accuracy.reset()
         self.ema_accuracy.reset()
-
 
     def scheduler_step(self):
         self.num_updates += 1
@@ -205,8 +210,8 @@ def main(data_path):
     num_epochs = 10
 
     data_path = Path(data_path)
-    train_path = data_path / 'train'
-    val_path = data_path / 'val'
+    train_path = data_path / "train"
+    val_path = data_path / "val"
     num_classes = len(list(train_path.iterdir()))
 
     # Create model using timm
@@ -216,19 +221,26 @@ def main(data_path):
 
     # Load data config associated with the model to use in data augmentation pipeline
     data_config = resolve_data_config({}, model=model, verbose=True)
-    data_mean = data_config['mean']
-    data_std = data_config['std']
+    data_mean = data_config["mean"]
+    data_std = data_config["std"]
 
     # Create datasets using PyTorch factory function
-    train_dataset = datasets.ImageFolder(train_path, train_transforms(img_size=img_size,
-                                                                      data_mean=data_mean,
-                                                                      data_std=data_std,
-                                                                      rand_augment_config_str="rand-m7-mstd0.5-inc1"))
+    train_dataset = datasets.ImageFolder(
+        train_path,
+        train_transforms(
+            img_size=img_size,
+            data_mean=data_mean,
+            data_std=data_std,
+            rand_augment_config_str="rand-m7-mstd0.5-inc1",
+        ),
+    )
 
-    eval_dataset = datasets.ImageFolder(val_path, eval_transforms(img_size=img_size,
-                                                                  data_mean=data_mean,
-                                                                  data_std=data_std,
-                                                                  crop_pct=0.95))
+    eval_dataset = datasets.ImageFolder(
+        val_path,
+        eval_transforms(
+            img_size=img_size, data_mean=data_mean, data_std=data_std, crop_pct=0.95
+        ),
+    )
 
     # Create mixup function
     mixup_args = dict(
@@ -270,7 +282,7 @@ def main(data_path):
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simple example of training script.")
     parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
     args = parser.parse_args()

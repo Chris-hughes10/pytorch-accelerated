@@ -39,24 +39,6 @@ class TrainerCallback(ABC):
         """
         pass
 
-    def on_train_epoch_end(self, trainer, **kwargs):
-        """
-        Event called at the end of an epoch.
-        """
-        pass
-
-    def on_eval_epoch_begin(self, trainer, **kwargs):
-        """
-        Event called at the beginning of evaluation.
-        """
-        pass
-
-    def on_eval_epoch_end(self, trainer, **kwargs):
-        """
-        Event called at the end of evaluation.
-        """
-        pass
-
     def on_train_step_begin(self, trainer, **kwargs):
         """
         Event called at the beginning of a training step.
@@ -69,6 +51,18 @@ class TrainerCallback(ABC):
         """
         pass
 
+    def on_train_epoch_end(self, trainer, **kwargs):
+        """
+        Event called at the end of an epoch.
+        """
+        pass
+
+    def on_eval_epoch_begin(self, trainer, **kwargs):
+        """
+        Event called at the beginning of evaluation.
+        """
+        pass
+
     def on_eval_step_begin(self, trainer, **kwargs):
         """
         Event called at the beginning of a training step.
@@ -78,6 +72,12 @@ class TrainerCallback(ABC):
     def on_eval_step_end(self, trainer, **kwargs):
         """
         Event called at the end of a training step.
+        """
+        pass
+
+    def on_eval_epoch_end(self, trainer, **kwargs):
+        """
+        Event called at the end of evaluation.
         """
         pass
 
@@ -195,11 +195,11 @@ class PrintProgressCallback(TrainerCallback):
 
 class SaveBestModelCallback(TrainerCallback):
     def __init__(
-            self,
-            save_dir=None,
-            watch_metric="eval_loss_epoch",
-            greater_is_better=False,
-            reset_on_train=True,
+        self,
+        save_dir=None,
+        watch_metric="eval_loss_epoch",
+        greater_is_better=False,
+        reset_on_train=True,
     ):
         self.watch_metric = watch_metric
         self.greater_is_better = greater_is_better
@@ -241,12 +241,12 @@ class SaveBestModelCallback(TrainerCallback):
 
 class EarlyStoppingCallback(TrainerCallback):
     def __init__(
-            self,
-            early_stopping_patience: int = 1,
-            early_stopping_threshold: Optional[float] = 0.01,
-            watch_metric="eval_loss_epoch",
-            greater_is_better=False,
-            reset_on_train=True,
+        self,
+        early_stopping_patience: int = 1,
+        early_stopping_threshold: Optional[float] = 0.01,
+        watch_metric="eval_loss_epoch",
+        greater_is_better=False,
+        reset_on_train=True,
     ):
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_threshold = early_stopping_threshold
@@ -269,7 +269,7 @@ class EarlyStoppingCallback(TrainerCallback):
         else:
             is_improvement = self.operator(current_metric, self.best_metric)
             improvement_above_threshold = (
-                    abs(current_metric - self.best_metric) > self.early_stopping_threshold
+                abs(current_metric - self.best_metric) > self.early_stopping_threshold
             )
 
             if is_improvement and improvement_above_threshold:

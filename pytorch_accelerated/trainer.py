@@ -13,7 +13,8 @@ from pytorch_accelerated.callbacks import (
     PrintProgressCallback,
     TerminateOnNaNCallback,
     StopTrainingError,
-    ProgressBarCallback)
+    ProgressBarCallback,
+)
 from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, LossTracker
 
 DEFAULT_CALLBACKS = (
@@ -21,8 +22,8 @@ DEFAULT_CALLBACKS = (
     PrintProgressCallback,
     ProgressBarCallback,
     PrintMetricsCallback,
-
 )
+
 
 class TrainerPlaceholderValues(Enum):
     NUM_EPOCHS = 'trainer.run_config["num_epochs"]'
@@ -62,7 +63,6 @@ class Trainer:
         loss_func,
         optimizer,
         callbacks=DEFAULT_CALLBACKS,
-        collate_fn=None,
         run_history=None,
     ):
         self.model = model
@@ -70,7 +70,7 @@ class Trainer:
         self.optimizer = optimizer
         self.scheduler_type = None
         self.scheduler = None
-        self.collate_fn = collate_fn
+        self.collate_fn = None
         self.train_dataset = None
         self.eval_dataset = None
         self._accelerator = Accelerator()
@@ -200,10 +200,12 @@ class Trainer:
         train_dataloader_kwargs: dict = None,
         eval_dataloader_kwargs: dict = None,
         reset_run_history=True,
+        collate_fn=None,
     ):
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.scheduler_type = create_scheduler_fn
+        self.collate_fn = collate_fn
 
         if reset_run_history:
             self.run_history.reset()
@@ -220,7 +222,7 @@ class Trainer:
             num_epochs=num_epochs,
             gradient_accumulation_steps=gradient_accumulation_steps,
             max_num_train_steps=max_num_train_steps,
-            per_device_batch_size=per_device_batch_size
+            per_device_batch_size=per_device_batch_size,
         )
 
         if self.scheduler_type is not None:
@@ -267,10 +269,11 @@ class Trainer:
     ):
 
         if self._train_dl_kwargs is not None:
-            train_per_device_batch_size = self._train_dl_kwargs.get("batch_size", per_device_batch_size)
+            train_per_device_batch_size = self._train_dl_kwargs.get(
+                "batch_size", per_device_batch_size
+            )
         else:
             train_per_device_batch_size = per_device_batch_size
-
 
         if self._eval_dl_kwargs is not None:
             eval_per_device_batch_size = self._eval_dl_kwargs.get(
@@ -327,12 +330,12 @@ class Trainer:
         self.training_run_end()
 
     def _run_train_epoch(self, train_dl):
+        self.train_epoch_start()
+        self._loss_tracker.reset()
         self.callback_handler.call_event(
             "on_train_epoch_begin",
             self,
         )
-        self.train_epoch_start()
-        self._loss_tracker.reset()
 
         for step, batch in enumerate(train_dl):
             self.callback_handler.call_event(
@@ -371,12 +374,12 @@ class Trainer:
         )
 
     def _run_eval_epoch(self, valid_dl):
+        self.eval_epoch_start()
+        self._loss_tracker.reset()
         self.callback_handler.call_event(
             "on_eval_epoch_begin",
             self,
         )
-        self.eval_epoch_start()
-        self._loss_tracker.reset()
 
         for batch in valid_dl:
             self.callback_handler.call_event(
