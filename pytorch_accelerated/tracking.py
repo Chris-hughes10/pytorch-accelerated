@@ -1,3 +1,4 @@
+# Copyright © 2021 Chris Hughes
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
@@ -28,10 +29,14 @@ class RunHistory(ABC):
     def increment_epoch(self):
         pass
 
+    @abstractmethod
+    def reset(self):
+        pass
+
 
 class InMemoryRunHistory(RunHistory):
     def __init__(self):
-        self._current_epoch = 0
+        self._current_epoch = 1
         self._metrics = defaultdict(list)
 
     def get_metric_names(self):
@@ -53,3 +58,31 @@ class InMemoryRunHistory(RunHistory):
 
     def increment_epoch(self):
         self._current_epoch += 1
+
+    def reset(self):
+        self._current_epoch = 1
+        self._metrics = defaultdict(list)
+
+
+class LossTracker:
+    def __init__(self):
+        self.loss_value = 0
+        self._average = 0
+        self.total_loss = 0
+        self.running_count = 0
+
+    def reset(self):
+        self.loss_value = 0
+        self._average = 0
+        self.total_loss = 0
+        self.running_count = 0
+
+    def update(self, loss_batch_value, batch_size=1):
+        self.loss_value = loss_batch_value
+        self.total_loss += loss_batch_value * batch_size
+        self.running_count += batch_size
+        self._average = self.total_loss / self.running_count
+
+    @property
+    def average(self):
+        return self._average

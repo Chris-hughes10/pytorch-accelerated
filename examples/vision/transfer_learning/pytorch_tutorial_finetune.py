@@ -1,18 +1,24 @@
+# Modifications Copyright © 2021 Chris Hughes
+########################################################################
+# This is an accelerated example of the PyTorch "Transfer Learning for Computer Vision Tutorial"
+# written by Sasank Chilamkurthy, available here:
+# https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html,
+# which demonstrates fine-tuning a ResNet18 model to classify ants and bees.
+#
+# Note: this example requires installing the torchvision package
+########################################################################
+import argparse
 import os
 from functools import partial
 
-from accelerate import notebook_launcher
-from accelerate.utils import set_seed
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from torchvision import transforms, datasets, models
 
-from pytorch_thunder.trainer import Trainer
+from pytorch_accelerated.trainer import Trainer
 
 
-def main():
-    set_seed(42)
-
+def main(data_dir):
     # Data augmentation and normalization for training
     # Just normalization for validation
     data_transforms = {
@@ -35,9 +41,6 @@ def main():
     }
 
     # Create datasets
-    data_dir = (
-        r"C:\Users\hughesc\OneDrive - Microsoft\Documents\toy_data\hymenoptera_data"
-    )
     image_datasets = {
         x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x])
         for x in ["train", "val"]
@@ -57,7 +60,6 @@ def main():
         model,
         loss_func=loss_func,
         optimizer=optimizer,
-        scheduler_type=exp_lr_scheduler,
     )
 
     trainer.train(
@@ -65,9 +67,12 @@ def main():
         eval_dataset=image_datasets["val"],
         num_epochs=8,
         per_device_batch_size=4,
-        fp16=True,
+        create_scheduler_fn=exp_lr_scheduler,
     )
 
 
 if __name__ == "__main__":
-    notebook_launcher(main, num_processes=1)
+    parser = argparse.ArgumentParser(description="Simple example of training script.")
+    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
+    args = parser.parse_args()
+    main(args.data_dir)
