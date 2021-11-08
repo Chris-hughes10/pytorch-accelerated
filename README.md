@@ -29,7 +29,7 @@ and gradient clipping, usage of which can be seen in the `pytorch-accelerated`
 
 ## Installation
 
-As this package is still in the aplha stage of development, it is not yet available on pypi.
+As this package is still in the alpha stage of development, it is not yet available on pypi.
  
 For the moment, please pip install from the main branch using the following command:
 ```
@@ -115,7 +115,7 @@ More complex training examples can be seen in the examples folder
 - Users that are familiar with PyTorch but would like to avoid having to write the common training loop boilerplate
 to focus on the interesting parts of the training loop.
 - Users who like, and are comfortable with, selecting and creating their own models, loss functions, optimizers and datasets.
-- Users who value a simple and streamlined feature set, where the behaviour is simple to debug, understand, and reason about!
+- Users who value a simple and streamlined feature set, where the behaviour is easy to debug, understand, and reason about!
 
 ### Who should not use pytorch-accelerated?
 
@@ -126,8 +126,8 @@ to focus on the interesting parts of the training loop.
 - If you would like to write the entire training loop yourself, just without all of the device management headaches, 
 you would probably be best suited to using [Accelerate](https://github.com/huggingface/accelerate) directly! Whilst it
 is possible to customize every part of the `Trainer`, the training loop is fundamentally broken up into a number of 
-different methods that you would have to override. Before you go though, is writing those for loops really that 
-important to warrant starting from scratch *again* 😉.
+different methods that you would have to override. But, before you go, is writing those `for` loops really important 
+enough to warrant starting from scratch *again* 😉.
 - If you are working on a custom, highly complex, use case which does not fit the patterns of usual training loops
 and want to squeeze out every last bit of performance on your chosen hardware, you are probably best off sticking
  with vanilla PyTorch; any high-level API becomes an overhead in highly specialized cases!
