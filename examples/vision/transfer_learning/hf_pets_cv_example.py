@@ -17,7 +17,7 @@
 # was adapted from an example produced by HuggingFace available here:
 # https://github.com/huggingface/accelerate/blob/main/examples/cv_example.py
 #
-# Note: this example requires installing the torchmetrics and timm packages
+# Note: this example requires installing the torchvision, torchmetrics and timm packages
 ########################################################################
 
 import argparse

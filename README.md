@@ -16,7 +16,7 @@ The key features are:
 
 Significant effort has been taken to ensure that every part of the library - both internal and external components - is as clear and simple as possible, 
 making it easy to customise, debug and understand exactly what is going on behind the scenes at each step; most of the 
-behaviour of the trainer is contained in a singe class! 
+behaviour of the trainer is contained in a single class! 
 In the spirit of Python, nothing is hidden and everything is accessible.
 
 `pytorch-accelerated` is proudly and transparently built on top of 
