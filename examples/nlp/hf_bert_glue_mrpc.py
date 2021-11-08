@@ -28,12 +28,7 @@ EVAL_BATCH_SIZE = 32
 class TransformersTrainer(Trainer):
     def __init__(self, model, optimizer, collate_fn, metric, *args, **kwargs):
         super().__init__(
-            model=model,
-            optimizer=optimizer,
-            loss_func=None,
-            collate_fn=collate_fn,
-            *args,
-            **kwargs
+            model=model, optimizer=optimizer, loss_func=None, *args, **kwargs
         )
         self.metric = metric
 
@@ -63,8 +58,8 @@ class TransformersTrainer(Trainer):
     def eval_epoch_end(self):
         self.run_history.update_metric("metrics", self.metric.compute())
 
-    def create_scheduler(self, optimizer):
-        return self.scheduler_type(
+    def create_scheduler(self):
+        return self.create_scheduler_fn(
             optimizer=self.optimizer,
             num_training_steps=len(self._train_dataloader)
             * self.run_config["num_epochs"],
@@ -142,6 +137,7 @@ def training_function(config, args):
         eval_dataloader_kwargs={"batch_size": EVAL_BATCH_SIZE, "num_workers": 0},
         create_scheduler_fn=lr_scheduler,
         gradient_accumulation_steps=gradient_accumulation_steps,
+        collate_fn=collate_fn,
     )
 
 

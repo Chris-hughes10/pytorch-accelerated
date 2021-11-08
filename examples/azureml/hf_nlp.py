@@ -54,7 +54,12 @@ def training_function(config, args):
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
-        outputs = tokenizer(examples["sentence1"], examples["sentence2"], truncation=True, max_length=None)
+        outputs = tokenizer(
+            examples["sentence1"],
+            examples["sentence2"],
+            truncation=True,
+            max_length=None,
+        )
         return outputs
 
     # Apply the method we just defined to all the examples in all the splits of the dataset
@@ -77,21 +82,31 @@ def training_function(config, args):
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
         if accelerator.distributed_type == DistributedType.TPU:
-            return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
+            return tokenizer.pad(
+                examples, padding="max_length", max_length=128, return_tensors="pt"
+            )
         return tokenizer.pad(examples, padding="longest", return_tensors="pt")
 
     # Instantiate dataloaders.
     train_dataloader = DataLoader(
-        tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=batch_size
+        tokenized_datasets["train"],
+        shuffle=True,
+        collate_fn=collate_fn,
+        batch_size=batch_size,
     )
     eval_dataloader = DataLoader(
-        tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=EVAL_BATCH_SIZE
+        tokenized_datasets["validation"],
+        shuffle=False,
+        collate_fn=collate_fn,
+        batch_size=EVAL_BATCH_SIZE,
     )
 
     set_seed(seed)
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        "bert-base-cased", return_dict=True
+    )
 
     # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
     # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
@@ -110,7 +125,7 @@ def training_function(config, args):
 
     rank = int(os.environ["RANK"])
     local_rank = int(os.environ["LOCAL_RANK"])
-    print(f'rank: {rank}, local_rank: {local_rank}, device: {train_dataloader.device}')
+    print(f"rank: {rank}, local_rank: {local_rank}, device: {train_dataloader.device}")
 
     # Instantiate learning rate scheduler after preparing the training dataloader as the prepare method
     # may change its length.
@@ -120,7 +135,7 @@ def training_function(config, args):
         num_training_steps=len(train_dataloader) * num_epochs,
     )
 
-    print('starting training')
+    print("starting training")
     # Now we train the model
     for epoch in tqdm(range(num_epochs)):
         model.train()
@@ -155,10 +170,20 @@ def training_function(config, args):
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
-    parser.add_argument("--fp16", action="store_true", help="If passed, will use FP16 training.")
-    parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
+    parser.add_argument(
+        "--fp16", action="store_true", help="If passed, will use FP16 training."
+    )
+    parser.add_argument(
+        "--cpu", action="store_true", help="If passed, will train on the CPU."
+    )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 10, "correct_bias": True, "seed": 42, "batch_size": 16}
+    config = {
+        "lr": 2e-5,
+        "num_epochs": 10,
+        "correct_bias": True,
+        "seed": 42,
+        "batch_size": 16,
+    }
     training_function(config, args)
 
 

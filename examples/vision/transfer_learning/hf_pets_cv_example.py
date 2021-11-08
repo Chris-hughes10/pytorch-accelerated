@@ -79,9 +79,9 @@ class PetsTrainer(Trainer):
             "accuracy", round(100 * self.accurate.item() / self.num_elems, 2)
         )
 
-    def create_scheduler(self, optimizer):
-        return self.scheduler_type(
-            optimizer=optimizer, steps_per_epoch=len(self._train_dataloader)
+    def create_scheduler(self):
+        return self.create_scheduler_fn(
+            optimizer=self.optimizer, steps_per_epoch=len(self._train_dataloader)
         )
 
 
