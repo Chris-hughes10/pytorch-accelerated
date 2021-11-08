@@ -1,8 +1,23 @@
+# Modifications Copyright (C) 2021 Chris Hughes
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 ########################################################################
-# This example trains a ResNet50 on the Oxford-IIT Pet Dataset and
+# This is an accelerated example of training a ResNet50 on the Oxford-IIT Pet Dataset and
 # was adapted from an example produced by HuggingFace available here:
 # https://github.com/huggingface/accelerate/blob/main/examples/cv_example.py
 #
+# Note: this example requires installing the torchmetrics and timm packages
 ########################################################################
 
 import argparse
@@ -112,18 +127,8 @@ class PetsDataset(Dataset):
         return {"image": image, "label": label}
 
 
-# def training_function(data_dir, config):
-def training_function():
+def training_function(data_dir, config):
 
-    data_dir = "/home/chris/notebooks/pets"
-
-    config = {
-        "lr": 3e-2,
-        "num_epochs": 3,
-        "seed": 42,
-        "batch_size": 64,
-        "image_size": 224,
-    }
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     seed = int(config["seed"])
@@ -214,17 +219,16 @@ def training_function():
 
 
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser(description="Simple examples of training script.")
-    # parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
-    # args = parser.parse_args()
-    # # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
-    # config = {
-    #     "lr": 3e-2,
-    #     "num_epochs": 3,
-    #     "seed": 42,
-    #     "batch_size": 64,
-    #     "image_size": 224,
-    # }
+    parser = argparse.ArgumentParser(description="Simple examples of training script.")
+    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
+    args = parser.parse_args()
+    # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
+    config = {
+        "lr": 3e-2,
+        "num_epochs": 3,
+        "seed": 42,
+        "batch_size": 64,
+        "image_size": 224,
+    }
 
-    # training_function(args.data_dir, config)
-    notebook_launcher(training_function, num_processes=2)
+    training_function(args.data_dir, config)

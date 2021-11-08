@@ -1,3 +1,4 @@
+# Copyright © 2021 Chris Hughes
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
@@ -76,9 +77,9 @@ class LossTracker:
         self.total_loss = 0
         self.running_count = 0
 
-    def update(self, val, batch_size=1):
-        self.loss_value = val
-        self.total_loss += val * batch_size
+    def update(self, loss_batch_value, batch_size=1):
+        self.loss_value = loss_batch_value
+        self.total_loss += loss_batch_value * batch_size
         self.running_count += batch_size
         self._average = self.total_loss / self.running_count
 

@@ -1,5 +1,7 @@
+# Copyright © 2021 Chris Hughes
 import math
 import os
+from collections import Callable
 from enum import Enum
 from functools import partial
 from typing import Iterable
@@ -27,6 +29,25 @@ DEFAULT_CALLBACKS = (
 
 
 class TrainerPlaceholderValues(Enum):
+    """
+    Some learning rate schedulers require information such as the total number of steps that will take place during training.
+    As this information is not accessible prior to creating the training dataloader - which will be done as part of the
+    `train` method - a placeholder value can be used in the cases, as demonstrated below:
+
+    ```
+    from functools import Partial
+
+    from torch.optim.lr_scheduler import OneCycleLR
+
+    create_scheduler_fn = partial(
+                OneCycleLR,
+                max_lr=e_config.lr,
+                epochs=TrainerPlaceholderValues.NUM_EPOCHS,
+                steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
+            )
+    ```
+    These placeholders will be replaced by the trainer with the correct values during training.
+    """
     NUM_EPOCHS = 'trainer.run_config["num_epochs"]'
     NUM_UPDATE_STEPS_PER_EPOCH = 'trainer.run_config["num_update_steps_per_epoch"]'
     TRAIN_DATALOADER_LEN = "len(trainer._train_dataloader)"
@@ -58,6 +79,16 @@ def replace_trainer_placeholder_values(trainer, instance):
 
 
 class Trainer:
+    """
+    The Trainer is designed to encapsulate an entire training loop for a specific task, bringing together the model,
+    loss function and optimizer, and providing a specification of the behaviour to execute of each step of the training
+    process.
+
+    The trainer has been implemented such that it provides (overridable) implementations of the parts of training
+     that rarely change after they have been defined – such as creating a data loader, or how a batch of data is fed to
+     the model – whilst remaining decoupled from components that are likely to change, such as the model, dataset,
+     loss function and optimizer.
+    """
     def __init__(
         self,
         model,
@@ -67,12 +98,15 @@ class Trainer:
         run_history=None,
     ):
         """
+        Create a new trainer object which can be used to train the given model using the provided loss function and optimizer.
 
-        :param model:
-        :param loss_func:
-        :param optimizer:
-        :param callbacks:
-        :param run_history:
+        The callbacks that are used by default are (TerminateOnNaNCallback, PrintProgressCallback, ProgressBarCallback, PrintMetricsCallback,
+)
+        :param model: a subclass of nn.Module to be trained
+        :param loss_func: the loss function to use when training the model
+        :param optimizer: the optimizer to update the model's parameters
+        :param callbacks: a list of callbacks to use during training runs. If a list of callbacks is not provided, the default selection will be used.
+        :param run_history: an instance of a RunHistory subclass to track training runs. If this is not provided, a new one will be created.
         """
         self.model = model
         self.loss_func = loss_func
@@ -301,7 +335,7 @@ class Trainer:
         per_device_batch_size=8,
         max_num_train_steps=None,
         gradient_accumulation_steps=1,
-        create_scheduler_fn=None,
+        create_scheduler_fn: Callable = None,
         train_dataloader_kwargs: dict = None,
         eval_dataloader_kwargs: dict = None,
         reset_run_history=True,
@@ -310,19 +344,21 @@ class Trainer:
         """
         Start a training run. If an evaluation dataset is provided, this routine will include both training and evaluation epochs.
 
-        TODO: As the internal optimizer needs to be prepared prior to training, in order to use a learning rate scheduler,
+        Note that, as the optimizer needs to be internally prepared prior to training, in order to use a learning rate scheduler,
+        a factory function must be provided to create_scheduler_fn. This must be a function which accepts the optimizer as a single parameter
+        and returns an instance of a learning rate scheduler. Passing an instance of a learning rate scheduler will not work here.
 
         :param train_dataset: the dataset to use during training epochs
-        :param num_epochs: the number of epochs
-        :param eval_dataset: the dataset to use during evaluation epochs
+        :param num_epochs: the number of epochs to train for
+        :param eval_dataset: the dataset to use during evaluation epochs, if this is not provided, evaluation is skipped.
         :param per_device_batch_size: the batch size to use per device
         :param max_num_train_steps: the maximum number of steps to train for. If provided, this will override num_epochs
-        :param gradient_accumulation_steps: accumulate grads to the specified number of steps to simulate a bigger batch size. By default, this is set to 1
+        :param gradient_accumulation_steps: accumulate gradients to the specified number of steps to simulate a bigger batch size. By default, this is set to 1
         :param create_scheduler_fn: a function which accepts an optimizer as an argument and returns a learning rate scheduler
-        :param train_dataloader_kwargs: : a dictionary of keyword arguments to pass to the  train dataloader constructor, for details see torch.utils.data.DataLoader
-        :param eval_dataloader_kwargs: a dictionary of keyword arguments to pass to the eval dataloader constructor, for details see torch.utils.data.DataLoader
+        :param train_dataloader_kwargs: : a dictionary of keyword arguments to pass to the training dataloader constructor, for details see torch.utils.data.DataLoader
+        :param eval_dataloader_kwargs: a dictionary of keyword arguments to pass to the evaluation dataloader constructor, for details see torch.utils.data.DataLoader
         :param reset_run_history: reset any run history saved by the trainer from previous training runs
-        :param collate_fn: the collate function to be used by the train and eval dataloaders
+        :param collate_fn: the collate function to be used by the training and evaluation dataloaders
         """
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
@@ -527,13 +563,13 @@ class Trainer:
         else:
             print(*args, **kwargs)
 
-    def save_model(self, save_dir, checkpoint_kwargs=None, save_optimizer=True):
+    def save_model(self, save_path, checkpoint_kwargs=None, save_optimizer=True):
         """
+        Save the model, optimizer and specified args as a checkpoint file.
 
-        :param save_dir:
-        :param checkpoint_kwargs:
-        :param save_optimizer:
-        :return:
+        :param save_path: the path where to save the checkpoint, this should end in '.pt'
+        :param checkpoint_kwargs: additional objects to include in the checkpoint
+        :param save_optimizer: flag to indicate whether to include the optimizer in the checkpoint
         """
         # TODO: add save method for run history?
 
@@ -551,18 +587,18 @@ class Trainer:
 
         self._accelerator.save(
             checkpoint,
-            save_dir,
+            save_path,
         )
 
-    def load_checkpoint(self, checkpoint_dir):
+    def load_checkpoint(self, checkpoint_path):
         """
-
-        :param checkpoint_dir:
-        :return:
+        Load the model and optimizer from a checkpoint file
+        :param checkpoint_path: the path of the checkpoint file to load
         """
         self._accelerator.wait_for_everyone()
-        checkpoint = torch.load(checkpoint_dir, map_location="cpu")
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
         self._accelerator.unwrap_model(self.model).load_state_dict(
             checkpoint["model_state_dict"]
         )
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        if 'optimizer_state_dict' in checkpoint:
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])

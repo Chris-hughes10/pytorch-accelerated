@@ -1,3 +1,14 @@
+# Copyright © 2021 Chris Hughes
+########################################################################
+# This example trains a ResNet-RS50 on the Imagenette Dataset using components from the timm library.
+# In this example, timm components are used to create the model, dataloaders, optimizer,
+# scheduler and training loss function.
+# Additionally, torchmetrics is used to track accuracy. This has been done using a callback
+# for clarity of which components are from timm and which are not; this could have also been included in the trainer
+#
+# Note: this example requires installing the torchmetrics and timm packages
+########################################################################
+
 from functools import partial
 from pathlib import Path
 

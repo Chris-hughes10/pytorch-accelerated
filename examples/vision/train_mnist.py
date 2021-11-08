@@ -1,3 +1,9 @@
+########################################################################
+# This example trains a model on the MNIST Dataset
+
+# Note: this example requires installing the torchvision package
+########################################################################
+
 import os
 
 from torch import nn, optim

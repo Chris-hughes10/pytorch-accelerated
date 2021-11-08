@@ -1,3 +1,4 @@
+# Modifications Copyright © 2021 Chris Hughes
 ########################################################################
 # This is an accelerated example of the PyTorch "Transfer Learning for Computer Vision Tutorial"
 # written by Sasank Chilamkurthy, available here:
@@ -6,6 +7,8 @@
 #
 # This example demonstrates how the default trainer class can be overridden
 # so that we can record classification metrics
+#
+# Note, this example requires installing the torchmetrics package
 ########################################################################
 
 import argparse

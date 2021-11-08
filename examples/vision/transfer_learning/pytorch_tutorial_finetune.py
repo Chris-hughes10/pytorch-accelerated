@@ -1,9 +1,11 @@
+# Modifications Copyright © 2021 Chris Hughes
 ########################################################################
 # This is an accelerated example of the PyTorch "Transfer Learning for Computer Vision Tutorial"
 # written by Sasank Chilamkurthy, available here:
 # https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html,
 # which demonstrates fine-tuning a ResNet18 model to classify ants and bees.
 #
+# Note: this example requires installing the torchvision package
 ########################################################################
 import argparse
 import os

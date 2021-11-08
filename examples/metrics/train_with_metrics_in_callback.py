@@ -1,3 +1,4 @@
+# Modifications Copyright © 2021 Chris Hughes
 ########################################################################
 # This is an accelerated example of the PyTorch "Transfer Learning for Computer Vision Tutorial"
 # written by Sasank Chilamkurthy, available here:
@@ -6,6 +7,8 @@
 #
 # This example demonstrates how a callback can be used to track metrics
 # to avoid having to override the default trainer class
+#
+# Note, this example requires installing the torchmetrics package
 ########################################################################
 import argparse
 import os
@@ -51,8 +54,6 @@ class ClassificationMetricsCallback(TrainerCallback):
 
 
 def main(data_dir):
-    set_seed(42)
-
     # Data augmentation and normalization for training
     # Just normalization for validation
     data_transforms = {

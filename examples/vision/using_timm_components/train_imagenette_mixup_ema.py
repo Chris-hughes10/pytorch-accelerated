@@ -1,3 +1,13 @@
+# Copyright © 2021 Chris Hughes
+########################################################################
+# This example trains a ResNet-RS50 on the Imagenette Dataset using components from the torchvision, timm and
+# torchmetrics libraries.
+# This example demonstrates how the trainer can be extended to incorporate techniques such as mixup and modelEMA
+# into a training run.
+#
+# Note: this example requires installing the torchvision, torchmetrics and timm packages
+########################################################################
+
 import argparse
 import math
 from functools import partial
@@ -6,7 +16,6 @@ from pathlib import Path
 import timm
 import torch
 import torch.nn.functional as F
-from accelerate import notebook_launcher
 from timm.data import resolve_data_config, Mixup, rand_augment_transform
 from timm.data.transforms import RandomResizedCropAndInterpolation
 from timm.models import create_model

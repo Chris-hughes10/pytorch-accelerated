@@ -1,2 +1,3 @@
-accelerate
-numpy
+accelerate~=0.5.1
+torch~=1.10.0
+tqdm~=4.62.3

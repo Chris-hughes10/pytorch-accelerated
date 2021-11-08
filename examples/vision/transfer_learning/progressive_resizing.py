@@ -1,10 +1,16 @@
+# Copyright © 2021 Chris Hughes
+########################################################################
+# This example trains a ResNet50d on the Imagenette Dataset using progressive resizing
+
+# Note: this example requires installing the torchmetrics and timm packages
+########################################################################
+import argparse
 import os
 from collections import namedtuple
 from functools import partial
 from pathlib import Path
 
 import torch
-from accelerate import notebook_launcher
 from timm import create_model
 from torch import nn
 from torch.optim.lr_scheduler import OneCycleLR
@@ -62,12 +68,11 @@ def create_transforms(train_image_size=224, val_image_size=224):
     }
 
 
-def main():
+def main(data_dir):
 
-    data_dir = Path(r"/home/chris/notebooks/imagenette2/")
+    data_dir = Path(data_dir)
     num_classes = len(list((data_dir / "train").iterdir()))
 
-    # model = create_model(number_of_classes=2)
     model = create_model("resnet50d", pretrained=False, num_classes=num_classes)
 
     # Define loss function
@@ -136,5 +141,7 @@ def main():
 
 
 if __name__ == "__main__":
-    # notebook_launcher(main, num_processes=2)
-    main()
+    parser = argparse.ArgumentParser(description="Simple example of training script.")
+    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
+    args = parser.parse_args()
+    main(args.data_dir)

@@ -1,3 +1,4 @@
+# Copyright © 2021 Chris Hughes
 import logging
 import time
 from abc import ABC
@@ -35,7 +36,7 @@ class TrainerCallback(ABC):
 
     def on_train_epoch_begin(self, trainer, **kwargs):
         """
-        Event called at the beginning of an epoch.
+        Event called at the beginning of a training epoch.
         """
         pass
 
@@ -53,25 +54,25 @@ class TrainerCallback(ABC):
 
     def on_train_epoch_end(self, trainer, **kwargs):
         """
-        Event called at the end of an epoch.
+        Event called at the end of a training epoch.
         """
         pass
 
     def on_eval_epoch_begin(self, trainer, **kwargs):
         """
-        Event called at the beginning of evaluation.
+        Event called at the beginning of an evaluation epoch.
         """
         pass
 
     def on_eval_step_begin(self, trainer, **kwargs):
         """
-        Event called at the beginning of a training step.
+        Event called at the beginning of a evaluation step.
         """
         pass
 
     def on_eval_step_end(self, trainer, **kwargs):
         """
-        Event called at the end of a training step.
+        Event called at the end of an evaluation step.
         """
         pass
 
@@ -85,8 +86,10 @@ class TrainerCallback(ABC):
         pass
 
 
-class CallbackHandler(TrainerCallback):
-    """class that just calls the list of callbacks in order."""
+class CallbackHandler:
+    """
+    Responsible for calling a list of callbacks. This class calls the callbacks in the order that they are given.
+    """
 
     def __init__(self, callbacks):
         self.callbacks = []
@@ -100,10 +103,9 @@ class CallbackHandler(TrainerCallback):
         cb = callback() if isinstance(callback, type) else callback
         cb_class = callback if isinstance(callback, type) else callback.__class__
         if cb_class in [c.__class__ for c in self.callbacks]:
-            logger.warning(
-                f"You are adding a {cb_class} to the callbacks of this Trainer, but there is already one. The current"
-                + "list of callbacks is\n:"
-                + self.callback_list
+            raise ValueError(
+                f"You attempted to add multiple instances of the callback {cb_class} to a single Trainer"
+                f" The list of callbacks already present is\n: {self.callback_list}"
             )
         self.callbacks.append(cb)
 
@@ -126,6 +128,7 @@ class CallbackHandler(TrainerCallback):
 
 
 class PrintMetricsCallback(TrainerCallback):
+
     def _print_metrics(self, trainer, metric_names):
         for metric_name in metric_names:
             trainer.print(
@@ -220,7 +223,7 @@ class SaveBestModelCallback(TrainerCallback):
         if self.best_metric is None:
             self.best_metric = current_metric
             trainer.save_model(
-                save_dir=self.save_dir,
+                save_path=self.save_dir,
                 checkpoint_kwargs={self.watch_metric: self.best_metric},
             )
         else:
@@ -229,7 +232,7 @@ class SaveBestModelCallback(TrainerCallback):
             if is_improvement:
                 self.best_metric = current_metric
                 trainer.save_model(
-                    save_dir=self.save_dir, checkpoint_kwargs={"loss": self.best_metric}
+                    save_path=self.save_dir, checkpoint_kwargs={"loss": self.best_metric}
                 )
 
     def on_train_run_end(self, trainer, **kwargs):

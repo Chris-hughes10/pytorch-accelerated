@@ -1,1 +1,0 @@
-az ml compute list --query "[].{Name:name}" --output table --resource-group explore --workspace-name explore
