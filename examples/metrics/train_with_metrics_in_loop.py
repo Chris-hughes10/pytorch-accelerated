@@ -97,7 +97,6 @@ def main(data_dir):
         model=model,
         loss_func=loss_func,
         optimizer=optimizer,
-        scheduler_type=exp_lr_scheduler,
     )
 
     trainer.train(
@@ -105,7 +104,7 @@ def main(data_dir):
         eval_dataset=image_datasets["val"],
         num_epochs=4,
         per_device_batch_size=32,
-        fp16=True,
+        create_scheduler_fn=exp_lr_scheduler,
     )
 
 

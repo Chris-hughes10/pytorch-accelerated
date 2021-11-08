@@ -26,7 +26,7 @@ EVAL_BATCH_SIZE = 32
 
 
 class TransformersTrainer(Trainer):
-    def __init__(self, model, optimizer, collate_fn, metric, *args, **kwargs):
+    def __init__(self, model, optimizer, metric, *args, **kwargs):
         super().__init__(
             model=model, optimizer=optimizer, loss_func=None, *args, **kwargs
         )

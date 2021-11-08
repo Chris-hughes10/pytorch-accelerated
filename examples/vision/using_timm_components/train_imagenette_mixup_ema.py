@@ -1,24 +1,3 @@
-# label smoothing - timm
-
-# drop path - timm
-
-# dropout
-
-# rand augment - timm
-
-# optimizer SGDR (warm restarts) + Cosine scheduling
-# or LAMB cosine scheduler
-
-# architecture - resnet RS
-
-# loss - BCE loss
-
-# mixup and cutmix
-
-# repeated augmentation + stochastic depth : tend to improve the results at convergence, but they slow
-# down the training in the early stages
-
-# sync batchnorm
 import argparse
 import math
 from functools import partial
@@ -180,6 +159,7 @@ class MixupTrainer(Trainer):
     def eval_epoch_end(self):
         super().eval_epoch_end()
         if self.scheduler is not None:
+            # timm scheduler must be manually updated per epoch
             self.scheduler.step(self.run_history.current_epoch + 1)
 
         self.run_history.update_metric("accuracy", self.accuracy.compute().cpu())
