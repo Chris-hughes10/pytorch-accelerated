@@ -28,7 +28,6 @@ from functools import partial
 import PIL
 import numpy as np
 import torch
-from accelerate import notebook_launcher
 from timm import create_model
 from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import OneCycleLR
@@ -46,11 +45,7 @@ from pytorch_accelerated.trainer import Trainer
 
 class PetsTrainer(Trainer):
     def training_run_start(self):
-
-        if isinstance(self.model, DistributedDataParallel):
-            config = self.model.module.default_cfg
-        else:
-            config = self.model.module
+        config = self._accelerator.unwrap_model(self.model).default_cfg
 
         self.mean = torch.tensor(config["mean"])[None, :, None, None].to(
             self._accelerator.device
