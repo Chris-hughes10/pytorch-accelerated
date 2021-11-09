@@ -25,7 +25,7 @@ movement of data between devices and launching of training configurations. When 
 training, users are encouraged to consult the [Accelerate documentation](https://huggingface.co/docs/accelerate/) 
 to understand all available options; Accelerate provides convenient functions for operations such gathering tensors 
 and gradient clipping, usage of which can be seen in the `pytorch-accelerated` 
-[examples](https://github.com/Chris-hughes10/pytorch-accelerated/tree/add-timm-examples/examples) folder! 
+[examples](https://github.com/Chris-hughes10/pytorch-accelerated/tree/main/examples) folder! 
 
 ## Installation
 
@@ -106,7 +106,7 @@ depending on your infrastructure configuration, for users who would like to main
 over the launch command.
 
 More complex training examples can be seen in the examples folder 
-[here](https://github.com/Chris-hughes10/pytorch-accelerated/tree/add-timm-examples/examples).
+[here](https://github.com/Chris-hughes10/pytorch-accelerated/tree/main/examples).
 
 ## Usage
 
@@ -337,12 +337,12 @@ significant care has gone into making the internal methods as clean and clear as
 Many aspects behind the design and features of `pytorch-accelerated` were greatly inspired by a number of excellent 
 libraries and frameworks such as [fastai](https://github.com/fastai/fastai), [timm](https://github.com/rwightman/pytorch-image-models), 
 [PyTorch-lightning](https://github.com/PyTorchLightning/pytorch-lightning) and [Hugging Face Accelerate](https://github.com/huggingface/accelerate). Each of these tools 
-hav made an enormous impact on both this library and the machine learning community, and their influence can not be 
+have made an enormous impact on both this library and the machine learning community, and their influence can not be 
 stated enough!
 
 `pytorch-accelerate` has taken only inspiration from these tools, and all of the functionality contained has been implemented
  from scratch in a way that benefits this library. The only exceptions to this are some of the scripts in the 
- [examples](https://github.com/Chris-hughes10/pytorch-accelerated/tree/add-timm-examples/examples)
+ [examples](https://github.com/Chris-hughes10/pytorch-accelerated/tree/main/examples)
  folder in which existing resources were taken and modified in order to showcase the features of `pytorch-accelerated`;
  these cases are clearly marked, with acknowledgement being given to the original authors.
  
