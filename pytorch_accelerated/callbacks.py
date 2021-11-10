@@ -1,5 +1,6 @@
 # Copyright © 2021 Chris Hughes
 import logging
+import sys
 import time
 from abc import ABC
 from typing import Optional
@@ -301,3 +302,6 @@ class TerminateOnNaNCallback(TrainerCallback):
 
     def on_eval_step_end(self, trainer, batch_output, **kwargs):
         self.check_for_nan_after_batch(batch_output, step="validation")
+
+    def on_train_run_end(self, trainer, **kwargs):
+        sys.exit('Exiting due to NaN loss')
