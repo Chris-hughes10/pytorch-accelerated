@@ -175,6 +175,7 @@ all that is left to do is to call the `train` method with a subset of the follow
 - `per_device_batch_size`: the batch size to use per device
 - `max_num_train_steps`: the maximum number of steps to train for. If provided, this will override `num_epochs`
 - `gradient_accumulation_steps`: accumulate grads to the specified number of steps to simulate a bigger batch size. By default, this is set to 1
+- `gradient_clip_value`: if specified, the gradients of the model's parameters will be clipped to within the range [-`gradient_clip_value`, `gradient_clip_value`]
 - `create_scheduler_fn`: a function which accepts an optimizer as an argument and returns a learning rate scheduler
 - `train_dataloader_kwargs`: : a dictionary of keyword arguments to pass to the training dataloader constructor, for details see torch.utils.data.DataLoader
 - `eval_dataloader_kwargs`: a dictionary of keyword arguments to pass to the evaluation dataloader constructor, for details see torch.utils.data.DataLoader

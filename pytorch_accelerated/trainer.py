@@ -48,6 +48,7 @@ class TrainerPlaceholderValues(Enum):
     ```
     These placeholders will be replaced by the trainer with the correct values during training.
     """
+
     NUM_EPOCHS = 'trainer.run_config["num_epochs"]'
     NUM_UPDATE_STEPS_PER_EPOCH = 'trainer.run_config["num_update_steps_per_epoch"]'
     TRAIN_DATALOADER_LEN = "len(trainer._train_dataloader)"
@@ -89,6 +90,7 @@ class Trainer:
      the model – whilst remaining decoupled from components that are likely to change, such as the model, dataset,
      loss function and optimizer.
     """
+
     def __init__(
         self,
         model,
@@ -98,15 +100,15 @@ class Trainer:
         run_history=None,
     ):
         """
-        Create a new trainer object which can be used to train the given model using the provided loss function and optimizer.
+                Create a new trainer object which can be used to train the given model using the provided loss function and optimizer.
 
-        The callbacks that are used by default are (TerminateOnNaNCallback, PrintProgressCallback, ProgressBarCallback, PrintMetricsCallback,
-)
-        :param model: a subclass of nn.Module to be trained
-        :param loss_func: the loss function to use when training the model
-        :param optimizer: the optimizer to update the model's parameters
-        :param callbacks: a list of callbacks to use during training runs. If a list of callbacks is not provided, the default selection will be used.
-        :param run_history: an instance of a RunHistory subclass to track training runs. If this is not provided, a new one will be created.
+                The callbacks that are used by default are (TerminateOnNaNCallback, PrintProgressCallback, ProgressBarCallback, PrintMetricsCallback,
+        )
+                :param model: a subclass of nn.Module to be trained
+                :param loss_func: the loss function to use when training the model
+                :param optimizer: the optimizer to update the model's parameters
+                :param callbacks: a list of callbacks to use during training runs. If a list of callbacks is not provided, the default selection will be used.
+                :param run_history: an instance of a RunHistory subclass to track training runs. If this is not provided, a new one will be created.
         """
         self.model = model
         self.loss_func = loss_func
@@ -335,6 +337,7 @@ class Trainer:
         per_device_batch_size=8,
         max_num_train_steps=None,
         gradient_accumulation_steps=1,
+        gradient_clip_value=None,
         create_scheduler_fn: Callable = None,
         train_dataloader_kwargs: dict = None,
         eval_dataloader_kwargs: dict = None,
@@ -354,6 +357,7 @@ class Trainer:
         :param per_device_batch_size: the batch size to use per device
         :param max_num_train_steps: the maximum number of steps to train for. If provided, this will override num_epochs
         :param gradient_accumulation_steps: accumulate gradients to the specified number of steps to simulate a bigger batch size. By default, this is set to 1
+        :param gradient_clip_value: if specified, the gradients of the model's parameters will be clipped to the range [-gradient_clip_value, gradient_clip_value]
         :param create_scheduler_fn: a function which accepts an optimizer as an argument and returns a learning rate scheduler
         :param train_dataloader_kwargs: : a dictionary of keyword arguments to pass to the training dataloader constructor, for details see torch.utils.data.DataLoader
         :param eval_dataloader_kwargs: a dictionary of keyword arguments to pass to the evaluation dataloader constructor, for details see torch.utils.data.DataLoader
@@ -386,6 +390,7 @@ class Trainer:
             gradient_accumulation_steps=gradient_accumulation_steps,
             max_num_train_steps=max_num_train_steps,
             per_device_batch_size=per_device_batch_size,
+            gradient_clip_value=gradient_clip_value,
         )
 
         if self.create_scheduler_fn is not None:
@@ -419,6 +424,7 @@ class Trainer:
         num_epochs,
         gradient_accumulation_steps,
         max_num_train_steps,
+        gradient_clip_value,
     ):
 
         if self._train_dl_kwargs is not None:
@@ -461,6 +467,7 @@ class Trainer:
             "is_local_process_zero": self._accelerator.is_local_main_process,
             "is_world_process_zero": self._accelerator.is_main_process,
             "fp16": self._accelerator.use_fp16,
+            "gradient_clip_value": gradient_clip_value,
         }
 
         return config
@@ -508,6 +515,9 @@ class Trainer:
             )
             self.backward_step(batch_output["loss"])
 
+            if self.run_config["gradient_clip_value"] is not None:
+                self._clip_gradients()
+
             if (step + 1) % self.run_config["gradient_accumulation_steps"] == 0 or (
                 step + 1 == len(train_dl)
             ):
@@ -524,6 +534,11 @@ class Trainer:
         self.callback_handler.call_event(
             "on_train_epoch_end",
             self,
+        )
+
+    def _clip_gradients(self):
+        self._accelerator.clip_grad_value_(
+            self.model.parameters(), clip_value=self.run_config["gradient_clip_value"]
         )
 
     def _run_eval_epoch(self, valid_dl):
@@ -600,5 +615,5 @@ class Trainer:
         self._accelerator.unwrap_model(self.model).load_state_dict(
             checkpoint["model_state_dict"]
         )
-        if 'optimizer_state_dict' in checkpoint:
+        if "optimizer_state_dict" in checkpoint:
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])

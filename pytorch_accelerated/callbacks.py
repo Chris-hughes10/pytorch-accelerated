@@ -128,7 +128,6 @@ class CallbackHandler:
 
 
 class PrintMetricsCallback(TrainerCallback):
-
     def _print_metrics(self, trainer, metric_names):
         for metric_name in metric_names:
             trainer.print(
@@ -232,7 +231,8 @@ class SaveBestModelCallback(TrainerCallback):
             if is_improvement:
                 self.best_metric = current_metric
                 trainer.save_model(
-                    save_path=self.save_dir, checkpoint_kwargs={"loss": self.best_metric}
+                    save_path=self.save_dir,
+                    checkpoint_kwargs={"loss": self.best_metric},
                 )
 
     def on_train_run_end(self, trainer, **kwargs):
