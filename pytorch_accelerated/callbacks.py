@@ -290,6 +290,7 @@ class EarlyStoppingCallback(TrainerCallback):
 
 class TerminateOnNaNCallback(TrainerCallback):
     """A callback that terminates training if loss is NaN."""
+
     def __init__(self):
         self.triggered = False
 
@@ -308,4 +309,4 @@ class TerminateOnNaNCallback(TrainerCallback):
 
     def on_train_run_end(self, trainer, **kwargs):
         if self.triggered:
-            sys.exit('Exiting due to NaN loss')
+            sys.exit("Exiting due to NaN loss")
