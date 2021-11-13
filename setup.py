@@ -3,6 +3,8 @@
 
 import io
 import os
+import versioneer
+
 
 from pkg_resources import Requirement
 from setuptools import find_packages, setup
@@ -16,7 +18,7 @@ URL = "https://github.com/Chris-hughes10/pytorch-accelerated"
 EMAIL = "31883449+Chris-hughes10@users.noreply.github.com"
 AUTHOR = "Chris Hughes"
 REQUIRES_PYTHON = ">=3.7.0"
-VERSION = 0.01
+VERSION = versioneer.get_version()
 
 FILEPATH = os.path.abspath(os.path.dirname(__file__))
 REQUIRED = []
@@ -40,6 +42,7 @@ except FileNotFoundError:
 setup(
     name=NAME,
     version=VERSION,
+    cmdclass=versioneer.get_cmdclass(),
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
