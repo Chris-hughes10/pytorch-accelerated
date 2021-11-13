@@ -11,9 +11,11 @@ from setuptools import find_packages, setup
 
 # Package meta-data.
 NAME = "pytorch-accelerated"
-DESCRIPTION = "A lightweight library designed to accelerate the process of training PyTorch models by " \
-              "providing a minimal, but extensible training loop which is flexible enough to handle the majority " \
-              "of use cases, and capable of utilizing different hardware options with no code changes required."
+DESCRIPTION = (
+    "A lightweight library designed to accelerate the process of training PyTorch models by "
+    "providing a minimal, but extensible training loop which is flexible enough to handle the majority "
+    "of use cases, and capable of utilizing different hardware options with no code changes required."
+)
 URL = "https://github.com/Chris-hughes10/pytorch-accelerated"
 EMAIL = "31883449+Chris-hughes10@users.noreply.github.com"
 AUTHOR = "Chris Hughes"
