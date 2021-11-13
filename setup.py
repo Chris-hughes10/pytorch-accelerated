@@ -3,18 +3,24 @@
 
 import io
 import os
+import versioneer
+
 
 from pkg_resources import Requirement
 from setuptools import find_packages, setup
 
 # Package meta-data.
 NAME = "pytorch-accelerated"
-DESCRIPTION = ""
-URL = "repo"
-EMAIL = ""
+DESCRIPTION = (
+    "A lightweight library designed to accelerate the process of training PyTorch models by "
+    "providing a minimal, but extensible training loop which is flexible enough to handle the majority "
+    "of use cases, and capable of utilizing different hardware options with no code changes required."
+)
+URL = "https://github.com/Chris-hughes10/pytorch-accelerated"
+EMAIL = "31883449+Chris-hughes10@users.noreply.github.com"
 AUTHOR = "Chris Hughes"
 REQUIRES_PYTHON = ">=3.7.0"
-VERSION = 0.01
+VERSION = versioneer.get_version()
 
 FILEPATH = os.path.abspath(os.path.dirname(__file__))
 REQUIRED = []
@@ -38,6 +44,7 @@ except FileNotFoundError:
 setup(
     name=NAME,
     version=VERSION,
+    cmdclass=versioneer.get_cmdclass(),
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
@@ -52,7 +59,7 @@ setup(
     install_requires=REQUIRED,
     include_package_data=True,
     classifiers=[
-        "License :: Other/Proprietary License",
+        "License :: OSI Approved :: MIT License",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
