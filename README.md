@@ -29,11 +29,15 @@ and gradient clipping, usage of which can be seen in the `pytorch-accelerated`
 
 ## Installation
 
-As this package is still in the alpha stage of development, it is not yet available on pypi.
- 
-For the moment, please pip install from the main branch using the following command:
+`pytorch-accelerated` can be installed from pip using the following command:
 ```
-pip install git+https://github.com/Chris-hughes10/pytorch-accelerated.git
+pip install pytorch-accelerated
+```
+
+To make the package as slim as possible, the packages required to run the examples are not included by default, 
+these can be installed. To include these packages, you can use the following command:
+```
+pip install pytorch-accelerated[examples]
 ```
 
 ## Quickstart
@@ -52,7 +56,7 @@ from torch.utils.data import random_split
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
-from pytorch_accelerated.trainer import Trainer
+from pytorch_accelerated import Trainer
 
 class MNISTModel(nn.Module):
     def __init__(self):
@@ -63,7 +67,6 @@ class MNISTModel(nn.Module):
             nn.Linear(in_features=128, out_features=64),
             nn.ReLU(),
             nn.Linear(in_features=64, out_features=10),
-            nn.LogSoftmax(dim=1),
         )
 
     def forward(self, input):
@@ -148,7 +151,7 @@ The core idea behind `pytorch-accelerated`, is that the entire training loop is 
 the `Trainer` class. 
 
 The `Trainer` is designed to encapsulate an entire training loop for a specific task, bringing together the model,
-loss function and optimizer, and providing a specification of the behaviour to execute of each step of the training 
+loss function and optimizer, and providing a specification of the behaviour to execute for each step of the training 
 process.
 
 The `Trainer` has been implemented such that it provides (overridable) implementations of the parts of training that 
