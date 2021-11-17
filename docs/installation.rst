@@ -1,7 +1,7 @@
 Installation
 **************
 
-`pytorch/-accelerated` can be installed from pip using the following command::
+`pytorch\-accelerated` can be installed from pip using the following command::
 
     pip install pytorch-accelerated
 
