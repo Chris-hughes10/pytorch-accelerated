@@ -111,7 +111,9 @@ depending on your infrastructure configuration, for users who would like to main
 over the launch command.
 
 More complex training examples can be seen in the examples folder 
-[here](https://github.com/Chris-hughes10/pytorch-accelerated/tree/main/examples).
+[here](https://github.com/Chris-hughes10/pytorch-accelerated/tree/main/examples). 
+
+Alternatively, if you would rather undertsand the core concepts first, this can be found in the [documentation](https://pytorch-accelerated.readthedocs.io/en/latest/).
 
 ## Usage
 

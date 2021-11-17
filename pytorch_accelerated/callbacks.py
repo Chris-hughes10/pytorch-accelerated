@@ -3,7 +3,6 @@ import logging
 import sys
 import time
 from abc import ABC
-from typing import Optional
 
 import numpy as np
 import torch

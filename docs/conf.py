@@ -13,8 +13,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(".."))
-sys.path.insert(1, os.path.abspath("../pytorch_accelerated"))
+# sys.path.insert(0, os.path.abspath(".."))
 
 # -- Project information -----------------------------------------------------
 
@@ -30,7 +29,8 @@ release = "0.1.3"
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ["sphinx.ext.autodoc"]
+extensions = ["sphinx.ext.autodoc", "sphinx.ext.viewcode"]
+# autodoc_mock_imports = ["accelerate", "torch", 'numpy', 'tqdm']
 
 # Add any paths that contain templates here, relative to this directory.
 # templates_path = ["_templates"]
