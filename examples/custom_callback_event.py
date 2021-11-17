@@ -6,11 +6,19 @@
 
 import os
 
+from accelerate import notebook_launcher
 from torch import nn, optim
 from torch.utils.data import random_split
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
+from pytorch_accelerated.callbacks import (
+    TrainerCallback,
+    TerminateOnNaNCallback,
+    PrintProgressCallback,
+    ProgressBarCallback,
+    PrintMetricsCallback,
+)
 from pytorch_accelerated.trainer import Trainer
 
 
@@ -29,36 +37,53 @@ class MNISTModel(nn.Module):
         return self.main(input.view(input.shape[0], -1))
 
 
+class VerifyBatchCallback(TrainerCallback):
+    def verify_train_batch(self, trainer, xb, yb):
+        assert xb.shape[0] == trainer.run_config["train_per_device_batch_size"]
+        assert xb.shape[1] == 1
+        assert xb.shape[2] == 28
+        assert xb.shape[3] == 28
+        assert yb.shape[0] == trainer.run_config["train_per_device_batch_size"]
+
+
+class TrainerWithCustomCallbackEvent(Trainer):
+    def calculate_train_batch_loss(self, batch) -> dict:
+        xb, yb = batch
+        self.callback_handler.call_event(
+            "verify_train_batch", trainer=self, xb=xb, yb=yb
+        )
+        return super().calculate_train_batch_loss(batch)
+
+
 def main():
     dataset = MNIST(os.getcwd(), download=True, transform=transforms.ToTensor())
-    train_dataset, validation_dataset, test_dataset = random_split(
-        dataset, [50000, 5000, 5000]
-    )
+    train_dataset, validation_dataset = random_split(dataset, [55000, 5000])
     model = MNISTModel()
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
     loss_func = nn.CrossEntropyLoss()
 
-    trainer = Trainer(
+    trainer = TrainerWithCustomCallbackEvent(
         model,
         loss_func=loss_func,
         optimizer=optimizer,
+        callbacks=(
+            VerifyBatchCallback,
+            TerminateOnNaNCallback,
+            PrintProgressCallback,
+            ProgressBarCallback,
+            PrintMetricsCallback,
+        ),
     )
 
     trainer.train(
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
-        num_epochs=2,
-        per_device_batch_size=32,
+        num_epochs=8,
         train_dataloader_kwargs={"num_workers": 0},
-        eval_dataloader_kwargs={"num_workers": 0},
-    )
-
-    trainer.evaluate(
-        dataset=test_dataset,
-        per_device_batch_size=64,
-        dataloader_kwargs={"num_workers": 0},
+        per_device_batch_size=32,
     )
 
 
 if __name__ == "__main__":
-    main()
+    notebook_launcher(main, num_processes=1)
+    # main()

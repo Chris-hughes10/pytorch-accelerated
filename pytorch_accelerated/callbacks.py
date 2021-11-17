@@ -26,7 +26,7 @@ class CallbackMethodNotImplementedError(Exception):
 
 class TrainerCallback(ABC):
     """
-    The abstract base class to be subclassed when creating new callbacks
+    The abstract base class to be subclassed when creating new callbacks.
     """
 
     def on_init_end(self, trainer, **kwargs):
@@ -95,9 +95,27 @@ class TrainerCallback(ABC):
         """
         pass
 
+    def on_training_run_epoch_end(self, trainer, **kwargs):
+        """
+        Event called during a training run after both training and evaluation epochs have been completed.
+        """
+        pass
+
     def on_training_run_end(self, trainer, **kwargs):
         """
         Event called at the end of training run.
+        """
+        pass
+
+    def on_evaluation_run_start(self, trainer, **kwargs):
+        """
+        Event called at the start of an evaluation run.
+        """
+        pass
+
+    def on_evaluation_run_end(self, trainer, **kwargs):
+        """
+        Event called at the end of an evaluation run.
         """
         pass
 
@@ -247,7 +265,7 @@ class ProgressBarCallback(TrainerCallback):
 
 class PrintProgressCallback(TrainerCallback):
     """
-    A callback which prints a message at the start and end of a training run,
+    A callback which prints a message at the start and end of a run,
     as well as at the start of each epoch.
     """
 
@@ -260,6 +278,12 @@ class PrintProgressCallback(TrainerCallback):
 
     def on_training_run_end(self, trainer, **kwargs):
         trainer.print("Finishing training run")
+
+    def on_evaluation_run_start(self, trainer, **kwargs):
+        trainer.print("\nStarting evaluation run")
+
+    def on_evaluation_run_end(self, trainer, **kwargs):
+        trainer.print("Finishing evaluation run")
 
 
 class SaveBestModelCallback(TrainerCallback):
@@ -293,7 +317,7 @@ class SaveBestModelCallback(TrainerCallback):
         if self.reset_on_train:
             self.best_metric = None
 
-    def on_eval_epoch_end(self, trainer, **kwargs):
+    def on_training_run_epoch_end(self, trainer, **kwargs):
         current_metric = trainer.run_history.get_latest_metric(self.watch_metric)
         if self.best_metric is None:
             self.best_metric = current_metric
@@ -353,7 +377,7 @@ class EarlyStoppingCallback(TrainerCallback):
             self.best_metric = None
             self.early_stopping_patience_counter = 0
 
-    def on_eval_epoch_end(self, trainer, **kwargs):
+    def on_training_run_epoch_end(self, trainer, **kwargs):
         current_metric = trainer.run_history.get_latest_metric(self.watch_metric)
         if self.best_metric is None:
             self.best_metric = current_metric

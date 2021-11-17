@@ -4,6 +4,9 @@
  by providing a minimal, but extensible training loop - encapsulated in a single `Trainer` 
 object - which is flexible enough to handle the majority of use cases, and capable of utilizing different hardware
  options with no code changes required.
+ 
+`pytorch-accelerated` offers a streamlined feature set, and places a huge emphasis on **simplicity** and **transparency**,
+to enable users to understand exactly what is going on under the hood, but without having to write and maintain the boilerplate themselves!
    
 The key features are:
 - A simple and contained, but easily customisable, training loop, which should work out of the box in straightforward cases;
@@ -34,8 +37,7 @@ and gradient clipping, usage of which can be seen in the `pytorch-accelerated`
 pip install pytorch-accelerated
 ```
 
-To make the package as slim as possible, the packages required to run the examples are not included by default, 
-these can be installed. To include these packages, you can use the following command:
+To make the package as slim as possible, the packages required to run the examples are not included by default. To include these packages, you can use the following command:
 ```
 pip install pytorch-accelerated[examples]
 ```
@@ -135,206 +137,6 @@ enough to warrant starting from scratch *again* 😉.
 and want to squeeze out every last bit of performance on your chosen hardware, you are probably best off sticking
  with vanilla PyTorch; any high-level API becomes an overhead in highly specialized cases!
 
-## Navigation
-1. [The Trainer Class](#the-trainer-class)
-2. [Training a model](#training-a-model)
-    - [Using Learning Rate Schedulers](#using-learning-rate-schedulers) 
-3. [Customizing Trainer Behaviour](#customizing-trainer-behaviour) 
-    - [Overridable methods](#overridable-methods)
-    - [Callbacks](#callbacks)
-4. [Trainer Internals](#trainer-internals)
-5. [Acknowledgements](#acknowledgements)
-
-## The Trainer Class
-
-The core idea behind `pytorch-accelerated`, is that the entire training loop is abstracted behind a single interface - 
-the `Trainer` class. 
-
-The `Trainer` is designed to encapsulate an entire training loop for a specific task, bringing together the model,
-loss function and optimizer, and providing a specification of the behaviour to execute for each step of the training 
-process.
-
-The `Trainer` has been implemented such that it provides (overridable) implementations of the parts of training that 
-rarely change after they have been defined – such as creating a data loader, or how a batch of data is fed to the model 
-– whilst remaining decoupled from components that are likely to change, such as the model, dataset, loss function and 
-optimizer.
-
-### Training a model
-
-After initialising a trainer instance with a model, loss function and optimizer like so:
-```python
-from pytorch_accelerated.trainer import Trainer
-
-trainer = Trainer(
-        model,
-        loss_func=loss_func,
-        optimizer=optimizer,
-    )
-```
-all that is left to do is to call the `train` method with a subset of the following parameters:
-- `train_dataset`: the dataset object to use during training epochs (*required*)
-- `num_epochs`: the number of epochs to train for (*required*)
-- `eval_dataset`: the dataset to use during evaluation epochs, if this is not provided, evaluation is skipped.
-- `per_device_batch_size`: the batch size to use per device
-- `max_num_train_steps`: the maximum number of steps to train for. If provided, this will override `num_epochs`
-- `gradient_accumulation_steps`: accumulate grads to the specified number of steps to simulate a bigger batch size. By default, this is set to 1
-- `gradient_clip_value`: if specified, the gradients of the model's parameters will be clipped to within the range [-`gradient_clip_value`, `gradient_clip_value`]
-- `create_scheduler_fn`: a function which accepts an optimizer as an argument and returns a learning rate scheduler
-- `train_dataloader_kwargs`: : a dictionary of keyword arguments to pass to the training dataloader constructor, for details see torch.utils.data.DataLoader
-- `eval_dataloader_kwargs`: a dictionary of keyword arguments to pass to the evaluation dataloader constructor, for details see torch.utils.data.DataLoader
-- `reset_run_history`: reset any run history saved by the trainer from previous training runs
-- `collate_fn`: the collate function to be used by the training and evaluation dataloaders
-
-#### Using learning rate schedulers
-
-Note that, as the optimizer needs to be internally prepared prior to training, in order to use a learning rate scheduler,
-a factory function must be provided to `create_scheduler_fn`. This must be a function which accepts the optimizer as a 
-single parameter and returns an instance of a learning rate scheduler. 
-Passing an instance of a learning rate scheduler will **not** work here.
-
-A simple method of doing this is by using `functools.partial` like so: 
-```
-from functools import Partial
-
-from torch.optim import lr_scheduler
-
-create_scheduler_fn = partial(lr_scheduler.StepLR, step_size=7, gamma=0.1)
-```
-
-##### More complex cases 
-
-Some learning rate schedulers require information such as the total number of steps that will take place during training.
-As this information is not accessible prior to creating the training dataloader - which will be done as part of the 
-`train` method - a placeholder value can be used in the cases, as demonstrated below:
-
-```
-from functools import Partial
-
-from torch.optim.lr_scheduler import OneCycleLR
-
-create_scheduler_fn = partial(
-            OneCycleLR,
-            max_lr=e_config.lr,
-            epochs=TrainerPlaceholderValues.NUM_EPOCHS,
-            steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
-        )
-```
-These placeholders will be replaced by the trainer with the correct values during training.
-
-A list of the available placeholders are:
-- `NUM_EPOCHS` 
-- `NUM_UPDATE_STEPS_PER_EPOCH`
-- `TRAIN_DATALOADER_LEN` 
-- `EVAL_DATALOADER_LEN`
-
-Alternatively, the same outcome could be achieved by overriding the `Trainer`'s `create_scheduler` method.
-
-## Customizing Trainer behaviour
-
-### Overridable methods
-
-Whilst the `Trainer` should work out of the box in straightforward use cases, subclassing the trainer and overriding
-its methods is intended and encouraged - think of the base implementation as a set of 'sensible defaults'!
-
-Methods which are prefixed with a verb such as *create* or *calculate* expect a value to be returned,
-all other methods are used to set internal state (e.g. `optimizer.step()`)
-
-#### Setup methods
-- `create_train_dataloader`
-- `create_eval_dataloader`
-- `create_scheduler`
-
-#### Training loop methods
-- `training_run_start`
-- `training_run_end`
-
-##### train epoch
-- `train_epoch_start`
-- `calculate_train_batch_loss`
-- `backward_step`
-- `optimizer_step`
-- `scheduler_step`
-- `optimizer_zero_grad`
-- `train_epoch_end`
-
-##### evaluation epoch
-- `eval_epoch_start`
-- `calculate_eval_batch_loss`
-- `eval_epoch_end`
-
-### Callbacks
-
-In addition to overridable hooks, the trainer also includes a callback system. It is recommended that callbacks are used
-to contain 'infrastructure' code, which is not essential to the operation of the training loop, such as logging, but
-this decision is left to the judgement of the user based on the specific use case.
-
-Callbacks are executed sequentially, so if a callback is used to modify state, such as updating a metric, it is the 
-responsibility of the user to ensure that this callback is placed before any callback which will read this state 
-(i.e. for logging purposes).
-
-**Note**: callbacks are called **after** their corresponding hooks, e.g., the callback`on_train_epoch_end` is called
- *after* the method `train_epoch_end`. This is done to support the pattern of updating the trainer's state in a
- method before reading this state in a callback.
- 
- The available callbacks are:
-- `on_init_end`
-- `on_train_run_begin`
-- `on_train_run_end`
-- `on_stop_training_error`
-
-#### train epoch
-- `on_train_epoch_begin`
-- `on_train_step_begin`
-- `on_train_step_end`
-- `on_train_epoch_end`
-
-#### eval epoch
-- `on_eval_epoch_begin`
-- `on_eval_step_begin`
-- `on_eval_step_end`
-- `on_eval_epoch_end`
-
-## Trainer Internals
-
-In pseudocode, the execution of the training loop can be depicted as:
-```python
-
-train_dl = create_train_dataloader()
-eval_dl = create_eval_dataloader()
-scheduler = create_scheduler()
-
-training_run_start()
-on_train_run_begin()
-
-for epoch in num_epochs:
-    train_epoch_start()
-    on_train_epoch_begin()
-    for batch in train_dl:
-        on_train_step_begin()
-        batch_output = calculate_train_batch_loss(batch)
-        on_train_step_end(batch, batch_output)
-        backward_step(batch_output["loss"])
-        optimizer_step()
-        scheduler_step()
-        optimizer_zero_grad()
-    train_epoch_end()
-    on_train_epoch_end()
-    
-    eval_epoch_start()
-    on_eval_epoch_begin()
-    for batch in eval_dl:
-        on_eval_step_begin()
-        batch_output = calculate_eval_batch_loss(batch)
-        on_eval_step_end(batch, batch_output)
-    eval_epoch_end()
-    on_eval_epoch_end()
-    
-training_run_end()
-```
-
-The best way to understand how the trainer works internally is by examining the source code for the `train` method;
-significant care has gone into making the internal methods as clean and clear as possible.
-
 
 ## Acknowledgements
 
@@ -344,7 +146,7 @@ libraries and frameworks such as [fastai](https://github.com/fastai/fastai), [ti
 have made an enormous impact on both this library and the machine learning community, and their influence can not be 
 stated enough!
 
-`pytorch-accelerate` has taken only inspiration from these tools, and all of the functionality contained has been implemented
+`pytorch-accelerated` has taken only inspiration from these tools, and all of the functionality contained has been implemented
  from scratch in a way that benefits this library. The only exceptions to this are some of the scripts in the 
  [examples](https://github.com/Chris-hughes10/pytorch-accelerated/tree/main/examples)
  folder in which existing resources were taken and modified in order to showcase the features of `pytorch-accelerated`;

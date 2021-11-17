@@ -30,9 +30,15 @@ class TrainerWithMetrics(Trainer):
         self.cm_metrics = ConfusionMatrix(num_classes=num_classes)
         self.accuracy = Accuracy(num_classes=num_classes)
 
-    def training_run_start(self):
+    def _move_metrics_to_device(self):
         self.cm_metrics.to(self._eval_dataloader.device)
         self.accuracy.to(self._eval_dataloader.device)
+
+    def training_run_start(self):
+        self._move_metrics_to_device()
+
+    def evaluation_run_start(self):
+        self._move_metrics_to_device()
 
     def calculate_eval_batch_loss(self, batch):
         batch_output = super().calculate_eval_batch_loss(batch)
