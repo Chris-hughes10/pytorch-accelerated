@@ -15,7 +15,6 @@ import sys
 
 sys.path.insert(0, os.path.abspath("../pytorch_accelerated"))
 
-
 # -- Project information -----------------------------------------------------
 
 project = "pytorch-accelerated"
@@ -23,8 +22,7 @@ copyright = "2021, Chris Hughes"
 author = "Chris Hughes"
 
 # The full version, including alpha/beta/rc tags
-release = "0.2.2"
-
+release = "0.1.3"
 
 # -- General configuration ---------------------------------------------------
 
@@ -40,7 +38,6 @@ templates_path = ["_templates"]
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
-
 
 # -- Options for HTML output -------------------------------------------------
 
