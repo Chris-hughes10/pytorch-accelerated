@@ -15,6 +15,7 @@ python:
   install:
     - method: pip
       path: .
+      setup_py_install: true
 
 formats:
   - pdf
