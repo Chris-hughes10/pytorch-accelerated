@@ -14,7 +14,7 @@ Training a model
 
 The main entrypoint for the :class:`Trainer` is the :meth:`~Trainer.train` method, which is used to launch a training run.
 
-.. automethod:: pytorch.accelerated.trainer.Trainer.train
+.. automethod:: pytorch_accelerated.trainer.Trainer.train
 
 Using learning rate schedulers
 ---------------------------------
