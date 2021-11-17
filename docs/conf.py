@@ -13,9 +13,15 @@
 import os
 import sys
 
+from sphinx.ext.autodoc import mock
+
 sys.path.insert(0, os.path.abspath(".."))
 sys.path.insert(0, os.path.abspath("../.."))
 sys.path.insert(0, os.path.abspath("../pytorch_accelerated"))
+
+MOCK_MODULES = ['numpy', 'torch', 'accelerate', ]
+for mod_name in MOCK_MODULES:
+    sys.modules[mod_name] = mock.Mock()
 
 # -- Project information -----------------------------------------------------
 
