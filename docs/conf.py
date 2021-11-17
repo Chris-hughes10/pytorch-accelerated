@@ -19,10 +19,6 @@ sys.path.insert(0, os.path.abspath(".."))
 sys.path.insert(0, os.path.abspath("../.."))
 sys.path.insert(0, os.path.abspath("../pytorch_accelerated"))
 
-MOCK_MODULES = ['numpy', 'torch', 'accelerate', ]
-for mod_name in MOCK_MODULES:
-    sys.modules[mod_name] = mock.Mock()
-
 # -- Project information -----------------------------------------------------
 
 project = "pytorch-accelerated"
@@ -38,6 +34,7 @@ release = "0.1.3"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = ["sphinx.ext.autodoc"]
+autodoc_mock_imports = ["accelerate", "torch"]
 
 # Add any paths that contain templates here, relative to this directory.
 # templates_path = ["_templates"]
