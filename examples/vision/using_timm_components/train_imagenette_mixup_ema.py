@@ -6,6 +6,7 @@
 # into a training run.
 #
 # Note: this example requires installing the torchvision, torchmetrics and timm packages
+# ONLY WORKS DISTRIBUTED due to sync batchnorm
 ########################################################################
 
 import argparse
