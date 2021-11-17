@@ -16,4 +16,5 @@ python:
     - method: pip
       path: .
 
-formats: all
+formats:
+  - pdf
