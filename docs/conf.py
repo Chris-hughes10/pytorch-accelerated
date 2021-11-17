@@ -13,11 +13,7 @@
 import os
 import sys
 
-from sphinx.ext.autodoc import mock
-
 sys.path.insert(0, os.path.abspath(".."))
-sys.path.insert(0, os.path.abspath("../.."))
-sys.path.insert(0, os.path.abspath("../pytorch_accelerated"))
 
 # -- Project information -----------------------------------------------------
 
