@@ -1,4 +1,4 @@
-.. currentmodule:: tracking
+.. currentmodule:: pytorch_accelerated.tracking
 
 Tracking
 ***********
@@ -7,10 +7,10 @@ Tracking
 
 RunHistory
 =======================
-.. autoclass:: tracking.RunHistory
+.. autoclass:: RunHistory
     :members:
 
 Implementations
 ===================
-.. autoclass:: tracking.InMemoryRunHistory
+.. autoclass:: InMemoryRunHistory
     :show-inheritance:

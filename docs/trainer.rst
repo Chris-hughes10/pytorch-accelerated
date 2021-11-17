@@ -1,18 +1,18 @@
-.. currentmodule:: trainer
+.. currentmodule:: pytorch_accelerated.trainer
 
 .. _trainer:
 
 Trainer
 *********
 
-.. autoclass:: pytorch_accelerated.trainer.Trainer
+.. autoclass:: Trainer
 
    .. automethod:: __init__
 
 Training a model
 ==================
 
-The main entrypoint for the :class:`~trainer.Trainer` is the :meth:`~Trainer.train` method, which is used to launch a training run.
+The main entrypoint for the :class:`Trainer` is the :meth:`~Trainer.train` method, which is used to launch a training run.
 
 .. automethod:: Trainer.train
 
@@ -39,7 +39,7 @@ A simple method of creating a scheduler factory function this is by using :meth:
 Using ``TrainerPlaceHolderValues``
 --------------------------------------
 
-.. autoclass:: trainer.TrainerPlaceholderValues
+.. autoclass:: TrainerPlaceholderValues
 
 The list of the available placeholders are:
 
@@ -48,15 +48,15 @@ The list of the available placeholders are:
 - ``TRAIN_DATALOADER_LEN``
 - ``EVAL_DATALOADER_LEN``
 
-Alternatively, the same outcome could be achieved by overriding the :class:`~trainer.Trainer`'s :meth:`~Trainer.create_scheduler`
+Alternatively, the same outcome could be achieved by overriding the :class:`Trainer`'s :meth:`~Trainer.create_scheduler`
 method, which will be discussed below.
 
 
 Evaluating a model
 ====================
 
-Once a model has been trained, or loaded from a checkpoint, the :class:`~trainer.Trainer` can also be used for evaluation, which
-consists of running a single epoch, using the :class:`~trainer.Trainer`'s evaluation loop logic, on the given dataset.
+Once a model has been trained, or loaded from a checkpoint, the :class:`~Trainer` can also be used for evaluation, which
+consists of running a single epoch, using the :class:`Trainer`'s evaluation loop logic, on the given dataset.
 
 .. automethod:: Trainer.evaluate
 
@@ -65,12 +65,12 @@ Utility Methods
 
 .. automethod:: Trainer.save_checkpoint
 .. automethod:: Trainer.load_checkpoint
-.. automethod:: Trainer.print
+.. automethod:: pytorch_accelerated.trainer.Trainer.print
 
 Customizing Trainer Behaviour
 ================================
 
-Whilst the :class:`~trainer.Trainer` should work out of the box in straightforward use cases, subclassing the trainer and overriding
+Whilst the :class:`Trainer` should work out of the box in straightforward use cases, subclassing the trainer and overriding
 its methods is intended and encouraged - think of the base implementation as a set of 'sensible defaults'!
 
 .. Note::
@@ -124,10 +124,10 @@ Internal Methods
 --------------------
 
 .. Warning::
-    In the spirit of Python, nothing is truly hidden within the :class:`~trainer.Trainer`. However, care must be taken as, by
-    overriding these methods, you are fundamentally changing how the :class:`~trainer.Trainer` is working internally and this may have
+    In the spirit of Python, nothing is truly hidden within the :class:`Trainer`. However, care must be taken as, by
+    overriding these methods, you are fundamentally changing how the :class:`Trainer` is working internally and this may have
     untended consequences. When modifying one or more internal methods, it is the responsibility of the user to ensure that
-    the :class:`~trainer.Trainer` continues to work as intended!
+    the :class:`Trainer` continues to work as intended!
 
 Internal Setup
 ++++++++++++++++++
@@ -156,11 +156,11 @@ Evaluation epoch behaviour
 Should I subclass the Trainer or use a callback?
 ---------------------------------------------------
 
-The behaviour of the :class:`~trainer.Trainer` can also be extended using :mod:`callbacks`. All callback methods are prefixed with ``on_``.
+The behaviour of the :class:`Trainer` can also be extended using Callbacks. All callback methods are prefixed with ``on_``.
 
 It is recommended that callbacks are used to contain 'infrastructure' code, which is not essential to the operation of the training loop,
 such as logging, but this decision is left to the judgement of the user based on the specific use case. If it seems
-overkill to subclass the :class:`~trainer.Trainer` for the modification you wish to make, it may be better to use a callback instead.
+overkill to subclass the :class:`Trainer` for the modification you wish to make, it may be better to use a callback instead.
 
 For more information on callbacks, see :ref:`callbacks`.
 
@@ -169,17 +169,17 @@ For more information on callbacks, see :ref:`callbacks`.
 Recording metrics
 ===================
 
-The :class:`~trainer.Trainer` contains an instance of :class:`tracking.RunHistory`, which can be used to store and retrieve the values of
-any metrics to track during training. By default, the only metrics that are recorded by the :class:`trainer.Trainer` are
+The :class:`Trainer` contains an instance of :class:`~pytorch_accelerated.tracking.RunHistory`, which can be used to store and retrieve the values of
+any metrics to track during training. By default, the only metrics that are recorded by the :class:`Trainer` are
 the losses observed during training and evaluation.
 
 .. Note::
-    If the callback :class:`~callbacks.PrintMetricsCallback` is being used, any metrics recorded
+    If the callback :class:`~pytorch_accelerated.callbacks.PrintMetricsCallback` is being used, any metrics recorded
     in the run history will be printed to the console automatically.
 
-The API for :class:`~tracking.RunHistory` is detailed at :ref:`run_history`.
+The API for :class:`~pytorch_accelerated.tracking.RunHistory` is detailed at :ref:`run_history`.
 
-Here is an example of how we can subclass the :class:~trainer.Trainer: and use the :class:`~tracking.RunHistory` to track metrics
+Here is an example of how we can subclass the :class:~trainer.Trainer: and use the :class:`~pytorch_accelerated.tracking.RunHistory` to track metrics
 computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/pages/overview.html>`_::
 
     from torchmetrics import Accuracy
@@ -213,7 +213,7 @@ computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/page
 
 
 .. Note::
-    If you feel that subclassing the :class:`~trainer.Trainer` seems too excessive for this use case, this could also be done using a callback
+    If you feel that subclassing the :class:`Trainer` seems too excessive for this use case, this could also be done using a callback
     as demonstrated in :ref:`callbacks_metric_example`.
 
 .. _inside-trainer:
@@ -280,5 +280,5 @@ Similarly, the execution of an evaluation run can be depicted as::
     on_evaluation_run_end()
 
 
-The best way to understand how the :class:`~trainer.Trainer` works internally is by examining the source code for the :meth:`~trainer.Trainer.train` method;
+The best way to understand how the :class:`Trainer` works internally is by examining the source code for the :meth:`~trainer.Trainer.train` method;
 significant care has gone into making the internal methods as clean and clear as possible.

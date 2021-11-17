@@ -109,10 +109,10 @@ class Trainer:
         :param run_history: an instance of a RunHistory subclass to track training runs. If this is not provided, a new one will be created.
 
         The callbacks that are used by default are (
-        :class:`callbacks.TerminateOnNaNCallback`,
-        :class:`callbacks.PrintProgressCallback`,
-        :class:`callbacks.ProgressBarCallback`,
-        :class:`callbacks.PrintMetricsCallback`,
+        :class:`~pytorch_accelerated.callbacks.TerminateOnNaNCallback`,
+        :class:`~pytorch_accelerated.callbacks.PrintProgressCallback`,
+        :class:`~pytorch_accelerated.callbacks.ProgressBarCallback`,
+        :class:`~pytorch_accelerated.callbacks.PrintMetricsCallback`,
         )
 
         """
@@ -147,7 +147,7 @@ class Trainer:
         """
         Create a dataloader to be used during training. This is initialised with the train_dataset and collate function which have been passed to the Trainer.
 
-        If no arguments are passed, the arguments returned by :meth:`Trainer._get_default_train_dl_kwargs` are used.
+        If no arguments are passed, the arguments returned by :meth:`Trainer.get_default_train_dl_kwargs` are used.
 
         .. Note:: if batch size is included in train_dl_kwargs, this takes precedence over the batch_size argument.
 
@@ -176,7 +176,7 @@ class Trainer:
         """
         Create a dataloader to be used during evaluation. This is initialised with the eval_dataset and collate function which have been passed to the Trainer.
 
-        If no arguments are passed, the arguments returned by :py:meth:`Trainer._get_default_eval_dl_kwargs` are used.
+        If no arguments are passed, the arguments returned by :meth:`Trainer.get_default_eval_dl_kwargs` are used.
 
         .. Note:: if batch size is included in eval_dl_kwargs, this takes precedence over the batch_size argument.
 

@@ -1,11 +1,11 @@
-.. currentmodule:: callbacks
+.. currentmodule:: pytorch_accelerated.callbacks
 
 .. _callbacks:
 
 Callbacks
 *********
 
-In addition to overridable hooks, the :class:`~trainer.Trainer` also includes a callback system.
+In addition to overridable hooks, the :class:`~pytorch_accelerated.trainer.Trainer` also includes a callback system.
 
 It is recommended that callbacks are used to contain 'infrastructure' code, which is not essential to the operation of
 the training loop, such as logging, but this decision is left to the judgement of the user based on the specific use case.
@@ -17,7 +17,7 @@ the training loop, such as logging, but this decision is left to the judgement o
 
 .. note::
     Callbacks are called **after** their corresponding hooks, e.g., a callback's ``on_train_epoch_end`` method is called
-    *after* the method :meth:`trainer.Trainer.train_epoch_end`. This is done to support the pattern of updating the
+    *after* the method :meth:`pytorch_accelerated.trainer.Trainer.train_epoch_end`. This is done to support the pattern of updating the
     trainer's state in a method before reading this state in a callback.
 
     For more info on execution order within the training loop, see: :ref:`inside-trainer`.
@@ -25,24 +25,24 @@ the training loop, such as logging, but this decision is left to the judgement o
 Implemented Callbacks
 ======================
 
-.. autoclass:: callbacks.TerminateOnNaNCallback
+.. autoclass:: TerminateOnNaNCallback
     :show-inheritance:
 
-.. autoclass:: callbacks.PrintMetricsCallback
+.. autoclass:: PrintMetricsCallback
     :show-inheritance:
 
-.. autoclass:: callbacks.PrintProgressCallback
+.. autoclass:: PrintProgressCallback
     :show-inheritance:
 
-.. autoclass:: callbacks.ProgressBarCallback
+.. autoclass:: ProgressBarCallback
     :show-inheritance:
 
-.. autoclass:: callbacks.SaveBestModelCallback
+.. autoclass:: SaveBestModelCallback
     :show-inheritance:
 
     .. automethod:: __init__
 
-.. autoclass:: callbacks.EarlyStoppingCallback
+.. autoclass:: EarlyStoppingCallback
     :show-inheritance:
 
     .. automethod:: __init__
@@ -51,16 +51,16 @@ Creating New Callbacks
 ========================
 
 To create a new callback containing custom behaviour, e.g. logging to an external platform, it is recommended to subclass
-:class:`~callbacks.TrainerCallback`. To avoid confusion with the :class:`~trainer.Trainer`'s methods, all callback methods are
+:class:`~TrainerCallback`. To avoid confusion with the :class:`~pytorch_accelerated.trainer.Trainer`'s methods, all callback methods are
 prefixed with ``_on``.
 
 .. warning::
-    For maximum flexibility, the current instance of the :class:`~trainer.Trainer` is available in every callback method.
+    For maximum flexibility, the current instance of the :class:`~pytorch_accelerated.trainer.Trainer` is available in every callback method.
     However, changing the trainer state within a callback can have unintended consequences, as this may affect other parts
-    of the training run. If a callback is used to modify :class:`~trainer.Trainer` state, it is responsibility of the user
+    of the training run. If a callback is used to modify :class:`~pytorch_accelerated.trainer.Trainer` state, it is responsibility of the user
     to ensure that everything continues to work as intended.
 
-.. autoclass:: callbacks.TrainerCallback
+.. autoclass:: TrainerCallback
 
     .. automethod:: TrainerCallback.on_init_end
     .. automethod:: TrainerCallback.on_training_run_start
@@ -78,17 +78,17 @@ prefixed with ``_on``.
 Stopping Training Early
 --------------------------
 
-A training run may be stopped early by raising a :class:`~callbacks.StopTrainingError`
+A training run may be stopped early by raising a :class:`~StopTrainingError`
 
 .. _callbacks_metric_example:
 
 Example: Tracking metrics using a callback
 ---------------------------------------------
 
-By default, the only metrics that are recorded by the :class:`trainer.Trainer` are the losses observed during
+By default, the only metrics that are recorded by the :class:`pytorch_accelerated.trainer.Trainer` are the losses observed during
 training and evaluation. To track additional metrics, we can extend this behaviour using a callback.
 
-Here is an example of how we can define a callback and use the :class:`~tracking.RunHistory` to track metrics
+Here is an example of how we can define a callback and use the :class:`~pytorch_accelerated.tracking.RunHistory` to track metrics
 computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/pages/overview.html>`_::
 
     class ClassificationMetricsCallback(TrainerCallback):
@@ -122,16 +122,16 @@ computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/page
 
 .. Note::
     If you feel that it would be clearer to compute metrics as part of the training loop, this could also be done by
-    subclassing the :class:`trainer.Trainer` as demonstrated in :ref:`trainer_metric_example`.
+    subclassing the :class:`pytorch_accelerated.trainer.Trainer` as demonstrated in :ref:`trainer_metric_example`.
 
 Callback handler
 ======================
 
-The execution of any callbacks passed to the :class:`~trainer.Trainer` is handled by an instance of an internal
+The execution of any callbacks passed to the :class:`~pytorch_accelerated.trainer.Trainer` is handled by an instance of an internal
 callback handler class.
 
 
-.. autoclass:: callbacks.CallbackHandler
+.. autoclass:: CallbackHandler
    :members:
 
 Creating new callback events
