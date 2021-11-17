@@ -16,6 +16,10 @@ The main entrypoint for the :class:`Trainer` is the :meth:`~Trainer.train` metho
 
 .. automethod:: Trainer.train
 
+.. automethod:: trainer.Trainer.train
+
+.. automethod:: pytorch_accelerated.trainer.Trainer.train
+
 Using learning rate schedulers
 ---------------------------------
 

@@ -7,15 +7,7 @@ build:
 
 sphinx:
   configuration: docs/conf.py
-  fail_on_warning: false
+  fail_on_warning: true
 
-formats: all
 
-python:
-  install:
-    - method: pip
-      path: .
-    - requirements: docs/requirements_docs.txt
 
-submodules:
-  include: all
