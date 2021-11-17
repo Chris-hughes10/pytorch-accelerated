@@ -78,7 +78,7 @@ class AccuracyCallback(TrainerCallback):
     def __init__(self, num_classes):
         self.accuracy = Accuracy(num_classes=num_classes)
 
-    def on_train_run_begin(self, trainer, **kwargs):
+    def on_training_run_start(self, trainer, **kwargs):
         self.accuracy.to(trainer._eval_dataloader.device)
 
     def on_eval_step_end(self, trainer, batch, batch_output, **kwargs):

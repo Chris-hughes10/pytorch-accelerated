@@ -30,22 +30,22 @@ DEFAULT_CALLBACKS = (
 
 class TrainerPlaceholderValues(Enum):
     """
-    Some learning rate schedulers require information such as the total number of steps that will take place during training.
+    Some learning rate schedulers require information such as the total number of steps that will take place during a training run.
     As this information is not accessible prior to creating the training dataloader - which will be done as part of the
-    `train` method - a placeholder value can be used in the cases, as demonstrated below:
+    :meth:`~Trainer.train` method - a placeholder value can be used in the cases, as demonstrated below::
 
-    ```
-    from functools import Partial
+        from functools import Partial
 
-    from torch.optim.lr_scheduler import OneCycleLR
+        from pytorch_accelerated import TrainerPlaceholderValues
+        from torch.optim.lr_scheduler import OneCycleLR
 
-    create_scheduler_fn = partial(
-                OneCycleLR,
-                max_lr=e_config.lr,
-                epochs=TrainerPlaceholderValues.NUM_EPOCHS,
-                steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
-            )
-    ```
+        create_scheduler_fn = partial(
+                    OneCycleLR,
+                    max_lr=config.lr,
+                    epochs=TrainerPlaceholderValues.NUM_EPOCHS,
+                    steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
+                )
+
     These placeholders will be replaced by the trainer with the correct values during training.
     """
 
@@ -60,7 +60,7 @@ class TrainerPlaceholderValues(Enum):
 
 
 def replace_trainer_placeholder_values(trainer, instance):
-    "If the instance is partial and contains keywords, will replace these, returning a new function"
+    """If the instance is partial and contains keywords, will replace these, returning a new function."""
 
     if isinstance(instance, partial):
         placeholders = TrainerPlaceholderValues.placeholder_set()
@@ -82,13 +82,13 @@ def replace_trainer_placeholder_values(trainer, instance):
 class Trainer:
     """
     The Trainer is designed to encapsulate an entire training loop for a specific task, bringing together the model,
-    loss function and optimizer, and providing a specification of the behaviour to execute of each step of the training
+    loss function and optimizer, and providing a specification of the behaviour to execute for each step of the training
     process.
 
     The trainer has been implemented such that it provides (overridable) implementations of the parts of training
-     that rarely change after they have been defined – such as creating a data loader, or how a batch of data is fed to
-     the model – whilst remaining decoupled from components that are likely to change, such as the model, dataset,
-     loss function and optimizer.
+    that rarely change after they have been defined – such as creating a data loader, or how a batch of data is fed to
+    the model – whilst remaining decoupled from components that are likely to change, such as the model, dataset,
+    loss function and optimizer.
     """
 
     def __init__(
@@ -100,15 +100,21 @@ class Trainer:
         run_history=None,
     ):
         """
-                Create a new trainer object which can be used to train the given model using the provided loss function and optimizer.
+        Create a new trainer object which can be used to train the given model using the provided loss function and optimizer.
 
-                The callbacks that are used by default are (TerminateOnNaNCallback, PrintProgressCallback, ProgressBarCallback, PrintMetricsCallback,
+        :param model: a subclass of nn.Module to be trained
+        :param loss_func: the loss function to use when training the model
+        :param optimizer: the optimizer to update the model's parameters
+        :param callbacks: a list of callbacks to use during training runs. If a list of callbacks is not provided, the default selection will be used.
+        :param run_history: an instance of a RunHistory subclass to track training runs. If this is not provided, a new one will be created.
+
+        The callbacks that are used by default are (
+        :class:`callbacks.TerminateOnNaNCallback`,
+        :class:`callbacks.PrintProgressCallback`,
+        :class:`callbacks.ProgressBarCallback`,
+        :class:`callbacks.PrintMetricsCallback`,
         )
-                :param model: a subclass of nn.Module to be trained
-                :param loss_func: the loss function to use when training the model
-                :param optimizer: the optimizer to update the model's parameters
-                :param callbacks: a list of callbacks to use during training runs. If a list of callbacks is not provided, the default selection will be used.
-                :param run_history: an instance of a RunHistory subclass to track training runs. If this is not provided, a new one will be created.
+
         """
         self.model = model
         self.loss_func = loss_func
@@ -136,32 +142,22 @@ class Trainer:
         self.callback_handler.call_event("on_init_end", self)
 
     def create_train_dataloader(
-        self, batch_size: int, train_dl_kwargs: dict
+        self, batch_size: int, train_dl_kwargs: dict = None
     ) -> Iterable:
         """
         Create a dataloader to be used during training. This is initialised with the train_dataset and collate function which have been passed to the Trainer.
 
-        If no arguments are passed, the default arguments are:
-        {
-           \n"shuffle": True,
-            \n"pin_memory": True if torch.cuda.is_available() else False,
-            \n"batch_size": batch_size,
-            \n"num_workers": max(os.cpu_count() // torch.cuda.device_count(), 1),
-        }
+        If no arguments are passed, the arguments returned by :meth:`Trainer._get_default_train_dl_kwargs` are used.
 
-        Note that if batch size is included in train_dl_kwargs, this takes precedence over the batch_size argument.
+        .. Note:: if batch size is included in train_dl_kwargs, this takes precedence over the batch_size argument.
 
         :param batch_size: the batch size to use per device
-        :param train_dl_kwargs: a dictionary of keyword arguments to pass to the dataloader constructor, for details see torch.utils.data.DataLoader
+        :param train_dl_kwargs: a dictionary of keyword arguments to pass to the dataloader constructor, for details see :class:`torch.utils.data.DataLoader`
 
-        :return: an instance of torch.utils.data.DataLoader
+        :return: an instance of :class:`~torch.utils.data.DataLoader`
         """
-        default_train_dl_kwargs = {
-            "shuffle": True,
-            "pin_memory": True if torch.cuda.is_available() else False,
-            "batch_size": batch_size,
-            "num_workers": max(os.cpu_count() // torch.cuda.device_count(), 1),
-        }
+
+        default_train_dl_kwargs = self.get_default_train_dl_kwargs(batch_size)
 
         if train_dl_kwargs is not None:
             default_train_dl_kwargs.update(train_dl_kwargs)
@@ -174,31 +170,22 @@ class Trainer:
             **self._train_dl_kwargs
         )
 
-    def create_eval_dataloader(self, batch_size: int, eval_dl_kwargs: dict) -> Iterable:
+    def create_eval_dataloader(
+        self, batch_size: int, eval_dl_kwargs: dict = None
+    ) -> Iterable:
         """
         Create a dataloader to be used during evaluation. This is initialised with the eval_dataset and collate function which have been passed to the Trainer.
 
-        If no arguments are passed, the default arguments are:
-        {
-           \n"shuffle": False,
-            \n"pin_memory": True if torch.cuda.is_available() else False,
-            \n"batch_size": batch_size,
-            \n"num_workers": max(os.cpu_count() // torch.cuda.device_count(), 1),
-        }
+        If no arguments are passed, the arguments returned by :py:meth:`Trainer._get_default_eval_dl_kwargs` are used.
 
-        Note that if batch size is included in eval_dl_kwargs, this takes precedence over the batch_size argument.
+        .. Note:: if batch size is included in eval_dl_kwargs, this takes precedence over the batch_size argument.
 
         :param batch_size: the batch size to use per device
-        :param eval_dl_kwargs: a dictionary of keyword arguments to pass to the dataloader constructor, for details see torch.utils.data.DataLoader
+        :param eval_dl_kwargs: a dictionary of keyword arguments to pass to the dataloader constructor, for details see :class:`torch.utils.data.DataLoader`
 
-        :return: an instance of torch.utils.data.DataLoader
+        :return: an instance of :class:`torch.utils.data.DataLoader`
         """
-        default_eval_dl_kwargs = {
-            "shuffle": False,
-            "pin_memory": True if torch.cuda.is_available() else False,
-            "batch_size": batch_size,
-            "num_workers": max(os.cpu_count() // torch.cuda.device_count(), 1),
-        }
+        default_eval_dl_kwargs = self.get_default_eval_dl_kwargs(batch_size)
 
         if eval_dl_kwargs is not None:
             default_eval_dl_kwargs.update(eval_dl_kwargs)
@@ -213,7 +200,7 @@ class Trainer:
 
     def create_scheduler(self):
         """
-        Create a learning rate scheduler based on the create_scheduler_fn function which has been passed to the Trainer.
+        Create a learning rate scheduler based on the ``create_scheduler_fn`` function which has been passed to the Trainer.
         :return: a learning rate scheduler instance
         """
         scheduler_type = replace_trainer_placeholder_values(
@@ -231,7 +218,7 @@ class Trainer:
         """
         This method is called at the start of a training epoch.
 
-        The default behaviour of this method is to call `self.model.train()`
+        The default behaviour of this method is to call ``self.model.train()``
 
         """
         self.model.train()
@@ -239,7 +226,7 @@ class Trainer:
     def calculate_train_batch_loss(self, batch) -> dict:
         """
         Calculates the training loss and return this along with the batch size and model outputs.
-        Any additional values returned will be available in the `on_train_step_end` callback.
+        Any additional values returned will be available in the :meth:`~callbacks.TrainerCallback.on_train_step_end` callback method.
 
         :param batch: the output of the train dataloader
         :return: A dictionary containing the training loss, model outputs and batch size. Can include any keys, but must include the keys 'loss', 'model_outputs' and 'batch_size'
@@ -257,22 +244,22 @@ class Trainer:
 
     def backward_step(self, loss):
         """
-        Use the accelerator to perform the backward pass on the calculated value of the loss returned by `calculate_train_batch_loss`.
+        Use the accelerator to perform the backward pass on the calculated value of the loss returned by :meth:`~Trainer.calculate_train_batch_loss`.
         If gradient accumulation is enabled, this loss has been scaled by 1 / accumulation steps.
 
-        :param loss: The loss tensor returned by calculate_train_batch_loss.
+        :param loss: The loss tensor returned by :meth:`~Trainer.calculate_train_batch_loss`.
         """
         self._accelerator.backward(loss)
 
     def optimizer_step(self):
         """
-        Performs a single optimization step and updates the parameters which have been passed to self.optimizer.
+        Performs a single optimization step and updates the parameters which have been passed to ``self.optimizer``.
         """
         self.optimizer.step()
 
     def scheduler_step(self):
         """
-        Performs a single scheduler step if self.scheduler has been assigned.
+        Performs a single scheduler step if ``self.scheduler`` has been assigned.
 
         """
         if self.scheduler is not None:
@@ -280,13 +267,13 @@ class Trainer:
 
     def optimizer_zero_grad(self):
         """
-        Sets the gradients of all optimized torch.Tensor s to zero.
+        Sets the gradients of all optimized ``torch.Tensor`` s to zero.
         """
         self.optimizer.zero_grad()
 
     def train_epoch_end(self):
         """
-        This method is called at the end of each training epoch
+        This method is called at the end of each training epoch.
         """
         pass
 
@@ -294,17 +281,17 @@ class Trainer:
         """
         This method is called at the start of an evaluation epoch.
 
-        The default behaviour of this method is to call `self.model.eval()`
+        The default behaviour of this method is to call ``self.model.eval()``
         """
         self.model.eval()
 
     def calculate_eval_batch_loss(self, batch) -> dict:
         """
         Calculates the evaluation loss and return this along with the batch size and model outputs.
-        Any additional values returned will be available in the `on_eval_step_end` callback.
+        Any additional values returned will be available in the :meth:`~callbacks.TrainerCallback.on_eval_step_end` callback.
 
         :param batch: the output of the eval dataloader
-        :return: A dictionary containing the evaluation loss, model outputs and batch size. Can include any keys, but must include the keys 'loss', 'model_outputs' and 'batch_size'
+        :return: A dictionary containing the evaluation loss, model outputs and batch size. Can include any keys, but must include the keys ``loss``, ``model_outputs`` and ``batch_size``
         """
         with torch.no_grad():
             xb, yb = batch
@@ -323,9 +310,27 @@ class Trainer:
         """
         pass
 
+    def training_run_epoch_end(self):
+        """
+        This method is called during a training run after both training and evaluation epochs have been completed.
+        """
+        pass
+
     def training_run_end(self):
         """
         This method is called at the end of a training run.
+        """
+        pass
+
+    def evaluation_run_start(self):
+        """
+        This method is called at the start of an evaluation run.
+        """
+        pass
+
+    def evaluation_run_end(self):
+        """
+        This method is called at the end of an evaluation run.
         """
         pass
 
@@ -347,20 +352,21 @@ class Trainer:
         """
         Start a training run. If an evaluation dataset is provided, this routine will include both training and evaluation epochs.
 
-        Note that, as the optimizer needs to be internally prepared prior to training, in order to use a learning rate scheduler,
-        a factory function must be provided to create_scheduler_fn. This must be a function which accepts the optimizer as a single parameter
-        and returns an instance of a learning rate scheduler. Passing an instance of a learning rate scheduler will not work here.
+        .. Note::
+            As the optimizer needs to be internally prepared prior to training, in order to use a learning rate scheduler,
+            a factory function must be provided to ``create_scheduler_fn``. This must be a function which accepts the optimizer as a single parameter
+            and returns an instance of a learning rate scheduler. Passing an instance of a learning rate scheduler will not work here.
 
         :param train_dataset: the dataset to use during training epochs
         :param num_epochs: the number of epochs to train for
         :param eval_dataset: the dataset to use during evaluation epochs, if this is not provided, evaluation is skipped.
         :param per_device_batch_size: the batch size to use per device
         :param max_num_train_steps: the maximum number of steps to train for. If provided, this will override num_epochs
-        :param gradient_accumulation_steps: accumulate gradients to the specified number of steps to simulate a bigger batch size. By default, this is set to 1
-        :param gradient_clip_value: if specified, the gradients of the model's parameters will be clipped to the range [-gradient_clip_value, gradient_clip_value]
+        :param gradient_accumulation_steps: accumulate gradients to the specified number of steps to simulate a bigger batch size. By default, this is set to ``1``
+        :param gradient_clip_value: if specified, the gradients of the model's parameters will be clipped to the range ``[-gradient_clip_value, gradient_clip_value]``
         :param create_scheduler_fn: a function which accepts an optimizer as an argument and returns a learning rate scheduler
-        :param train_dataloader_kwargs: : a dictionary of keyword arguments to pass to the training dataloader constructor, for details see torch.utils.data.DataLoader
-        :param eval_dataloader_kwargs: a dictionary of keyword arguments to pass to the evaluation dataloader constructor, for details see torch.utils.data.DataLoader
+        :param train_dataloader_kwargs: : a dictionary of keyword arguments to pass to the training dataloader constructor, for details see :class:`torch.utils.data.DataLoader`
+        :param eval_dataloader_kwargs: a dictionary of keyword arguments to pass to the evaluation dataloader constructor, for details see :class:`torch.utils.data.DataLoader`
         :param reset_run_history: reset any run history saved by the trainer from previous training runs
         :param collate_fn: the collate function to be used by the training and evaluation dataloaders
         """
@@ -396,17 +402,84 @@ class Trainer:
         if self.create_scheduler_fn is not None:
             self.scheduler = self.create_scheduler()
 
-        self.callback_handler.call_event(
-            "on_train_run_begin",
-            self,
-        )
         self._run_training()
-        self.callback_handler.call_event(
-            "on_train_run_end",
-            self,
+
+    def evaluate(
+        self,
+        dataset=None,
+        per_device_batch_size=8,
+        dataloader_kwargs: dict = None,
+        collate_fn=None,
+    ):
+        """
+        Start an evaluation run.
+
+        .. Note:: Starting an evaluation run will reset the :class:`Trainer`'s run history.
+
+        :param dataset: the dataset to use during evaluation
+        :param per_device_batch_size: the batch size to use per device
+        :param dataloader_kwargs: a dictionary of keyword arguments to pass to the dataloader constructor, for details see :class:`torch.utils.data.DataLoader`
+        :param collate_fn: the collate function to be used by the dataloader
+        """
+        self.eval_dataset = dataset
+        self.collate_fn = collate_fn
+
+        self.run_history.reset()
+
+        self._prepare_model_and_optimizer()
+
+        self._train_dataloader = None
+        self._eval_dataloader = self.create_eval_dataloader(
+            batch_size=per_device_batch_size, eval_dl_kwargs=dataloader_kwargs
         )
 
+        self._prepare_dataloaders()
+
+        self._run_evaluation()
+
+    def get_default_train_dl_kwargs(self, batch_size) -> dict:
+        """
+        Return the default arguments that will be used by the training dataloader.
+
+        :param batch_size: the batch size to use during training
+        :return: a dictionary containing the default arguments for the training dataloader
+        """
+        return {
+            "shuffle": True,
+            "pin_memory": True if torch.cuda.is_available() else False,
+            "batch_size": batch_size,
+            "num_workers": max(
+                os.cpu_count() // torch.cuda.device_count()
+                if torch.cuda.is_available()
+                else os.cpu_count(),
+                1,
+            ),
+        }
+
+    def get_default_eval_dl_kwargs(self, batch_size) -> dict:
+        """
+        Return the default arguments that will be used by the evaluation dataloader.
+
+        :param batch_size: the batch size to use during evaluation
+        :return: a dictionary containing the default arguments for the evaluation dataloader
+        """
+        return {
+            "shuffle": False,
+            "pin_memory": True if torch.cuda.is_available() else False,
+            "batch_size": batch_size,
+            "num_workers": max(
+                os.cpu_count() // torch.cuda.device_count()
+                if torch.cuda.is_available()
+                else os.cpu_count(),
+                1,
+            ),
+        }
+
     def _prepare_model_and_optimizer(self):
+        """
+        Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap the model in any wrappers necessary for training.
+        (e.g. :class:`torch.distributed.DistributedDataParallel`) and ensures the parameters are placed on the appropriate device.
+        """
         self._accelerator.free_memory()
         (self.model, self.optimizer,) = self._accelerator.prepare(
             self.model,
@@ -414,7 +487,14 @@ class Trainer:
         )
 
     def _prepare_dataloaders(self):
-        self._train_dataloader = self._accelerator.prepare(self._train_dataloader)
+        """
+        Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap prepare the dataloaders for training.
+        By default, this will convert each dataloader to an instance of :class:`accelerate.data_loader.DataLoaderShard`.
+
+        .. Note:: This may change the length of the dataloaders, so this should be called *before* the number of update steps per epoch is calculated, i.e. to initialise a learning rate scheduler
+        """
+        if self._train_dataloader is not None:
+            self._train_dataloader = self._accelerator.prepare(self._train_dataloader)
         if self._eval_dataloader is not None:
             self._eval_dataloader = self._accelerator.prepare(self._eval_dataloader)
 
@@ -425,8 +505,17 @@ class Trainer:
         gradient_accumulation_steps,
         max_num_train_steps,
         gradient_clip_value,
-    ):
+    ) -> dict:
+        """
+        Create a run config dictionary containing values representing the current state of the trainer.
 
+        :param per_device_batch_size: the batch size per device
+        :param num_epochs: the number of epochs in the current training run
+        :param gradient_accumulation_steps: the number of gradient accumulation steps which will be used during the training run
+        :param max_num_train_steps: If specified, the maximum number of steps to train for. If present, this will take precedence over ``num_epochs``
+        :param gradient_clip_value: the value used to determine the threshold to clip the gradients of the model's parameters
+
+        """
         if self._train_dl_kwargs is not None:
             train_per_device_batch_size = self._train_dl_kwargs.get(
                 "batch_size", per_device_batch_size
@@ -473,13 +562,25 @@ class Trainer:
         return config
 
     def _run_training(self):
+        """
+        The method responsible for the orchestration of the high level steps which will be executed during a training run.
+        """
         self.training_run_start()
+        self.callback_handler.call_event(
+            "on_training_run_start",
+            self,
+        )
         for epoch in range(self.run_config["num_epochs"]):
             try:
                 self._run_train_epoch(self._train_dataloader)
                 if self.eval_dataset is not None:
                     self._run_eval_epoch(self._eval_dataloader)
-                self.run_history.increment_epoch()
+                self.run_history._increment_epoch()
+                self.training_run_epoch_end()
+                self.callback_handler.call_event(
+                    "on_training_run_epoch_end",
+                    self,
+                )
             except StopTrainingError as e:
                 self._accelerator.print(e)
                 self.callback_handler.call_event(
@@ -488,18 +589,50 @@ class Trainer:
                 )
                 break
         self.training_run_end()
+        self.callback_handler.call_event(
+            "on_training_run_end",
+            self,
+        )
+
+    def _run_evaluation(self):
+        """
+        The method responsible for the orchestration of the high level steps which will be executed during an evaluation run.
+        """
+        self.evaluation_run_start()
+        self.callback_handler.call_event(
+            "on_evaluation_run_start",
+            self,
+        )
+        try:
+            self._run_eval_epoch(self._eval_dataloader, is_training=False)
+        except StopTrainingError as e:
+            self._accelerator.print(e)
+            self.callback_handler.call_event(
+                "on_stop_training_error",
+                self,
+            )
+        self.evaluation_run_end()
+        self.callback_handler.call_event(
+            "on_evaluation_run_end",
+            self,
+        )
 
     def _run_train_epoch(self, train_dl):
+        """
+        The method responsible for the behaviour of each training epoch.
+
+        :param train_dl: the dataloader to be used during training
+        """
         self.train_epoch_start()
         self._loss_tracker.reset()
         self.callback_handler.call_event(
-            "on_train_epoch_begin",
+            "on_train_epoch_start",
             self,
         )
 
         for step, batch in enumerate(train_dl):
             self.callback_handler.call_event(
-                "on_train_step_begin",
+                "on_train_step_start",
                 self,
             )
             batch_output = self.calculate_train_batch_loss(batch)
@@ -537,21 +670,32 @@ class Trainer:
         )
 
     def _clip_gradients(self):
+        """
+        Clip the gradients of the model's parameters that fall outside of the threshold specified in :meth:`~Trainer.train`.
+
+        By default, this clips the gradients using :meth:`accelerate.Accelerator.clip_grad_value_`
+        """
         self._accelerator.clip_grad_value_(
             self.model.parameters(), clip_value=self.run_config["gradient_clip_value"]
         )
 
-    def _run_eval_epoch(self, valid_dl):
+    def _run_eval_epoch(self, valid_dl, is_training: bool = True):
+        """
+        The method responsible for the behaviour of each evaluation epoch.
+
+        :param valid_dl: the dataloader to be used during evaluation
+        :param is_training: signals whether the evaluation is being run as part of a training run
+        """
         self.eval_epoch_start()
         self._loss_tracker.reset()
         self.callback_handler.call_event(
-            "on_eval_epoch_begin",
+            "on_eval_epoch_start",
             self,
         )
 
         for batch in valid_dl:
             self.callback_handler.call_event(
-                "on_eval_step_begin",
+                "on_eval_step_start",
                 self,
             )
             batch_output = self.calculate_eval_batch_loss(batch)
@@ -563,7 +707,8 @@ class Trainer:
                 "on_eval_step_end", self, batch_output=batch_output, batch=batch
             )
         self.eval_epoch_end()
-        self.run_history.update_metric("eval_loss_epoch", self._loss_tracker.average)
+        metric_name = "eval_loss_epoch" if is_training else "evaluation_loss"
+        self.run_history.update_metric(metric_name, self._loss_tracker.average)
         self.callback_handler.call_event(
             "on_eval_epoch_end",
             self,
@@ -571,14 +716,14 @@ class Trainer:
 
     def print(self, *args, **kwargs):
         """
-        Use in replacement of print() to only print once per node.
+        Use in replacement of ``print()`` to only print once per node.
         """
         if self._accelerator is not None:
             self._accelerator.print(*args, **kwargs)
         else:
             print(*args, **kwargs)
 
-    def save_model(self, save_path, checkpoint_kwargs=None, save_optimizer=True):
+    def save_checkpoint(self, save_path, checkpoint_kwargs=None, save_optimizer=True):
         """
         Save the model, optimizer and specified args as a checkpoint file.
 
@@ -607,7 +752,8 @@ class Trainer:
 
     def load_checkpoint(self, checkpoint_path):
         """
-        Load the model and optimizer from a checkpoint file
+        Load the model and optimizer from a checkpoint file.
+
         :param checkpoint_path: the path of the checkpoint file to load
         """
         self._accelerator.wait_for_everyone()

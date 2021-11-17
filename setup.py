@@ -3,11 +3,11 @@
 
 import io
 import os
-import versioneer
-
 
 from pkg_resources import Requirement
 from setuptools import find_packages, setup
+
+import versioneer
 
 # Package meta-data.
 NAME = "pytorch-accelerated"
@@ -24,11 +24,19 @@ VERSION = versioneer.get_version()
 
 FILEPATH = os.path.abspath(os.path.dirname(__file__))
 REQUIRED = []
+EXAMPLES_REQUIRED = []
 
 with open("requirements.txt", "r") as f:
     for line in f.readlines():
         try:
             REQUIRED.append(str(Requirement.parse(line)))
+        except ValueError:
+            pass
+
+with open("requirements.examples.txt", "r") as f:
+    for line in f.readlines():
+        try:
+            EXAMPLES_REQUIRED.append(str(Requirement.parse(line)))
         except ValueError:
             pass
 
@@ -57,6 +65,7 @@ setup(
     ),
     scripts=[],
     install_requires=REQUIRED,
+    extras_require={"examples": EXAMPLES_REQUIRED},
     include_package_data=True,
     classifiers=[
         "License :: OSI Approved :: MIT License",
