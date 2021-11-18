@@ -1,7 +1,7 @@
 Quickstart
 ############
 
-To get started, simply import and use the `pytorch\-accelerated` :class:`pytorch.accelerated.trainer.Trainer`, as demonstrated in the following snippet,
+To get started, simply import and use the `pytorch\-accelerated` :class:`pytorch_accelerated.trainer.Trainer`, as demonstrated in the following snippet,
 and then launch training using the `accelerate CLI <https://huggingface.co/docs/accelerate/quicktour.html#launching-your-distributed-script>`_ as described below::
 
     # examples/vision/train_mnist.py

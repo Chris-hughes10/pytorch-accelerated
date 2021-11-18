@@ -57,7 +57,7 @@ class TrainerCallback(ABC):
         Event called at the end of a training step.
 
         :param batch: the current batch of training data
-        :param batch_output: the outputs returned by :meth:`trainer.Trainer.calculate_train_batch_loss`
+        :param batch_output: the outputs returned by :meth:`pytorch_accelerated.trainer.Trainer.calculate_train_batch_loss`
         """
         pass
 
@@ -84,7 +84,7 @@ class TrainerCallback(ABC):
         Event called at the end of an evaluation step.
 
         :param batch: the current batch of evaluation data
-        :param batch_output: the outputs returned by :meth:`trainer.Trainer.calculate_eval_batch_loss`
+        :param batch_output: the outputs returned by :meth:`pytorch_accelerated.trainer.Trainer.calculate_eval_batch_loss`
         """
         pass
 
