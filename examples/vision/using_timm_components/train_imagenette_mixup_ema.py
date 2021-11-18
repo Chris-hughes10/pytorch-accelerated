@@ -17,6 +17,7 @@ from pathlib import Path
 import timm
 import torch
 import torch.nn.functional as F
+from accelerate import DistributedType
 from timm.data import resolve_data_config, Mixup, rand_augment_transform
 from timm.data.transforms import RandomResizedCropAndInterpolation
 from timm.models import create_model
@@ -133,7 +134,8 @@ class MixupTrainer(Trainer):
         self.ema_model = ModelEmaV2(
             self._accelerator.unwrap_model(self.model), decay=0.5
         )
-        self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
+        if self._accelerator.distributed_type != DistributedType.NO:
+            self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
 
     def train_epoch_start(self):
         super().train_epoch_start()
