@@ -179,7 +179,7 @@ the losses observed during training and evaluation.
 
 The API for :class:`~pytorch_accelerated.tracking.RunHistory` is detailed at :ref:`run_history`.
 
-Here is an example of how we can subclass the :class:~trainer.Trainer: and use the :class:`~pytorch_accelerated.tracking.RunHistory` to track metrics
+Here is an example of how we can subclass the :class:`~trainer.Trainer` and use the :class:`~pytorch_accelerated.tracking.RunHistory` to track metrics
 computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/pages/overview.html>`_::
 
     from torchmetrics import Accuracy

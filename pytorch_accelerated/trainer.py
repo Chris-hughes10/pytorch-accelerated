@@ -478,7 +478,7 @@ class Trainer:
     def _prepare_model_and_optimizer(self):
         """
         Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap the model in any wrappers necessary for training.
-        (e.g. :class:`torch.distributed.DistributedDataParallel`) and ensures the parameters are placed on the appropriate device.
+        (e.g. :class:`torch.nn.parallel.DistributedDataParallel`) and ensures the parameters are placed on the appropriate device.
         """
         self._accelerator.free_memory()
         (self.model, self.optimizer,) = self._accelerator.prepare(

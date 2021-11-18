@@ -29,8 +29,15 @@ release = "0.1.3"
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ["sphinx.ext.autodoc", "sphinx.ext.viewcode"]
+extensions = ["sphinx.ext.autodoc", "sphinx.ext.viewcode",  "sphinx.ext.intersphinx",]
 # autodoc_mock_imports = ["accelerate", "torch", 'numpy', 'tqdm']
+
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "torch": ("https://pytorch.org/docs/stable/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "accelerate": ("https://huggingface.co/docs/accelerate/", None),
+}
 
 # Add any paths that contain templates here, relative to this directory.
 # templates_path = ["_templates"]

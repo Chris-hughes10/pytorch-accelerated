@@ -6,7 +6,7 @@ from typing import Iterable
 
 class RunHistory(ABC):
     """
-    The abstract base class which defines the API for a :class:`~trainer.Trainer`'s run history.
+    The abstract base class which defines the API for a :class:`~pytorch_accelerated.trainer.Trainer`'s run history.
     """
 
     @abstractmethod
