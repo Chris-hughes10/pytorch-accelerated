@@ -570,7 +570,7 @@ class Trainer:
             "is_distributed": True
             if self._accelerator.distributed_type != DistributedType.NO
             else False,
-            "fp16": self._accelerator.use_fp16,
+            "using_fp16": self._accelerator.use_fp16,
             "gradient_clip_value": gradient_clip_value,
         }
 
