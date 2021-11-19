@@ -19,6 +19,7 @@ from pytorch_accelerated.callbacks import (
     ProgressBarCallback,
     MoveModulesToDeviceCallback,
 )
+from pytorch_accelerated.run_config import TrainerRunConfig
 from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, LossTracker
 
 DEFAULT_CALLBACKS = (
@@ -51,8 +52,8 @@ class TrainerPlaceholderValues(Enum):
     These placeholders will be replaced by the trainer with the correct values during training.
     """
 
-    NUM_EPOCHS = 'trainer.run_config["num_epochs"]'
-    NUM_UPDATE_STEPS_PER_EPOCH = 'trainer.run_config["num_update_steps_per_epoch"]'
+    NUM_EPOCHS = 'trainer.run_config.num_epochs'
+    NUM_UPDATE_STEPS_PER_EPOCH = 'trainer.run_config.num_update_steps_per_epoch'
     TRAIN_DATALOADER_LEN = "len(trainer._train_dataloader)"
     EVAL_DATALOADER_LEN = "len(trainer._eval_dataloader)"
 
@@ -140,7 +141,7 @@ class Trainer:
         self._train_dl_kwargs = None
         self._eval_dl_kwargs = None
         self._eval_dataloader = None
-        self.run_config = None
+        self.run_config: TrainerRunConfig = None
 
         self.callback_handler.call_event("on_init_end", self)
 
@@ -516,9 +517,9 @@ class Trainer:
         gradient_accumulation_steps,
         max_num_train_steps,
         gradient_clip_value,
-    ) -> dict:
+    ) -> TrainerRunConfig:
         """
-        Create a run config dictionary containing values representing the current state of the trainer.
+        Create an instance of :class:`~pytorch_accelerated.run_config.TrainerRunConfig` representing the current state of the trainer.
 
         :param per_device_batch_size: the batch size per device
         :param num_epochs: the number of epochs in the current training run
@@ -573,7 +574,7 @@ class Trainer:
             "gradient_clip_value": gradient_clip_value,
         }
 
-        return config
+        return TrainerRunConfig(**config)
 
     def _run_training(self):
         """
@@ -584,7 +585,7 @@ class Trainer:
             "on_training_run_start",
             self,
         )
-        for epoch in range(self.run_config["num_epochs"]):
+        for epoch in range(self.run_config.num_epochs):
             try:
                 self._run_train_epoch(self._train_dataloader)
                 if self.eval_dataset is not None:
@@ -654,18 +655,18 @@ class Trainer:
                 self._accelerator.gather(batch_output["loss"]).detach().mean().item(),
                 batch_output["batch_size"],
             )
-            if self.run_config["gradient_accumulation_steps"] > 1:
-                batch_output["loss"] /= self.run_config["gradient_accumulation_steps"]
+            if self.run_config.gradient_accumulation_steps > 1:
+                batch_output["loss"] /= self.run_config.gradient_accumulation_steps
 
             self.callback_handler.call_event(
                 "on_train_step_end", self, batch_output=batch_output, batch=batch
             )
             self.backward_step(batch_output["loss"])
 
-            if self.run_config["gradient_clip_value"] is not None:
+            if self.run_config.gradient_clip_value is not None:
                 self._clip_gradients()
 
-            if (step + 1) % self.run_config["gradient_accumulation_steps"] == 0 or (
+            if (step + 1) % self.run_config.gradient_accumulation_steps == 0 or (
                 step + 1 == len(train_dl)
             ):
                 self.optimizer_step()
@@ -690,7 +691,7 @@ class Trainer:
         By default, this clips the gradients using :meth:`accelerate.Accelerator.clip_grad_value_`
         """
         self._accelerator.clip_grad_value_(
-            self.model.parameters(), clip_value=self.run_config["gradient_clip_value"]
+            self.model.parameters(), clip_value=self.run_config.gradient_clip_value
         )
 
     def _run_eval_epoch(self, valid_dl, is_training: bool = True):

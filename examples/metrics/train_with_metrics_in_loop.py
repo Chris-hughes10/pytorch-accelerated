@@ -27,8 +27,8 @@ class TrainerWithMetrics(Trainer):
     def __init__(self, num_classes, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # this will be moved to the correct device automatically by the MoveModulesToDeviceCallback callback,
-        # which is used by default
+        # this will be moved to the correct device automatically by the
+        # MoveModulesToDeviceCallback callback, which is used by default
         self.metrics = MetricCollection(
             {
                 "accuracy": Accuracy(num_classes=num_classes),

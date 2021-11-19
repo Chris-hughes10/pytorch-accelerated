@@ -27,7 +27,7 @@ from pytorch_accelerated.callbacks import (
     PrintProgressCallback,
     ProgressBarCallback,
 )
-from pytorch_accelerated.trainer import Trainer
+from pytorch_accelerated.trainer import Trainer, DEFAULT_CALLBACKS
 
 
 class TimmTrainer(Trainer):
@@ -37,7 +37,7 @@ class TimmTrainer(Trainer):
         self.train_loss_func = kwargs["loss_func"]
         self.eval_loss_func = eval_loss_func
 
-    def create_train_dataloader(self, batch_size, train_dl_kwargs):
+    def create_train_dataloader(self, batch_size: int, train_dl_kwargs: dict = None):
 
         return timm.data.create_loader(
             dataset=self.train_dataset,
@@ -46,7 +46,7 @@ class TimmTrainer(Trainer):
             **train_dl_kwargs
         )
 
-    def create_eval_dataloader(self, batch_size, eval_dl_kwargs):
+    def create_eval_dataloader(self, batch_size: int, eval_dl_kwargs: dict = None):
 
         return timm.data.create_loader(
             dataset=self.eval_dataset,
@@ -178,11 +178,8 @@ def main():
         loss_func=train_loss_fn,
         eval_loss_func=validate_loss_fn,
         callbacks=(
-            TerminateOnNaNCallback,
             AccuracyCallback(num_classes=num_classes),
-            PrintMetricsCallback,
-            PrintProgressCallback,
-            ProgressBarCallback,
+            *DEFAULT_CALLBACKS
         ),
     )
 

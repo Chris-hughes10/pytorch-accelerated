@@ -97,6 +97,7 @@ these cases are clearly marked, with acknowledgement being given to the original
    trainer
    callbacks
    tracking
+   run_config
 
 
 Indices and tables
