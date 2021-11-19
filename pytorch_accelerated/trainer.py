@@ -7,7 +7,7 @@ from functools import partial
 from typing import Iterable
 
 import torch
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedType
 from torch.utils.data import DataLoader
 
 from pytorch_accelerated.callbacks import (
@@ -17,10 +17,12 @@ from pytorch_accelerated.callbacks import (
     TerminateOnNaNCallback,
     StopTrainingError,
     ProgressBarCallback,
+    MoveModulesToDeviceCallback,
 )
 from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, LossTracker
 
 DEFAULT_CALLBACKS = (
+    MoveModulesToDeviceCallback,
     TerminateOnNaNCallback,
     PrintProgressCallback,
     ProgressBarCallback,
@@ -475,6 +477,14 @@ class Trainer:
             ),
         }
 
+    @property
+    def device(self):
+        """
+        Use the internal instance of :class:`accelerate.Accelerator` to get the appropriate device
+        :return: an instance of `torch.device`
+        """
+        return self._accelerator.device
+
     def _prepare_model_and_optimizer(self):
         """
         Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap the model in any wrappers necessary for training.
@@ -555,6 +565,9 @@ class Trainer:
             "max_num_train_steps": max_num_train_steps,
             "is_local_process_zero": self._accelerator.is_local_main_process,
             "is_world_process_zero": self._accelerator.is_main_process,
+            "is_distributed": True
+            if self._accelerator.distributed_type != DistributedType.NO
+            else False,
             "fp16": self._accelerator.use_fp16,
             "gradient_clip_value": gradient_clip_value,
         }

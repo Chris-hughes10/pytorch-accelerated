@@ -140,9 +140,9 @@ class MixupTrainer(Trainer):
     def train_epoch_start(self):
         super().train_epoch_start()
         self.num_updates = self.run_history.current_epoch * len(self._train_dataloader)
-        self.accuracy.to(self._eval_dataloader.device)
-        self.ema_accuracy.to(self._eval_dataloader.device)
-        self.ema_model.to(self._eval_dataloader.device)
+        # self.accuracy.to(self._eval_dataloader.device)
+        # self.ema_accuracy.to(self._eval_dataloader.device)
+        # self.ema_model.to(self._eval_dataloader.device)
 
     def calculate_train_batch_loss(self, batch):
         xb, yb = batch

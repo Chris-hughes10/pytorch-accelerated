@@ -14,53 +14,52 @@
 import argparse
 import os
 from functools import partial
+import inspect
 
+from accelerate import notebook_launcher
 from accelerate.utils import set_seed
 from torch import nn, optim
 from torch.optim import lr_scheduler
-from torchmetrics import ConfusionMatrix, Accuracy
+from torchmetrics import ConfusionMatrix, Accuracy, MetricCollection
 from torchvision import transforms, datasets, models
 
-from pytorch_accelerated.trainer import Trainer
+from pytorch_accelerated.callbacks import TrainerCallback
+from pytorch_accelerated.trainer import Trainer, DEFAULT_CALLBACKS
 
 
 class TrainerWithMetrics(Trainer):
     def __init__(self, num_classes, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.cm_metrics = ConfusionMatrix(num_classes=num_classes)
-        self.accuracy = Accuracy(num_classes=num_classes)
 
-    def _move_metrics_to_device(self):
-        self.cm_metrics.to(self._eval_dataloader.device)
-        self.accuracy.to(self._eval_dataloader.device)
-
-    def training_run_start(self):
-        self._move_metrics_to_device()
-
-    def evaluation_run_start(self):
-        self._move_metrics_to_device()
+        # this will be moved to the correct device automatically by the MoveModulesToDeviceCallback callback, which is used by default
+        self.metrics = MetricCollection(
+            {
+                "accuracy": Accuracy(num_classes=num_classes),
+                "confusion_matrix": ConfusionMatrix(num_classes=num_classes),
+            }
+        )
 
     def calculate_eval_batch_loss(self, batch):
         batch_output = super().calculate_eval_batch_loss(batch)
         preds = batch_output["model_outputs"].argmax(dim=-1)
 
-        self.cm_metrics.update(preds, batch[1])
-        self.accuracy.update(preds, batch[1])
+        self.metrics.update(preds, batch[1])
 
         return batch_output
 
     def eval_epoch_end(self):
+        metrics = self.metrics.compute()
+        self.run_history.update_metric("accuracy", metrics["accuracy"].cpu())
         self.run_history.update_metric(
-            "confusion_matrix", self.cm_metrics.compute().cpu()
+            "confusion matrix", metrics["confusion_matrix"].cpu()
         )
-        self.run_history.update_metric("accuracy", self.accuracy.compute().item())
 
-        self.cm_metrics.reset()
-        self.accuracy.reset()
+        self.metrics.reset()
 
 
-def main(data_dir):
-    set_seed(42)
+# def main(data_dir):
+def main():
+    data_dir = "/home/chris/notebooks/hymenoptera_data/"
 
     # Data augmentation and normalization for training
     # Just normalization for validation
@@ -118,7 +117,8 @@ def main(data_dir):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simple examples of training script.")
-    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
-    args = parser.parse_args()
-    main(args.data_dir)
+    # parser = argparse.ArgumentParser(description="Simple examples of training script.")
+    # parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
+    # args = parser.parse_args()
+    # main(args.data_dir)
+    notebook_launcher(main, num_processes=2)
