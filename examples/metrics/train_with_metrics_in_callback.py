@@ -14,7 +14,6 @@ import argparse
 import os
 from functools import partial
 
-from accelerate.utils import set_seed
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from torchmetrics import ConfusionMatrix, Accuracy, MetricCollection

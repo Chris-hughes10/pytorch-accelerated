@@ -17,7 +17,6 @@ from pathlib import Path
 import timm
 import torch
 import torch.nn.functional as F
-from accelerate import DistributedType
 from timm.data import resolve_data_config, Mixup, rand_augment_transform
 from timm.data.transforms import RandomResizedCropAndInterpolation
 from timm.models import create_model

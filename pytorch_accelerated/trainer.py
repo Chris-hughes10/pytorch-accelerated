@@ -52,8 +52,8 @@ class TrainerPlaceholderValues(Enum):
     These placeholders will be replaced by the trainer with the correct values during training.
     """
 
-    NUM_EPOCHS = 'trainer.run_config.num_epochs'
-    NUM_UPDATE_STEPS_PER_EPOCH = 'trainer.run_config.num_update_steps_per_epoch'
+    NUM_EPOCHS = "trainer.run_config.num_epochs"
+    NUM_UPDATE_STEPS_PER_EPOCH = "trainer.run_config.num_update_steps_per_epoch"
     TRAIN_DATALOADER_LEN = "len(trainer._train_dataloader)"
     EVAL_DATALOADER_LEN = "len(trainer._eval_dataloader)"
 

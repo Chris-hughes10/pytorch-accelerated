@@ -77,8 +77,7 @@ class TransformersTrainer(Trainer):
     def create_scheduler(self):
         return self.create_scheduler_fn(
             optimizer=self.optimizer,
-            num_training_steps=len(self._train_dataloader)
-            * self.run_config["num_epochs"],
+            num_training_steps=len(self._train_dataloader) * self.run_config.num_epochs,
         )
 
 

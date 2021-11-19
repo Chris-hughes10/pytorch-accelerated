@@ -1,5 +1,6 @@
 ########################################################################
-# This example trains a model on the MNIST Dataset
+# This example trains a model on the MNIST Dataset and demonstrates using
+# a custom callback event
 
 # Note: this example requires installing the torchvision package
 ########################################################################

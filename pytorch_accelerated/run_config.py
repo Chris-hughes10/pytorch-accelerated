@@ -26,6 +26,7 @@ class TrainerRunConfig:
 
 
     """
+
     num_epochs: int
     train_per_device_batch_size: int
     train_dl_kwargs: dict
@@ -41,4 +42,3 @@ class TrainerRunConfig:
     is_world_process_zero: bool
     is_distributed: bool
     using_fp16: bool
-
