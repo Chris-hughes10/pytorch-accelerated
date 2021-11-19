@@ -17,7 +17,7 @@ from functools import partial
 from accelerate.utils import set_seed
 from torch import nn, optim
 from torch.optim import lr_scheduler
-from torchmetrics import ConfusionMatrix, Accuracy
+from torchmetrics import ConfusionMatrix, Accuracy, MetricCollection
 from torchvision import transforms, datasets, models
 
 from pytorch_accelerated.callbacks import (
@@ -31,12 +31,15 @@ from pytorch_accelerated.trainer import Trainer
 
 class ClassificationMetricsCallback(TrainerCallback):
     def __init__(self, num_classes):
-        self.cm_metrics = ConfusionMatrix(num_classes=num_classes)
-        self.accuracy = Accuracy(num_classes=num_classes)
+        self.metrics = MetricCollection(
+            {
+                "accuracy": Accuracy(num_classes=num_classes),
+                "confusion_matrix": ConfusionMatrix(num_classes=num_classes),
+            }
+        )
 
     def _move_to_device(self, trainer):
-        self.cm_metrics.to(trainer._eval_dataloader.device)
-        self.accuracy.to(trainer._eval_dataloader.device)
+        self.metrics.to(trainer.device)
 
     def on_training_run_start(self, trainer, **kwargs):
         self._move_to_device(trainer)
@@ -46,17 +49,16 @@ class ClassificationMetricsCallback(TrainerCallback):
 
     def on_eval_step_end(self, trainer, batch, batch_output, **kwargs):
         preds = batch_output["model_outputs"].argmax(dim=-1)
-        self.cm_metrics.update(preds, batch[1])
-        self.accuracy.update(preds, batch[1])
+        self.metrics.update(preds, batch[1])
 
     def on_eval_epoch_end(self, trainer, **kwargs):
-        trainer.run_history.update_metric(
-            "confusion_matrix", self.cm_metrics.compute().cpu()
+        metrics = self.metrics.compute()
+        self.run_history.update_metric("accuracy", metrics["accuracy"].cpu())
+        self.run_history.update_metric(
+            "confusion matrix", metrics["confusion_matrix"].cpu()
         )
-        trainer.run_history.update_metric("accuracy", self.accuracy.compute().item())
 
-        self.cm_metrics.reset()
-        self.accuracy.reset()
+        self.metrics.reset()
 
 
 def main(data_dir):

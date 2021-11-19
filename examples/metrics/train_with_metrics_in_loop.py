@@ -11,27 +11,24 @@
 # Note, this example requires installing the torchmetrics package
 ########################################################################
 
-import argparse
 import os
 from functools import partial
-import inspect
 
 from accelerate import notebook_launcher
-from accelerate.utils import set_seed
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from torchmetrics import ConfusionMatrix, Accuracy, MetricCollection
 from torchvision import transforms, datasets, models
 
-from pytorch_accelerated.callbacks import TrainerCallback
-from pytorch_accelerated.trainer import Trainer, DEFAULT_CALLBACKS
+from pytorch_accelerated.trainer import Trainer
 
 
 class TrainerWithMetrics(Trainer):
     def __init__(self, num_classes, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # this will be moved to the correct device automatically by the MoveModulesToDeviceCallback callback, which is used by default
+        # this will be moved to the correct device automatically by the MoveModulesToDeviceCallback callback,
+        # which is used by default
         self.metrics = MetricCollection(
             {
                 "accuracy": Accuracy(num_classes=num_classes),

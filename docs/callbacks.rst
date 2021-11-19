@@ -47,6 +47,10 @@ Implemented Callbacks
 
     .. automethod:: __init__
 
+.. autoclass:: MoveModulesToDeviceCallback
+    :show-inheritance:
+
+
 Creating New Callbacks
 ========================
 
@@ -92,33 +96,35 @@ Here is an example of how we can define a callback and use the :class:`~pytorch_
 computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/pages/overview.html>`_::
 
     class ClassificationMetricsCallback(TrainerCallback):
-    def __init__(self, num_classes):
-        self.cm_metrics = ConfusionMatrix(num_classes=num_classes)
-        self.accuracy = Accuracy(num_classes=num_classes)
+        def __init__(self, num_classes):
+            self.metrics = MetricCollection(
+                {
+                    "accuracy": Accuracy(num_classes=num_classes),
+                    "confusion_matrix": ConfusionMatrix(num_classes=num_classes),
+                }
+            )
 
-    def _move_to_device(self, trainer):
-        self.cm_metrics.to(trainer._eval_dataloader.device)
-        self.accuracy.to(trainer._eval_dataloader.device)
+        def _move_to_device(self, trainer):
+            self.metrics.to(trainer.device)
 
-    def on_training_run_start(self, trainer, **kwargs):
-        self._move_to_device(trainer)
+        def on_training_run_start(self, trainer, **kwargs):
+            self._move_to_device(trainer)
 
-    def on_evaluation_run_start(self, trainer, **kwargs):
-        self._move_to_device(trainer)
+        def on_evaluation_run_start(self, trainer, **kwargs):
+            self._move_to_device(trainer)
 
-    def on_eval_step_end(self, trainer, batch, batch_output, **kwargs):
-        preds = batch_output["model_outputs"].argmax(dim=-1)
-        self.cm_metrics.update(preds, batch[1])
-        self.accuracy.update(preds, batch[1])
+        def on_eval_step_end(self, trainer, batch, batch_output, **kwargs):
+            preds = batch_output["model_outputs"].argmax(dim=-1)
+            self.metrics.update(preds, batch[1])
 
-    def on_eval_epoch_end(self, trainer, **kwargs):
-        trainer.run_history.update_metric(
-            "confusion_matrix", self.cm_metrics.compute().cpu()
-        )
-        trainer.run_history.update_metric("accuracy", self.accuracy.compute().item())
+        def on_eval_epoch_end(self, trainer, **kwargs):
+            metrics = self.metrics.compute()
+            self.run_history.update_metric("accuracy", metrics["accuracy"].cpu())
+            self.run_history.update_metric(
+                "confusion matrix", metrics["confusion_matrix"].cpu()
+            )
 
-        self.cm_metrics.reset()
-        self.accuracy.reset()
+            self.metrics.reset()
 
 .. Note::
     If you feel that it would be clearer to compute metrics as part of the training loop, this could also be done by

@@ -111,6 +111,7 @@ class Trainer:
         :param run_history: an instance of a RunHistory subclass to track training runs. If this is not provided, a new one will be created.
 
         The callbacks that are used by default are (
+        :class:`~pytorch_accelerated.callbacks.MoveModulesToDeviceCallback`,
         :class:`~pytorch_accelerated.callbacks.TerminateOnNaNCallback`,
         :class:`~pytorch_accelerated.callbacks.PrintProgressCallback`,
         :class:`~pytorch_accelerated.callbacks.ProgressBarCallback`,

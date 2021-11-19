@@ -188,28 +188,32 @@ computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/page
     class TrainerWithMetrics(Trainer):
         def __init__(self, num_classes, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.accuracy = Accuracy(num_classes=num_classes)
 
-        def _move_metrics_to_device(self):
-            self.accuracy.to(self._eval_dataloader.device)
-
-        def training_run_start(self):
-            self._move_metrics_to_device()
-
-        def evaluation_run_start(self):
-            self._move_metrics_to_device()
+            # this will be moved to the correct device automatically by the MoveModulesToDeviceCallback callback,
+            # which is used by default
+            self.metrics = MetricCollection(
+                {
+                    "accuracy": Accuracy(num_classes=num_classes),
+                    "confusion_matrix": ConfusionMatrix(num_classes=num_classes),
+                }
+            )
 
         def calculate_eval_batch_loss(self, batch):
             batch_output = super().calculate_eval_batch_loss(batch)
-
             preds = batch_output["model_outputs"].argmax(dim=-1)
-            self.accuracy.update(preds, batch[1])
+
+            self.metrics.update(preds, batch[1])
 
             return batch_output
 
         def eval_epoch_end(self):
-            self.run_history.update_metric("accuracy", self.accuracy.compute().item())
-            self.accuracy.reset()
+            metrics = self.metrics.compute()
+            self.run_history.update_metric("accuracy", metrics["accuracy"].cpu())
+            self.run_history.update_metric(
+                "confusion matrix", metrics["confusion_matrix"].cpu()
+            )
+
+            self.metrics.reset()
 
 
 .. Note::
