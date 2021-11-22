@@ -55,7 +55,7 @@ Who should not use pytorch-accelerated?
 
 - If you are looking for an end-to-end solution, encompassing everything from loading data to inference,
   which helps you to select a model, optimizer or loss function, you would probably be better suited to
-  `fastai <https://github.com/fastai/fastai>`_. `pytorch\-accelerate` focuses only on the training process, with all other
+  `fastai <https://github.com/fastai/fastai>`_. `pytorch\-accelerated` focuses only on the training process, with all other
   concerns being left to the responsibility of the user.
 
 - If you would like to write the entire training loop yourself, just without all of the device management headaches,
