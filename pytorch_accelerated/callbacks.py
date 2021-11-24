@@ -1,4 +1,5 @@
 # Copyright © 2021 Chris Hughes
+import inspect
 import logging
 import sys
 import time
@@ -6,6 +7,7 @@ from abc import ABC
 
 import numpy as np
 import torch
+from torch import nn
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -158,7 +160,7 @@ class CallbackHandler:
         """
         cb = callback() if isinstance(callback, type) else callback
         cb_class = callback if isinstance(callback, type) else callback.__class__
-        if cb_class in [c.__class__ for c in self.callbacks]:
+        if cb_class in {c.__class__ for c in self.callbacks}:
             raise ValueError(
                 f"You attempted to add multiple instances of the callback {cb_class} to a single Trainer"
                 f" The list of callbacks already present is\n: {self.callback_list}"
@@ -423,3 +425,31 @@ class TerminateOnNaNCallback(TrainerCallback):
     def on_training_run_end(self, trainer, **kwargs):
         if self.triggered:
             sys.exit("Exiting due to NaN loss")
+
+
+class MoveModulesToDeviceCallback(TrainerCallback):
+    """
+    A callback which moves any :class:`~pytorch_accelerated.trainer.Trainer` attributes which are instances of
+    :class:`torch.nn.Module` on to the appropriate device at the start of a training or evaluation run.
+
+    .. Note::
+        This does **not** include the model, as this will be prepared separately by the
+        :class:`~pytorch_accelerated.trainer.Trainer`'s internal instance of :class:`accelerate.Accelerator`.
+
+    """
+
+    def _get_modules(self, trainer):
+        return inspect.getmembers(trainer, lambda x: isinstance(x, nn.Module))
+
+    def _move_modules_to_device(self, trainer):
+        modules = self._get_modules(trainer)
+
+        for module_name, module in modules:
+            if module_name != "model":
+                module.to(trainer.device)
+
+    def on_training_run_start(self, trainer, **kwargs):
+        self._move_modules_to_device(trainer)
+
+    def on_evaluation_run_start(self, trainer, **kwargs):
+        self._move_modules_to_device(trainer)

@@ -1,3 +1,4 @@
+# Copyright © 2021 Chris Hughes
 ########################################################################
 # This example trains a model on the MNIST Dataset
 
@@ -11,7 +12,7 @@ from torch.utils.data import random_split
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
-from pytorch_accelerated.trainer import Trainer
+from pytorch_accelerated import Trainer
 
 
 class MNISTModel(nn.Module):
@@ -25,8 +26,8 @@ class MNISTModel(nn.Module):
             nn.Linear(in_features=64, out_features=10),
         )
 
-    def forward(self, input):
-        return self.main(input.view(input.shape[0], -1))
+    def forward(self, x):
+        return self.main(x.view(x.shape[0], -1))
 
 
 def main():
@@ -49,14 +50,11 @@ def main():
         eval_dataset=validation_dataset,
         num_epochs=2,
         per_device_batch_size=32,
-        train_dataloader_kwargs={"num_workers": 0},
-        eval_dataloader_kwargs={"num_workers": 0},
     )
 
     trainer.evaluate(
         dataset=test_dataset,
         per_device_batch_size=64,
-        dataloader_kwargs={"num_workers": 0},
     )
 
 

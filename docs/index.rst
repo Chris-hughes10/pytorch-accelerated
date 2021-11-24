@@ -24,7 +24,7 @@ Key features
 ===============
 
 - A simple and contained, but easily customisable, training loop, which should work out of the box in straightforward cases\; behaviour can be customised using inheritance and\/or callbacks.
-- Handles device placement, mixed-precision, multi GPU and distributed training with no code changes.
+- Handles device placement, mixed-precision, DeepSpeed integration, multi-GPU and distributed training with no code changes.
 - Uses pure PyTorch components, with no additional modifications or wrappers, and easily interoperates with other popular libraries such as `timm`_, `transformers`_ and `torchmetrics`_.
 - A small, streamlined API ensures that there is a minimal learning curve for existing PyTorch users.
 
@@ -55,7 +55,7 @@ Who should not use pytorch-accelerated?
 
 - If you are looking for an end-to-end solution, encompassing everything from loading data to inference,
   which helps you to select a model, optimizer or loss function, you would probably be better suited to
-  `fastai <https://github.com/fastai/fastai>`_. `pytorch\-accelerate` focuses only on the training process, with all other
+  `fastai <https://github.com/fastai/fastai>`_. `pytorch\-accelerated` focuses only on the training process, with all other
   concerns being left to the responsibility of the user.
 
 - If you would like to write the entire training loop yourself, just without all of the device management headaches,
@@ -97,6 +97,7 @@ these cases are clearly marked, with acknowledgement being given to the original
    trainer
    callbacks
    tracking
+   run_config
 
 
 Indices and tables
