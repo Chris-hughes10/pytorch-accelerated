@@ -24,7 +24,7 @@ Key features
 ===============
 
 - A simple and contained, but easily customisable, training loop, which should work out of the box in straightforward cases\; behaviour can be customised using inheritance and\/or callbacks.
-- Handles device placement, mixed-precision, multi GPU and distributed training with no code changes.
+- Handles device placement, mixed-precision, DeepSpeed integration, multi-GPU and distributed training with no code changes.
 - Uses pure PyTorch components, with no additional modifications or wrappers, and easily interoperates with other popular libraries such as `timm`_, `transformers`_ and `torchmetrics`_.
 - A small, streamlined API ensures that there is a minimal learning curve for existing PyTorch users.
 

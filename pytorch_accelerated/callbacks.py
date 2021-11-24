@@ -160,7 +160,7 @@ class CallbackHandler:
         """
         cb = callback() if isinstance(callback, type) else callback
         cb_class = callback if isinstance(callback, type) else callback.__class__
-        if cb_class in [c.__class__ for c in self.callbacks]:
+        if cb_class in {c.__class__ for c in self.callbacks}:
             raise ValueError(
                 f"You attempted to add multiple instances of the callback {cb_class} to a single Trainer"
                 f" The list of callbacks already present is\n: {self.callback_list}"

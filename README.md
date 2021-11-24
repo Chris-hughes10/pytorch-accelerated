@@ -11,7 +11,7 @@ to enable users to understand exactly what is going on under the hood, but witho
 The key features are:
 - A simple and contained, but easily customisable, training loop, which should work out of the box in straightforward cases;
  behaviour can be customised using inheritance and/or callbacks.
-- Handles device placement, mixed-precision, multi GPU and distributed training with no code changes.
+- Handles device placement, mixed-precision, DeepSpeed integration, multi-GPU and distributed training with no code changes.
 - Uses pure PyTorch components, with no additional modifications or wrappers, and easily interoperates
  with other popular libraries such as [timm](https://github.com/rwightman/pytorch-image-models), 
  [transformers](https://huggingface.co/transformers/) and [torchmetrics](https://torchmetrics.readthedocs.io/en/latest/).
@@ -124,7 +124,7 @@ to focus on the interesting parts of the training loop.
 - Users who like, and are comfortable with, selecting and creating their own models, loss functions, optimizers and datasets.
 - Users who value a simple and streamlined feature set, where the behaviour is easy to debug, understand, and reason about!
 
-### Who should not use pytorch-accelerated?
+### When shouldn't I use pytorch-accelerated?
 
 - If you are looking for an end-to-end solution, encompassing everything from loading data to inference,
   which helps you to select a model, optimizer or loss function, you would probably be better suited to

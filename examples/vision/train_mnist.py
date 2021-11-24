@@ -11,7 +11,7 @@ from torch.utils.data import random_split
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
-from pytorch_accelerated.trainer import Trainer
+from pytorch_accelerated import Trainer
 
 
 class MNISTModel(nn.Module):
@@ -25,8 +25,8 @@ class MNISTModel(nn.Module):
             nn.Linear(in_features=64, out_features=10),
         )
 
-    def forward(self, input):
-        return self.main(input.view(input.shape[0], -1))
+    def forward(self, x):
+        return self.main(x.view(x.shape[0], -1))
 
 
 def main():
