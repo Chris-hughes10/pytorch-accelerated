@@ -1,3 +1,4 @@
+# Copyright © 2021 Chris Hughes
 from dataclasses import dataclass
 from numbers import Number
 from typing import Union

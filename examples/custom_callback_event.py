@@ -1,3 +1,4 @@
+# Copyright © 2021 Chris Hughes
 ########################################################################
 # This example trains a model on the MNIST Dataset and demonstrates using
 # a custom callback event

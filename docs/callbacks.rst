@@ -95,6 +95,8 @@ training and evaluation. To track additional metrics, we can extend this behavio
 Here is an example of how we can define a callback and use the :class:`~pytorch_accelerated.tracking.RunHistory` to track metrics
 computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/pages/overview.html>`_::
 
+    from torchmetrics import MetricCollection, Accuracy, Precision, Recall
+
     class ClassificationMetricsCallback(TrainerCallback):
         def __init__(self, num_classes):
             self.metrics = MetricCollection(

@@ -182,7 +182,7 @@ The API for :class:`~pytorch_accelerated.tracking.RunHistory` is detailed at :re
 Here is an example of how we can subclass the :class:`~trainer.Trainer` and use the :class:`~pytorch_accelerated.tracking.RunHistory` to track metrics
 computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/pages/overview.html>`_::
 
-    from torchmetrics import Accuracy, Precision, Recall
+    from torchmetrics import MetricCollection, Accuracy, Precision, Recall
     from pytorch_accelerated import Trainer
 
     class TrainerWithMetrics(Trainer):
