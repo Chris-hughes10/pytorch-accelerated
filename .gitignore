@@ -141,7 +141,7 @@ dmypy.json
 cython_debug/
 *.gz
 
-/examples/vision/MNIST/*
+/examples/MNIST/*
 examples/MNIST/raw/t10k-images-idx3-ubyte
 examples/MNIST/raw/t10k-labels-idx1-ubyte
 examples/MNIST/raw/train-images-idx3-ubyte
