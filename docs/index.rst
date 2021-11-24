@@ -50,7 +50,7 @@ Who is pytorch-accelerated aimed at?
 - Users who like, and are comfortable with, selecting and creating their own models, loss functions, optimizers and datasets.
 - Users who value a simple and streamlined feature set, where the behaviour is easy to debug, understand, and reason about!
 
-Who should not use pytorch-accelerated?
+Why shouldn't I use pytorch-accelerated?
 ---------------------------------------------
 
 - If you are looking for an end-to-end solution, encompassing everything from loading data to inference,
