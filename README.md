@@ -50,7 +50,7 @@ and then launch training using the
 described below.
 
 ```python
-# examples/vision/train_mnist.py
+# examples/train_mnist.py
 import os
 
 from torch import nn, optim

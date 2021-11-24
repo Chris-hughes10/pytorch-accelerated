@@ -182,19 +182,20 @@ The API for :class:`~pytorch_accelerated.tracking.RunHistory` is detailed at :re
 Here is an example of how we can subclass the :class:`~trainer.Trainer` and use the :class:`~pytorch_accelerated.tracking.RunHistory` to track metrics
 computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/pages/overview.html>`_::
 
-    from torchmetrics import Accuracy
+    from torchmetrics import Accuracy, Precision, Recall
     from pytorch_accelerated import Trainer
 
     class TrainerWithMetrics(Trainer):
         def __init__(self, num_classes, *args, **kwargs):
             super().__init__(*args, **kwargs)
 
-            # this will be moved to the correct device automatically by the MoveModulesToDeviceCallback callback,
-            # which is used by default
+            # this will be moved to the correct device automatically by the
+            # MoveModulesToDeviceCallback callback, which is used by default
             self.metrics = MetricCollection(
                 {
                     "accuracy": Accuracy(num_classes=num_classes),
-                    "confusion_matrix": ConfusionMatrix(num_classes=num_classes),
+                    "precision": Precision(num_classes=num_classes),
+                    "recall": Recall(num_classes=num_classes),
                 }
             )
 
@@ -209,9 +210,8 @@ computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/page
         def eval_epoch_end(self):
             metrics = self.metrics.compute()
             self.run_history.update_metric("accuracy", metrics["accuracy"].cpu())
-            self.run_history.update_metric(
-                "confusion matrix", metrics["confusion_matrix"].cpu()
-            )
+            self.run_history.update_metric("precision", metrics["precision"].cpu())
+            self.run_history.update_metric("recall", metrics["recall"].cpu())
 
             self.metrics.reset()
 

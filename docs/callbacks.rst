@@ -100,7 +100,8 @@ computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/page
             self.metrics = MetricCollection(
                 {
                     "accuracy": Accuracy(num_classes=num_classes),
-                    "confusion_matrix": ConfusionMatrix(num_classes=num_classes),
+                    "precision": Precision(num_classes=num_classes),
+                    "recall": Recall(num_classes=num_classes),
                 }
             )
 
@@ -119,10 +120,9 @@ computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/page
 
         def on_eval_epoch_end(self, trainer, **kwargs):
             metrics = self.metrics.compute()
-            self.run_history.update_metric("accuracy", metrics["accuracy"].cpu())
-            self.run_history.update_metric(
-                "confusion matrix", metrics["confusion_matrix"].cpu()
-            )
+            trainer.run_history.update_metric("accuracy", metrics["accuracy"].cpu())
+            trainer.run_history.update_metric("precision", metrics["precision"].cpu())
+            trainer.run_history.update_metric("recall", metrics["recall"].cpu())
 
             self.metrics.reset()
 
