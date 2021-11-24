@@ -49,14 +49,11 @@ def main():
         eval_dataset=validation_dataset,
         num_epochs=2,
         per_device_batch_size=32,
-        train_dataloader_kwargs={"num_workers": 0},
-        eval_dataloader_kwargs={"num_workers": 0},
     )
 
     trainer.evaluate(
         dataset=test_dataset,
         per_device_batch_size=64,
-        dataloader_kwargs={"num_workers": 0},
     )
 
 
