@@ -243,7 +243,7 @@ class Trainer:
         return {
             "loss": loss,
             "model_outputs": model_outputs,
-            "batch_size": xb.size(0),
+            "batch_size": xb.size(0), # use yb?
         }
 
     def backward_step(self, loss):
@@ -305,7 +305,7 @@ class Trainer:
         return {
             "loss": val_loss,
             "model_outputs": model_outputs,
-            "batch_size": xb.size(0),
+            "batch_size": xb.size(0), # use yb?
         }
 
     def eval_epoch_end(self):
