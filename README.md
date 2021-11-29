@@ -76,24 +76,33 @@ class MNISTModel(nn.Module):
     def forward(self, input):
         return self.main(input.view(input.shape[0], -1))
 
-dataset = MNIST(os.getcwd(), download=True, transform=transforms.ToTensor())
-train_dataset, validation_dataset = random_split(dataset, [55000, 5000])
-model = MNISTModel()
-optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-loss_func = nn.CrossEntropyLoss()
+def main():
+    dataset = MNIST(os.getcwd(), download=True, transform=transforms.ToTensor())
+    train_dataset, validation_dataset, test_dataset = random_split(dataset, [50000, 5000, 5000])
+    model = MNISTModel()
+    optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    loss_func = nn.CrossEntropyLoss()
 
-trainer = Trainer(
-        model,
-        loss_func=loss_func,
-        optimizer=optimizer,
+    trainer = Trainer(
+            model,
+            loss_func=loss_func,
+            optimizer=optimizer,
     )
 
-trainer.train(
+    trainer.train(
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
         num_epochs=8,
         per_device_batch_size=32,
     )
+
+    trainer.evaluate(
+        dataset=test_dataset,
+        per_device_batch_size=64,
+    )
+    
+if __name__ == "__main__":
+    main()
 ```
 
 To launch training using the [accelerate CLI](https://huggingface.co/docs/accelerate/quicktour.html#launching-your-distributed-script)
