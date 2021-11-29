@@ -41,6 +41,8 @@ training, users are encouraged to consult the `Accelerate documentation <https:/
 to understand all available options; Accelerate provides convenient functions for operations such gathering tensors,
 usage of which can be seen in the `pytorch\-accelerated` `examples`_ folder!
 
+To learn more about the motivatons behind this library, along with a detailed getting started guide, check out `this blog post <https://medium.com/@chris.p.hughes10/introducing-pytorch-accelerated-6ba99530608c?source=friends_link&sk=868c2d2ec5229fdea42877c0bf82b968>`_.
+
 
 Who is pytorch-accelerated aimed at?
 ------------------------------------------
