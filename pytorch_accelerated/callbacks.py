@@ -393,22 +393,23 @@ class EarlyStoppingCallback(TrainerCallback):
                 )
                 self.best_metric = current_metric
                 self.early_stopping_patience_counter = 0
-                trainer.print(
-                    f"Early stopping counter: {self.early_stopping_patience_counter}"
-                )
+                self.__print_counter_status(trainer)
             else:
                 trainer.print(
                     "No improvement above threshold observed, incrementing counter. "
                 )
                 self.early_stopping_patience_counter += 1
-                trainer.print(
-                    f"Early stopping counter: {self.early_stopping_patience_counter}/{self.early_stopping_patience}"
-                )
+                self.__print_counter_status(trainer)
 
         if self.early_stopping_patience_counter >= self.early_stopping_patience:
             raise StopTrainingError(
                 f"Stopping training due to no improvement after {self.early_stopping_patience} epochs"
             )
+
+    def __print_counter_status(self, trainer):
+        trainer.print(
+            f"Early stopping counter: {self.early_stopping_patience_counter}/{self.early_stopping_patience}"
+        )
 
 
 class TerminateOnNaNCallback(TrainerCallback):
