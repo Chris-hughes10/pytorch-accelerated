@@ -284,5 +284,5 @@ Similarly, the execution of an evaluation run can be depicted as::
     on_evaluation_run_end()
 
 
-The best way to understand how the :class:`Trainer` works internally is by examining the source code for the :meth:`~trainer.Trainer.train` method;
+The best way to understand how the :class:`Trainer` works internally is by examining the source code for the :meth:`~Trainer.train` method;
 significant care has gone into making the internal methods as clean and clear as possible.
