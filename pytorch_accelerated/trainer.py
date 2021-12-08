@@ -740,7 +740,7 @@ class Trainer:
 
     def save_checkpoint(self, save_path, checkpoint_kwargs=None, save_optimizer=True):
         """
-        Save the model, optimizer and specified args as a checkpoint file.
+        Save the model, optimizer and specified args as a checkpoint file. This is done once per machine.
 
         :param save_path: the path where to save the checkpoint, this should end in '.pt'
         :param checkpoint_kwargs: additional objects to include in the checkpoint
