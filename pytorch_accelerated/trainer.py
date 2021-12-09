@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 from pytorch_accelerated.callbacks import (
     CallbackHandler,
-    PrintMetricsCallback,
+    LogMetricsCallback,
     PrintProgressCallback,
     TerminateOnNaNCallback,
     StopTrainingError,
@@ -27,7 +27,7 @@ DEFAULT_CALLBACKS = (
     TerminateOnNaNCallback,
     PrintProgressCallback,
     ProgressBarCallback,
-    PrintMetricsCallback,
+    LogMetricsCallback,
 )
 
 
@@ -129,7 +129,7 @@ class Trainer:
         self.run_history: RunHistory = (
             run_history if run_history is not None else InMemoryRunHistory()
         )
-        self._accelerator = Accelerator()
+        self._accelerator = self._create_accelerator()
         self._loss_tracker = LossTracker()
         # placeholders which will be set during training
         self.create_scheduler_fn = None
@@ -144,6 +144,13 @@ class Trainer:
         self.run_config: TrainerRunConfig = None
 
         self.callback_handler.call_event("on_init_end", self)
+
+    def _create_accelerator(self):
+        """
+        Create an instance of :class:`accelerate.Accelerator` which will be used to manage training.
+        :return:
+        """
+        return Accelerator()
 
     def create_train_dataloader(
         self, batch_size: int, train_dl_kwargs: dict = None
@@ -382,8 +389,6 @@ class Trainer:
         if reset_run_history:
             self.run_history.reset()
 
-        self._prepare_model_and_optimizer()
-
         self._train_dataloader = self.create_train_dataloader(
             batch_size=per_device_batch_size, train_dl_kwargs=train_dataloader_kwargs
         )
@@ -393,7 +398,7 @@ class Trainer:
                 batch_size=per_device_batch_size, eval_dl_kwargs=eval_dataloader_kwargs
             )
 
-        self._prepare_dataloaders()
+        self._prepare_model_and_dataloaders_for_training()
 
         self.run_config = self._create_run_config(
             num_epochs=num_epochs,
@@ -430,14 +435,12 @@ class Trainer:
 
         self.run_history.reset()
 
-        self._prepare_model_and_optimizer()
-
         self._train_dataloader = None
         self._eval_dataloader = self.create_eval_dataloader(
             batch_size=per_device_batch_size, eval_dl_kwargs=dataloader_kwargs
         )
 
-        self._prepare_dataloaders()
+        self._prepare_model_and_dataloaders_for_training()
 
         self._run_evaluation()
 
@@ -487,28 +490,35 @@ class Trainer:
         """
         return self._accelerator.device
 
-    def _prepare_model_and_optimizer(self):
+    def _prepare_model_and_dataloaders_for_training(self):
         """
-        Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap the model in any wrappers necessary for training.
+        Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap the model, optimizer and dataloaders in any wrappers necessary for training.
         (e.g. :class:`torch.nn.parallel.DistributedDataParallel`) and ensures the parameters are placed on the appropriate device.
+         By default, this will convert each dataloader to an instance of :class:`accelerate.data_loader.DataLoaderShard`.
+
+         .. Note:: This may change the length of the dataloaders, so this should be called *before* the number of update steps per epoch is calculated, i.e. to initialise a learning rate scheduler
         """
         self._accelerator.free_memory()
-        (self.model, self.optimizer,) = self._accelerator.prepare(
-            self.model,
-            self.optimizer,
-        )
+        components = [self.model, self.optimizer]
 
-    def _prepare_dataloaders(self):
-        """
-        Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap prepare the dataloaders for training.
-        By default, this will convert each dataloader to an instance of :class:`accelerate.data_loader.DataLoaderShard`.
-
-        .. Note:: This may change the length of the dataloaders, so this should be called *before* the number of update steps per epoch is calculated, i.e. to initialise a learning rate scheduler
-        """
         if self._train_dataloader is not None:
-            self._train_dataloader = self._accelerator.prepare(self._train_dataloader)
+            components.append(self._train_dataloader)
+
         if self._eval_dataloader is not None:
-            self._eval_dataloader = self._accelerator.prepare(self._eval_dataloader)
+            components.append(self._eval_dataloader)
+
+        prepared_components = self._accelerator.prepare(*components)
+
+        self.model = prepared_components[0]
+        self.optimizer = prepared_components[1]
+
+        if self._train_dataloader is not None:
+            self._train_dataloader = prepared_components[2]
+            if self._eval_dataloader is not None:
+                self._eval_dataloader = prepared_components[3]
+
+        elif self._eval_dataloader is not None:
+            self._eval_dataloader = prepared_components[2]
 
     def _create_run_config(
         self,
@@ -738,13 +748,16 @@ class Trainer:
         else:
             print(*args, **kwargs)
 
-    def save_checkpoint(self, save_path, checkpoint_kwargs=None, save_optimizer=True):
+    def save_checkpoint(
+        self, save_path, checkpoint_kwargs=None, save_optimizer=True, save_per_node=True
+    ):
         """
-        Save the model, optimizer and specified args as a checkpoint file. This is done once per machine.
+        Save the model, optimizer and specified args as a checkpoint file.
 
         :param save_path: the path where to save the checkpoint, this should end in '.pt'
         :param checkpoint_kwargs: additional objects to include in the checkpoint
         :param save_optimizer: flag to indicate whether to include the optimizer in the checkpoint
+        :param save_per_node: flag to indicate whether to save the checkpoint once per machine, if False, the checkpoint will only be saved from the world process zero
         """
         # TODO: add save method for run history?
 
@@ -760,10 +773,19 @@ class Trainer:
 
         self._accelerator.wait_for_everyone()
 
-        self._accelerator.save(
-            checkpoint,
-            save_path,
-        )
+        if save_per_node:
+
+            self._accelerator.save(
+                checkpoint,
+                save_path,
+            )
+        else:
+
+            if self.run_config.is_world_process_zero:
+                self._accelerator.save(
+                    checkpoint,
+                    save_path,
+                )
 
     def load_checkpoint(self, checkpoint_path):
         """
