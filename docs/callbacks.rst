@@ -28,7 +28,7 @@ Implemented Callbacks
 .. autoclass:: TerminateOnNaNCallback
     :show-inheritance:
 
-.. autoclass:: PrintMetricsCallback
+.. autoclass:: LogMetricsCallback
     :show-inheritance:
 
 .. autoclass:: PrintProgressCallback

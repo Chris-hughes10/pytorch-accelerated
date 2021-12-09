@@ -19,13 +19,14 @@ from torchvision import transforms, datasets
 
 from pytorch_accelerated.callbacks import (
     TerminateOnNaNCallback,
-    PrintMetricsCallback,
+    LogMetricsCallback,
     PrintProgressCallback,
     EarlyStoppingCallback,
     SaveBestModelCallback,
     TrainerCallback,
     ProgressBarCallback,
 )
+
 from pytorch_accelerated.trainer import Trainer, TrainerPlaceholderValues
 
 
@@ -90,7 +91,7 @@ def main(data_dir):
             AccuracyCallback(num_classes=num_classes),
             PrintProgressCallback,
             ProgressBarCallback,
-            PrintMetricsCallback,
+            LogMetricsCallback,
             EarlyStoppingCallback(early_stopping_patience=2),
             SaveBestModelCallback(watch_metric="accuracy", greater_is_better=True),
         ),
@@ -121,7 +122,7 @@ def main(data_dir):
         }
 
         # Here we use placeholders for the number of epochs and number of steps per epoch, so that the
-        # trainer can inject those values later. This is key especially key for the number of update steps
+        # trainer can inject those values later. This is especially key for the number of update steps
         # which will change depending on whether training is distributed or not
         lr_scheduler = partial(
             OneCycleLR,

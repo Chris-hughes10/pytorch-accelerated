@@ -19,7 +19,7 @@ from pytorch_accelerated.callbacks import (
     TerminateOnNaNCallback,
     PrintProgressCallback,
     ProgressBarCallback,
-    PrintMetricsCallback,
+    LogMetricsCallback,
 )
 from pytorch_accelerated.trainer import Trainer
 
@@ -73,7 +73,7 @@ def main():
             TerminateOnNaNCallback,
             PrintProgressCallback,
             ProgressBarCallback,
-            PrintMetricsCallback,
+            LogMetricsCallback,
         ),
     )
 

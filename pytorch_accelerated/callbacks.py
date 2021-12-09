@@ -196,16 +196,16 @@ class CallbackHandler:
                 continue
 
 
-class PrintMetricsCallback(TrainerCallback):
+class LogMetricsCallback(TrainerCallback):
     """
-    A callback that prints the latest values of any metric which has been updated in
-    the trainer's run history.
+    A callback that logs the latest values of any metric which has been updated in
+    the trainer's run history. By default, this just prints to the command line.
 
-    Metrics prefixed with 'train' are printed at the end of a training epoch, all other
-    metrics are printed after evaluation.
+    Metrics prefixed with 'train' are logged at the end of a training epoch, all other
+    metrics are logged after evaluation.
     """
 
-    def _print_metrics(self, trainer, metric_names):
+    def log_metrics(self, trainer, metric_names):
         for metric_name in metric_names:
             trainer.print(
                 f"\n{metric_name}: {trainer.run_history.get_latest_metric(metric_name)}"
@@ -218,7 +218,7 @@ class PrintMetricsCallback(TrainerCallback):
             if "train" in metric
         ]
 
-        self._print_metrics(trainer, metric_names)
+        self.log_metrics(trainer, metric_names)
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         metric_names = [
@@ -226,7 +226,7 @@ class PrintMetricsCallback(TrainerCallback):
             for metric in trainer.run_history.get_metric_names()
             if "train" not in metric
         ]
-        self._print_metrics(trainer, metric_names)
+        self.log_metrics(trainer, metric_names)
 
 
 class ProgressBarCallback(TrainerCallback):

@@ -36,7 +36,7 @@ from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
 
 from pytorch_accelerated.callbacks import (
     TerminateOnNaNCallback,
-    PrintMetricsCallback,
+    LogMetricsCallback,
     PrintProgressCallback,
     ProgressBarCallback,
 )
@@ -200,7 +200,7 @@ def training_function(data_dir, config):
             TerminateOnNaNCallback,
             PrintProgressCallback,
             ProgressBarCallback,
-            PrintMetricsCallback,
+            LogMetricsCallback,
         ),
     )
 
