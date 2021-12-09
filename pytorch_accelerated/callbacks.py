@@ -205,12 +205,6 @@ class LogMetricsCallback(TrainerCallback):
     metrics are logged after evaluation.
     """
 
-    def log_metrics(self, trainer, metric_names):
-        for metric_name in metric_names:
-            trainer.print(
-                f"\n{metric_name}: {trainer.run_history.get_latest_metric(metric_name)}"
-            )
-
     def on_train_epoch_end(self, trainer, **kwargs):
         metric_names = [
             metric
@@ -218,7 +212,7 @@ class LogMetricsCallback(TrainerCallback):
             if "train" in metric
         ]
 
-        self.log_metrics(trainer, metric_names)
+        self._log_latest_metrics(trainer, metric_names)
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         metric_names = [
@@ -226,7 +220,21 @@ class LogMetricsCallback(TrainerCallback):
             for metric in trainer.run_history.get_metric_names()
             if "train" not in metric
         ]
-        self.log_metrics(trainer, metric_names)
+        self._log_latest_metrics(trainer, metric_names)
+
+    def _log_latest_metrics(self, trainer, metric_names):
+        latest_metrics = self._get_latest_metrics(trainer, metric_names)
+        self.log_metrics(trainer, latest_metrics)
+
+    def _get_latest_metrics(self, trainer, metric_names):
+        return {
+            metric_name: trainer.run_history.get_latest_metric(metric_name)
+            for metric_name in metric_names
+        }
+
+    def log_metrics(self, trainer, metrics):
+        for metric_name, metric_value in metrics.items():
+            trainer.print(f"\n{metric_name}: {metric_value}")
 
 
 class ProgressBarCallback(TrainerCallback):

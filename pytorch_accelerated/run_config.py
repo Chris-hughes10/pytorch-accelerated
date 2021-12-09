@@ -43,6 +43,6 @@ class TrainerRunConfig:
     is_world_process_zero: bool
     is_distributed: bool
     using_fp16: bool
-    
+
     def to_dict(self):
         return asdict(self)
