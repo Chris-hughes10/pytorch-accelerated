@@ -133,7 +133,7 @@ Internal Setup
 ++++++++++++++++++
 
 .. automethod:: Trainer._create_accelerator
-.. automethod:: Trainer._prepare_model_and_dataloaders_for_training
+.. automethod:: Trainer._prepare_model_optimizer_and_dataloaders
 .. automethod:: Trainer._create_run_config
 
 Training run behaviour

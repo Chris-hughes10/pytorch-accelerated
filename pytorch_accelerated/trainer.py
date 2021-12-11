@@ -398,7 +398,7 @@ class Trainer:
                 batch_size=per_device_batch_size, eval_dl_kwargs=eval_dataloader_kwargs
             )
 
-        self._prepare_model_and_dataloaders_for_training()
+        self._prepare_model_optimizer_and_dataloaders()
 
         self.run_config = self._create_run_config(
             num_epochs=num_epochs,
@@ -440,7 +440,7 @@ class Trainer:
             batch_size=per_device_batch_size, eval_dl_kwargs=dataloader_kwargs
         )
 
-        self._prepare_model_and_dataloaders_for_training()
+        self._prepare_model_optimizer_and_dataloaders()
 
         self._run_evaluation()
 
@@ -490,7 +490,7 @@ class Trainer:
         """
         return self._accelerator.device
 
-    def _prepare_model_and_dataloaders_for_training(self):
+    def _prepare_model_optimizer_and_dataloaders(self):
         """
         Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap the model, optimizer and dataloaders in any wrappers necessary for training.
         (e.g. :class:`torch.nn.parallel.DistributedDataParallel`) and ensures the parameters are placed on the appropriate device.
