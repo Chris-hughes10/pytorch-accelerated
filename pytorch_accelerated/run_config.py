@@ -1,5 +1,5 @@
 # Copyright © 2021 Chris Hughes
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from numbers import Number
 from typing import Union
 
@@ -43,3 +43,6 @@ class TrainerRunConfig:
     is_world_process_zero: bool
     is_distributed: bool
     using_fp16: bool
+
+    def to_dict(self):
+        return asdict(self)
