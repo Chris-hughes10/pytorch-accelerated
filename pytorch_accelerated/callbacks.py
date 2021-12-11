@@ -199,7 +199,7 @@ class CallbackHandler:
 class LogMetricsCallback(TrainerCallback):
     """
     A callback that logs the latest values of any metric which has been updated in
-    the trainer's run history. By default, this just prints to the command line.
+    the trainer's run history. By default, this just prints to the command line once per machine.
 
     Metrics prefixed with 'train' are logged at the end of a training epoch, all other
     metrics are logged after evaluation.
@@ -234,7 +234,7 @@ class LogMetricsCallback(TrainerCallback):
             for metric_name in metric_names
         }
 
-    def log_metrics(self, trainer, metrics):
+    def log_metrics(self, trainer, metrics: dict):
         for metric_name, metric_value in metrics.items():
             trainer.print(f"\n{metric_name}: {metric_value}")
 
