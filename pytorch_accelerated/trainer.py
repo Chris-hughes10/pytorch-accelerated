@@ -116,7 +116,7 @@ class Trainer:
         :class:`~pytorch_accelerated.callbacks.TerminateOnNaNCallback`,
         :class:`~pytorch_accelerated.callbacks.PrintProgressCallback`,
         :class:`~pytorch_accelerated.callbacks.ProgressBarCallback`,
-        :class:`~pytorch_accelerated.callbacks.PrintMetricsCallback`,
+        :class:`~pytorch_accelerated.callbacks.LogMetricsCallback`,
         )
 
         """

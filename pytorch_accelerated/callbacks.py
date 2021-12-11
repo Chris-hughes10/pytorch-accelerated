@@ -203,6 +203,8 @@ class LogMetricsCallback(TrainerCallback):
 
     Metrics prefixed with 'train' are logged at the end of a training epoch, all other
     metrics are logged after evaluation.
+
+    This can be subclassed to create loggers for different platforms by overriding the :meth:`~LogMetricsCallback.log_metrics` method.
     """
 
     def on_train_epoch_end(self, trainer, **kwargs):

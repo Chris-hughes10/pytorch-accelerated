@@ -132,6 +132,26 @@ computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/page
     If you feel that it would be clearer to compute metrics as part of the training loop, this could also be done by
     subclassing the :class:`pytorch_accelerated.trainer.Trainer` as demonstrated in :ref:`trainer_metric_example`.
 
+Example: Create a custom logging callback
+---------------------------------------------
+
+It is recommended that callbacks are used to handle logging, to keep the training loop focused on the ML related code.
+It is easy to create loggers for other platforms by subclassing the :class:`LogMetricsCallback` callback. For example,
+we can create a logger for AzureML (which uses the MLFlow API) as demonstrated below::
+
+    import mlflow
+
+    class AzureMLLoggerCallback(LogMetricsCallback):
+    def __init__(self):
+        mlflow.set_tracking_uri(os.environ['MLFLOW_TRACKING_URI'])
+
+    def on_training_run_start(self, trainer, **kwargs):
+        mlflow.set_tags(trainer.run_config.to_dict())
+
+    def log_metrics(self, trainer, metrics):
+        if trainer.run_config.is_world_process_zero:
+            mlflow.log_metrics(metrics)
+
 Callback handler
 ======================
 
