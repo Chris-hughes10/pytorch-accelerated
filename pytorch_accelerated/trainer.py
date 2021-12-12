@@ -494,7 +494,7 @@ class Trainer:
         """
         Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap the model, optimizer and dataloaders in any wrappers necessary for training.
         (e.g. :class:`torch.nn.parallel.DistributedDataParallel`) and ensures the parameters are placed on the appropriate device.
-         By default, this will convert each dataloader to an instance of :class:`accelerate.data_loader.DataLoaderShard`.
+        By default, this will convert each dataloader to an instance of :class:`accelerate.data_loader.DataLoaderShard`.
 
         .. Note:: This may change the length of the dataloaders, so this should be called *before* the number of update steps per epoch is calculated, i.e. to initialise a learning rate scheduler
         """
