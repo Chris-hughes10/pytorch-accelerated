@@ -209,7 +209,7 @@ class ModelFreezer:
                         if params:
                             modified_parameters[layer.layer_group_idx[0]].extend(params)
 
-        return modified_parameters
+        return {layer_group_idx: {'params': params} for layer_group_idx, params in modified_parameters.items()}
 
     def _convert_idxs(self, from_idx, to_idx):
         from_idx = convert_idx(from_idx, self.num_groups)

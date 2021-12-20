@@ -153,7 +153,7 @@ def test_unfreeze_model_returns_correct_parameters_for_frozen_model(
     freezer = ModelFreezer(model, freeze_batch_norms=True)
     freezer.freeze(from_index=0, to_index=-1)
     expected_params = {
-        lg.layer_group_idx[0]: list(lg.module.parameters())
+        lg.layer_group_idx[0]: {'params': list(lg.module.parameters())}
         for lg in freezer.get_layer_groups()
         if from_index <= lg.layer_group_idx[0] <= to_index
     }
@@ -175,7 +175,7 @@ def test_unfreeze_model_returns_correct_parameters_for_partially_frozen_model(
     freezer = ModelFreezer(model, freeze_batch_norms=True)
     freezer.freeze(from_index=0, to_index=-2)
     expected_params = {
-        lg.layer_group_idx[0]: list(lg.module.parameters())
+        lg.layer_group_idx[0]: {'params': list(lg.module.parameters())}
         for lg in freezer.get_layer_groups()
         if (from_index <= lg.layer_group_idx[0] <= to_index) and lg.is_frozen is True
     }
