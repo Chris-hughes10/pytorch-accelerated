@@ -17,7 +17,51 @@ LayerGroup = namedtuple("LayerGroup", ["layer_group_idx", "module", "is_frozen"]
 
 
 class ModelFreezer:
+    """
+    A class to freeze and unfreeze different parts of a model, to simplify the process of finetuning during transfer learning.
+
+    This class uses the following abstractions:
+     - `Layer`: A subclass of :class:`torch.nn.Module` with a depth of 1. i.e. The module is not nested.
+     - `LayerGroup`: The modules which have been defined as attributes of a model. These may be Layers or nested modules.
+
+     For example, let's consider the following model::
+
+        from torch import nn
+
+        class MyModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.input = nn.Linear(100, 100)
+                self.block_1 = nn.Sequential(
+                    nn.Linear(100, 100),
+                    nn.BatchNorm1d(100),
+                    nn.Sequential(
+                        nn.Linear(100, 100),
+                        nn.BatchNorm1d(100),
+                        nn.ReLU(),
+                    ),
+                )
+                self.output = nn.Linear(100, 10)
+
+            def forward(self, x):
+                x = self.input(x)
+                x = self.block_1(x)
+                out = self.output(x)
+                return out
+
+    Here, the layer groups would be the modules [`input`, `block_1`, `output`], whereas the layers would be ordered, flattened list
+    of Linear, BatchNorm and ReLU modules.
+    """
+
     def __init__(self, model, freeze_batch_norms=False):
+        """
+        Create a new ModelFreezer instance, which can be used to freeze and unfreeze all, or parts, or a model. When a model is passed
+        to a ModelFreezer instance, all parameters will be unfrozen regardless of their previous state. Subsequent freezing/unfreezing should be
+        done using this instance.
+
+        :param model: The model to freeze/unfreeze. This should be a subclass of :class:`torch.nn.Module`
+        :param freeze_batch_norms: Whether to freeze BatchNorm layers, during freezing. By default, BatchNorm layers are left unfrozen.
+        """
         self.model = model
         set_requires_grad(model.parameters(), value=True)
         self._layer_groups, self._layers = get_layer_groups(model)
@@ -25,6 +69,10 @@ class ModelFreezer:
         self.num_groups = len(self._layer_groups)
 
     def get_layer_groups(self):
+        """
+        Return all of the model's layer groups.
+        :return:
+        """
         layer_groups = []
 
         for group_idx, layer_group_module in self._layer_groups.items():
