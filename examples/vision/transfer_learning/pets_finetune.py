@@ -24,16 +24,19 @@ import argparse
 import os
 import re
 from functools import partial
+from pprint import pprint
 
 import PIL
 import numpy as np
 import torch
 from timm import create_model
+from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
 
+from pytorch_accelerated import notebook_launcher
 from pytorch_accelerated.callbacks import (
     TerminateOnNaNCallback,
     LogMetricsCallback,
@@ -92,7 +95,7 @@ class PetsTrainer(Trainer):
 
     def create_scheduler(self):
         return self.create_scheduler_fn(
-            optimizer=self.optimizer, steps_per_epoch=len(self._train_dataloader)
+            optimizer=self.optimizer, steps_per_epoch=len(self._train_dataloader), epochs=self.run_config.num_epochs
         )
 
 
@@ -176,19 +179,28 @@ def training_function(data_dir, config):
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = create_model("resnet50d", pretrained=True, num_classes=len(label_to_id))
 
-    freezer = ModelFreezer(model)
-    freezer.freeze()
+    num_in_features = model.get_classifier().in_features
+    model.fc = nn.Sequential(nn.Linear(num_in_features, 512),
+                             nn.BatchNorm1d(512),
+                             nn.ReLU(),
+                             nn.Dropout(0.4),
+                             nn.Linear(512, len(label_to_id)))
+
+    freezer = ModelFreezer(model, freeze_batch_norms=False)
+
 
     # Define a loss function
     loss_func = torch.nn.functional.cross_entropy
 
     # Instantiate optimizer and scheduler type
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=lr / 25)
+    # optimizer = torch.optim.Adam(params=[param for param in model.parameters() if param.requires_grad], lr=lr / 25)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr / 25)
     lr_scheduler = partial(
         OneCycleLR,
         max_lr=lr,
-        epochs=num_epochs,
     )
+
+    freezer.freeze(set_eval=False)
 
     trainer = PetsTrainer(
         model=model,
@@ -212,8 +224,15 @@ def training_function(data_dir, config):
 
     param_groups = freezer.unfreeze()
 
-    for param_group in param_groups.values():
-        optimizer.add_param_group(param_group)
+    # for idx, param_group in param_groups.items():
+    #     # print(f'adding param group {idx}')
+    #     param_group['lr'] = lr/1000
+    #     optimizer.add_param_group(param_group)
+
+    lr_scheduler = partial(
+        OneCycleLR,
+        max_lr=lr/100,
+    )
 
     trainer.train(
         train_dataset=train_dataset,
@@ -226,9 +245,9 @@ def training_function(data_dir, config):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simple examples of training script.")
-    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description="Simple examples of training script.")
+    # parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
+    # args = parser.parse_args()
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     config = {
         "lr": 3e-2,
@@ -238,4 +257,5 @@ if __name__ == "__main__":
         "image_size": 224,
     }
 
-    training_function(args.data_dir, config)
+    launch_fn = partial(training_function, '/home/chris/notebooks/pets', config)
+    notebook_launcher(launch_fn, num_processes=2, use_fp16=True)

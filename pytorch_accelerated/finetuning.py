@@ -165,7 +165,7 @@ class ModelFreezer:
 
         return layers
 
-    def freeze(self, from_index=0, to_index=-2, set_eval=True):
+    def freeze(self, from_index=0, to_index=-2, set_eval=False):
         self.__freeze_unfreeze(
             from_index, to_index, freeze=True, toggle_train_eval=set_eval
         )
