@@ -1,10 +1,6 @@
 from collections import namedtuple, defaultdict
-from pprint import pprint
-from typing import Optional, Generator
 
 import torch
-from torch import nn
-from torch.optim import Optimizer
 
 BN_TYPES = (
     torch.nn.BatchNorm1d,
@@ -15,97 +11,6 @@ BN_TYPES = (
     torch.nn.LazyBatchNorm3d,
     torch.nn.SyncBatchNorm,
 )
-
-
-def filter_params(module: torch.nn.Module, train_bn: bool = True) -> Generator:
-    """Yields the trainable parameters of a given module.
-    Args:
-        module: A given module
-        train_bn: If True, leave the BatchNorm layers in training mode
-    Returns:
-        Generator
-    """
-    children = list(module.children())
-    if not children:
-        if not (isinstance(module, BN_TYPES) and train_bn):
-            for param in module.parameters():
-                if param.requires_grad:
-                    yield param
-    else:
-        for child in children:
-            for param in filter_params(module=child, train_bn=train_bn):
-                yield param
-
-
-def _unfreeze_and_add_param_group(
-    module: torch.nn.Module,
-    optimizer: Optimizer,
-    lr: Optional[float] = None,
-    train_bn: bool = True,
-):
-    """Unfreezes a module and adds its parameters to an optimizer."""
-    # _make_trainable(module)
-    params_lr = optimizer.param_groups[0]["lr"] if lr is None else float(lr)
-    optimizer.add_param_group(
-        {
-            "params": filter_params(module=module, train_bn=train_bn),
-            "lr": params_lr / 10.0,
-        }
-    )
-
-
-def get_trainable_parameters(
-    module: torch.nn.Module, train_bn: bool = True
-) -> Generator:
-    """Yields the trainable parameters of a given module.
-    Args:
-        module: A given module
-        train_bn: If True, leave the BatchNorm layers in training mode
-    Returns:
-        Generator
-    """
-    children = list(module.children())
-    if not children:
-        # is leaf
-        if not (isinstance(module, BN_TYPES) and train_bn):
-            for param in module.parameters():
-                if param.requires_grad:
-                    yield param
-    else:
-        for child in children:
-            for param in get_trainable_parameters(module=child, train_bn=train_bn):
-                yield param
-
-
-class TestModel(nn.Module):
-    def __init__(self):
-        super(TestModel, self).__init__()
-        self.input = nn.Linear(100, 100)
-        self.block_1 = nn.Sequential(
-            nn.Linear(100, 100),
-            nn.BatchNorm1d(100),
-            nn.ReLU(),
-        )
-        self.block_2 = nn.Sequential(
-            nn.Linear(100, 100),
-            nn.BatchNorm1d(100),
-            nn.Sequential(
-                nn.Linear(100, 100),
-                nn.BatchNorm1d(100),
-                nn.ReLU(),
-            ),
-        )
-        self.output_1 = nn.Linear(100, 10)
-        self.output_2 = nn.Linear(100, 10)
-
-    def forward(self, x):
-        x = self.input(x)
-        x = self.block_1(x)
-        x = self.block_2(x)
-        out_1 = self.output_1(x)
-        out_2 = self.output_2(x)
-        return (out_1, out_2)
-
 
 Layer = namedtuple("Layer", ["layer_group_idx", "module", "is_frozen"])
 LayerGroup = namedtuple("LayerGroup", ["layer_group_idx", "module", "is_frozen"])
@@ -209,7 +114,10 @@ class ModelFreezer:
                         if params:
                             modified_parameters[layer.layer_group_idx[0]].extend(params)
 
-        return {layer_group_idx: {'params': params} for layer_group_idx, params in modified_parameters.items()}
+        return {
+            layer_group_idx: {"params": params}
+            for layer_group_idx, params in modified_parameters.items()
+        }
 
     def _convert_idxs(self, from_idx, to_idx):
         from_idx = convert_idx(from_idx, self.num_groups)
@@ -266,46 +174,3 @@ def _recursive_get_layers(module, result, layer_group=0):
         # is nested
         for child in children:
             _recursive_get_layers(child, result, layer_group)
-
-
-if __name__ == "__main__":
-    # model = models.resnet18(pretrained=False)
-
-    model = TestModel()
-
-    finetuner = ModelFreezer(model)
-
-    print("====================")
-    pprint(finetuner.get_layers())
-    print("------------------------")
-    pprint(finetuner.get_layer_groups())
-    print("====================")
-
-    finetuner.freeze()
-
-    print("====================")
-    pprint(finetuner.get_layers())
-    print("------------------------")
-    # pprint(finetuner.get_layer_groups())
-    print("====================")
-
-    finetuner.unfreeze(from_index=-1, to_index=-3)
-    print("====================")
-    pprint(finetuner.get_layers())
-    print("------------------------")
-    print("====================")
-    finetuner.unfreeze(from_index=-3, to_index=-4)
-    print("====================")
-    pprint(finetuner.get_layers())
-    print("------------------------")
-    print("====================")
-    finetuner.unfreeze(from_index=-4, to_index=0)
-
-    print("====================")
-    pprint(finetuner.get_layers())
-    print("------------------------")
-    print("====================")
-
-    # for name, param in model.named_parameters():
-    #     print(name)
-    #     print(param.requires_grad)

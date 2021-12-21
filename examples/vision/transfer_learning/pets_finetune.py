@@ -95,7 +95,9 @@ class PetsTrainer(Trainer):
 
     def create_scheduler(self):
         return self.create_scheduler_fn(
-            optimizer=self.optimizer, steps_per_epoch=len(self._train_dataloader), epochs=self.run_config.num_epochs
+            optimizer=self.optimizer,
+            steps_per_epoch=len(self._train_dataloader),
+            epochs=self.run_config.num_epochs,
         )
 
 
@@ -180,14 +182,15 @@ def training_function(data_dir, config):
     model = create_model("resnet50d", pretrained=True, num_classes=len(label_to_id))
 
     num_in_features = model.get_classifier().in_features
-    model.fc = nn.Sequential(nn.Linear(num_in_features, 512),
-                             nn.BatchNorm1d(512),
-                             nn.ReLU(),
-                             nn.Dropout(0.4),
-                             nn.Linear(512, len(label_to_id)))
+    model.fc = nn.Sequential(
+        nn.Linear(num_in_features, 512),
+        nn.BatchNorm1d(512),
+        nn.ReLU(),
+        nn.Dropout(0.4),
+        nn.Linear(512, len(label_to_id)),
+    )
 
     freezer = ModelFreezer(model, freeze_batch_norms=False)
-
 
     # Define a loss function
     loss_func = torch.nn.functional.cross_entropy
@@ -231,7 +234,7 @@ def training_function(data_dir, config):
 
     lr_scheduler = partial(
         OneCycleLR,
-        max_lr=lr/100,
+        max_lr=lr / 100,
     )
 
     trainer.train(
@@ -240,7 +243,7 @@ def training_function(data_dir, config):
         num_epochs=4,
         per_device_batch_size=batch_size,
         create_scheduler_fn=lr_scheduler,
-        reset_run_history=False
+        reset_run_history=False,
     )
 
 
@@ -257,5 +260,5 @@ if __name__ == "__main__":
         "image_size": 224,
     }
 
-    launch_fn = partial(training_function, '/home/chris/notebooks/pets', config)
+    launch_fn = partial(training_function, "/home/chris/notebooks/pets", config)
     notebook_launcher(launch_fn, num_processes=2, use_fp16=True)
