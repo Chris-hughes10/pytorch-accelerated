@@ -20,85 +20,58 @@
 # Note: this example requires installing the torchvision, torchmetrics and timm packages
 ########################################################################
 
-import argparse
 import os
 import re
 from functools import partial
-from pprint import pprint
 
 import PIL
 import numpy as np
 import torch
+import torchmetrics
 from timm import create_model
 from torch import nn
-from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import Dataset
-from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
+from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor, Normalize
 
 from pytorch_accelerated import notebook_launcher
 from pytorch_accelerated.callbacks import (
-    TerminateOnNaNCallback,
-    LogMetricsCallback,
-    PrintProgressCallback,
-    ProgressBarCallback,
+    TrainerCallback,
 )
 from pytorch_accelerated.finetuning import ModelFreezer
-from pytorch_accelerated.trainer import Trainer
+from pytorch_accelerated.trainer import Trainer, DEFAULT_CALLBACKS, TrainerPlaceholderValues
 
 
-class PetsTrainer(Trainer):
-    def training_run_start(self):
-        config = self._accelerator.unwrap_model(self.model).default_cfg
-
-        self.mean = torch.tensor(config["mean"])[None, :, None, None].to(
-            self._accelerator.device
-        )
-        self.std = torch.tensor(config["std"])[None, :, None, None].to(
-            self._accelerator.device
-        )
-
-    def calculate_train_batch_loss(self, batch):
-        inputs = (batch["image"] - self.mean) / self.std
-
-        return super().calculate_train_batch_loss((inputs, batch["label"]))
-
-    def eval_epoch_start(self):
-        super().eval_epoch_start()
-        self.accurate = 0
-        self.num_elems = 0
-
-    def calculate_eval_batch_loss(self, batch):
-        inputs = (batch["image"] - self.mean) / self.std
-
-        with torch.no_grad():
-            outputs = self.model(inputs)
-            loss = self.loss_func(outputs, batch["label"])
-        predictions = outputs.argmax(dim=-1)
-        accurate_preds = self._accelerator.gather(
-            predictions
-        ) == self._accelerator.gather(batch["label"])
-        self.num_elems += accurate_preds.shape[0]
-        self.accurate += accurate_preds.long().sum()
-
-        return {
-            "loss": loss,
-            "model_outputs": outputs,
-            "batch_size": inputs.size(0),
-        }
-
-    def eval_epoch_end(self):
-        super().eval_epoch_end()
-        self.run_history.update_metric(
-            "accuracy", round(100 * self.accurate.item() / self.num_elems, 2)
+class ClassificationMetricsCallback(TrainerCallback):
+    def __init__(self, num_classes):
+        self.metrics = torchmetrics.MetricCollection(
+            {
+                "accuracy": torchmetrics.Accuracy(num_classes=num_classes),
+                "precision": torchmetrics.Precision(num_classes=num_classes),
+                "recall": torchmetrics.Recall(num_classes=num_classes),
+            }
         )
 
-    def create_scheduler(self):
-        return self.create_scheduler_fn(
-            optimizer=self.optimizer,
-            steps_per_epoch=len(self._train_dataloader),
-            epochs=self.run_config.num_epochs,
-        )
+    def _move_to_device(self, trainer):
+        self.metrics.to(trainer.device)
+
+    def on_training_run_start(self, trainer, **kwargs):
+        self._move_to_device(trainer)
+
+    def on_evaluation_run_start(self, trainer, **kwargs):
+        self._move_to_device(trainer)
+
+    def on_eval_step_end(self, trainer, batch, batch_output, **kwargs):
+        preds = batch_output["model_outputs"].argmax(dim=-1)
+        self.metrics.update(preds, batch[1])
+
+    def on_eval_epoch_end(self, trainer, **kwargs):
+        metrics = self.metrics.compute()
+        trainer.run_history.update_metric("accuracy", metrics["accuracy"].cpu())
+        trainer.run_history.update_metric("precision", metrics["precision"].cpu())
+        trainer.run_history.update_metric("recall", metrics["recall"].cpu())
+
+        self.metrics.reset()
 
 
 def extract_label(fname):
@@ -128,11 +101,35 @@ class PetsDataset(Dataset):
         return {"image": image, "label": label}
 
 
-def training_function(data_dir, config):
+def create_datasets(file_names, label_to_id, image_size, normalization_mean, normalization_std):
+    random_perm = np.random.permutation(len(file_names))
+    cut = int(0.8 * len(file_names))
+    train_split = random_perm[:cut]
+    eval_split = random_perm[cut:]
 
+    # For training we use a simple RandomResizedCrop
+    train_tfm = Compose([RandomResizedCrop(image_size, scale=(0.5, 1.0)), ToTensor(),
+                         Normalize(normalization_mean, normalization_std), ])
+    train_dataset = PetsDataset(
+        [file_names[i] for i in train_split],
+        image_transform=train_tfm,
+        label_to_id=label_to_id,
+    )
+
+    # For evaluation, we use a deterministic Resize
+    eval_tfm = Compose([Resize(image_size), ToTensor(), Normalize(normalization_mean, normalization_std), ])
+    eval_dataset = PetsDataset(
+        [file_names[i] for i in eval_split],
+        image_transform=eval_tfm,
+        label_to_id=label_to_id,
+    )
+
+    return train_dataset, eval_dataset
+
+
+def training_function(data_dir, config):
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
-    seed = int(config["seed"])
     batch_size = int(config["batch_size"])
     image_size = config["image_size"]
     if not isinstance(image_size, (list, tuple)):
@@ -151,34 +148,7 @@ def training_function(data_dir, config):
     id_to_label.sort()
     label_to_id = {lbl: i for i, lbl in enumerate(id_to_label)}
 
-    # Set the seed before splitting the data.
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-    # Split our filenames between train and validation
-    random_perm = np.random.permutation(len(file_names))
-    cut = int(0.8 * len(file_names))
-    train_split = random_perm[:cut]
-    eval_split = random_perm[cut:]
-
-    # For training we use a simple RandomResizedCrop
-    train_tfm = Compose([RandomResizedCrop(image_size, scale=(0.5, 1.0)), ToTensor()])
-    train_dataset = PetsDataset(
-        [file_names[i] for i in train_split],
-        image_transform=train_tfm,
-        label_to_id=label_to_id,
-    )
-
-    # For evaluation, we use a deterministic Resize
-    eval_tfm = Compose([Resize(image_size), ToTensor()])
-    eval_dataset = PetsDataset(
-        [file_names[i] for i in eval_split],
-        image_transform=eval_tfm,
-        label_to_id=label_to_id,
-    )
-
-    # Instantiate the model (we build the model here so that the seed also control new weights initialization)
+    # Instantiate the model
     model = create_model("resnet50d", pretrained=True, num_classes=len(label_to_id))
 
     num_in_features = model.get_classifier().in_features
@@ -192,29 +162,34 @@ def training_function(data_dir, config):
 
     freezer = ModelFreezer(model, freeze_batch_norms=False)
 
+    model_config = model.default_cfg
+    normalization_mean = model_config['mean']
+    normalization_std = model_config['std']
+
+    train_dataset, eval_dataset = create_datasets(file_names, label_to_id, image_size, normalization_mean,
+                                                  normalization_std)
+
     # Define a loss function
     loss_func = torch.nn.functional.cross_entropy
 
     # Instantiate optimizer and scheduler type
     # optimizer = torch.optim.Adam(params=[param for param in model.parameters() if param.requires_grad], lr=lr / 25)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr / 25)
+
     lr_scheduler = partial(
         OneCycleLR,
         max_lr=lr,
+        epochs=TrainerPlaceholderValues.NUM_EPOCHS,
+        steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
     )
 
     freezer.freeze(set_modules_as_eval=False)
 
-    trainer = PetsTrainer(
+    trainer = Trainer(
         model=model,
         loss_func=loss_func,
         optimizer=optimizer,
-        callbacks=(
-            TerminateOnNaNCallback,
-            PrintProgressCallback,
-            ProgressBarCallback,
-            LogMetricsCallback,
-        ),
+        callbacks=[ClassificationMetricsCallback, *DEFAULT_CALLBACKS]
     )
 
     trainer.train(
@@ -234,7 +209,9 @@ def training_function(data_dir, config):
 
     lr_scheduler = partial(
         OneCycleLR,
-        max_lr=lr / 100,
+        max_lr=lr/100,
+        epochs=TrainerPlaceholderValues.NUM_EPOCHS,
+        steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
     )
 
     trainer.train(
@@ -255,7 +232,6 @@ if __name__ == "__main__":
     config = {
         "lr": 3e-2,
         "num_epochs": 3,
-        "seed": 42,
         "batch_size": 64,
         "image_size": 224,
     }
