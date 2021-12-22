@@ -19,7 +19,7 @@ LayerGroup = namedtuple("LayerGroup", ["layer_group_idx", "module", "is_frozen"]
 
 class ModelFreezer:
     """
-    A class to freeze and unfreeze different parts of a model, to simplify the process of finetuning during transfer learning.
+    A class to freeze and unfreeze different parts of a model, to simplify the process of fine-tuning during transfer learning.
 
     This class uses the following abstractions:
      - `Layer`: A subclass of :class:`torch.nn.Module` with a depth of 1. i.e. The module is not nested.
