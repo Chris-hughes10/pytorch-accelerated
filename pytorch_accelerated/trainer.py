@@ -500,9 +500,6 @@ class Trainer:
         """
         self._accelerator.free_memory()
         self._accelerator = self._create_accelerator()
-        # if self._accelerator.state.use_fp16:
-        #     kwargs = self._accelerator.scaler_handler.to_kwargs() if self._accelerator.scaler_handler is not None else {}
-        #     self._accelerator.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
         components = [self.model, self.optimizer]
 
