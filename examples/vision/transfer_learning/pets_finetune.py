@@ -203,7 +203,7 @@ def training_function(data_dir, config):
         max_lr=lr,
     )
 
-    freezer.freeze(set_eval=False)
+    freezer.freeze(set_modules_as_eval=False)
 
     trainer = PetsTrainer(
         model=model,

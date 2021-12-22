@@ -1,8 +1,9 @@
 from collections import namedtuple, defaultdict
+from typing import List
 
 import torch
 
-BN_TYPES = (
+BN_MODULES = (
     torch.nn.BatchNorm1d,
     torch.nn.BatchNorm2d,
     torch.nn.BatchNorm3d,
@@ -63,15 +64,16 @@ class ModelFreezer:
         :param freeze_batch_norms: Whether to freeze BatchNorm layers, during freezing. By default, BatchNorm layers are left unfrozen.
         """
         self.model = model
-        set_requires_grad(model.parameters(), value=True)
-        self._layer_groups, self._layers = get_layer_groups(model)
+        _set_requires_grad(model.parameters(), value=True)
+        self._layer_groups, self._layers = _get_layer_groups_for_module(model)
         self.freeze_bn = freeze_batch_norms
         self.num_groups = len(self._layer_groups)
 
-    def get_layer_groups(self):
+    def get_layer_groups(self) -> List[LayerGroup]:
         """
-        Return all of the model's layer groups.
-        :return:
+        Return all of the model's layer groups. A layer group is any module which has been defined as an attribute of the model.
+
+        :return: a list of all layer groups in the model.
         """
         layer_groups = []
 
@@ -89,7 +91,12 @@ class ModelFreezer:
 
         return layer_groups
 
-    def get_layers(self):
+    def get_layers(self) -> List[Layer]:
+        """
+        Return all of the model's layers. A Layer is any non-nested module which is included in the model.
+
+        :return: a list of all layers in the model.
+        """
         layers = []
 
         for group_idx, layer in self._layers:
@@ -118,13 +125,30 @@ class ModelFreezer:
 
         return layers
 
-    def freeze(self, from_index=0, to_index=-2, set_eval=False):
+    def freeze(self, from_index=0, to_index=-2, set_modules_as_eval=False):
+        """
+        Freeze layer groups corresponding to the specified indexes, which are inclusive. By default, this freezes all layer groups
+        except the final one.
+
+        :param from_index: The index of the first layer group to freeze.
+        :param to_index: The index of the final layer group to freeze.
+        :param set_modules_as_eval: If True, frozen modules will also be placed in `eval` mode. This is False by default.
+        """
         self.__freeze_unfreeze(
-            from_index, to_index, freeze=True, toggle_train_eval=set_eval
+            from_index, to_index, freeze=True, toggle_train_eval=set_modules_as_eval
         )
 
-    def unfreeze(self, from_index=-1, to_index=0):
-        unfrozen_params = self.__freeze_unfreeze(from_index, to_index, freeze=False)
+    def unfreeze(self, from_index=-1, to_index=0, set_modules_as_training=True):
+        """
+        Unfreeze layer groups corresponding to the specified indexes, which are inclusive. By default, this unfreezes all layer groups.
+        For each layer group, any parameters which have been unfrozen are returned, so that they can be added to an optimizer if needed.
+
+        :param from_index: The index of the first layer group to unfreeze.
+        :param to_index: The index of the final layer group to unfreeze.
+        :param set_modules_as_training: If True, unfrozen modules will also be placed in `train` mode. This is True by default.
+        :return: a dictionary containing the parameters which have been unfrozen for each layer group.
+        """
+        unfrozen_params = self.__freeze_unfreeze(from_index, to_index, freeze=False, toggle_train_eval=set_modules_as_training)
         return unfrozen_params
 
     def __freeze_unfreeze(
@@ -152,11 +176,11 @@ class ModelFreezer:
                     # layer already in correct state
                     continue
                 else:
-                    is_batch_norm = module_is_batch_norm(layer.module)
+                    is_batch_norm = _module_is_batch_norm(layer.module)
                     if is_batch_norm and not self.freeze_bn:
                         continue
                     else:
-                        params = change_layer_state(
+                        params = _change_layer_state(
                             layer, toggle_train_eval, set_grad_value
                         )
                         if params:
@@ -168,8 +192,8 @@ class ModelFreezer:
         }
 
     def _convert_idxs(self, from_idx, to_idx):
-        from_idx = convert_idx(from_idx, self.num_groups)
-        to_idx = convert_idx(to_idx, self.num_groups)
+        from_idx = _convert_idx(from_idx, self.num_groups)
+        to_idx = _convert_idx(to_idx, self.num_groups)
 
         if from_idx > to_idx:
             from_idx, to_idx = to_idx, from_idx
@@ -177,32 +201,31 @@ class ModelFreezer:
         return from_idx, to_idx
 
 
-def change_layer_state(layer, toggle_train_eval, set_grad_value):
+def _change_layer_state(layer: Layer, set_grad_value: bool, toggle_train_eval: bool):
     params = list(layer.module.parameters())
     if params:
-        set_requires_grad(params, value=set_grad_value)
+        _set_requires_grad(params, value=set_grad_value)
     if toggle_train_eval:
         layer.module.train(mode=set_grad_value)
     return params
 
 
-def module_is_batch_norm(module):
-    return isinstance(module, BN_TYPES)
+def _module_is_batch_norm(module):
+    return isinstance(module, BN_MODULES)
 
 
-def convert_idx(idx, num_groups):
+def _convert_idx(idx, num_groups):
     if idx < 0:
         idx = idx + num_groups
-
     return idx
 
 
-def set_requires_grad(parameters, value=True):
+def _set_requires_grad(parameters, value=True):
     for param in parameters:
         param.requires_grad = value
 
 
-def get_layer_groups(module):
+def _get_layer_groups_for_module(module):
     layers = []
     layer_groups = dict()
     for layer_group, group in enumerate(module.children()):

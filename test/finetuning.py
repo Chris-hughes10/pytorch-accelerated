@@ -1,7 +1,7 @@
 from pytest import fixture, mark
 from torch import nn
 
-from pytorch_accelerated.finetuning import ModelFreezer, module_is_batch_norm
+from pytorch_accelerated.finetuning import ModelFreezer, _module_is_batch_norm
 
 
 class TestModel(nn.Module):
@@ -45,11 +45,14 @@ def verify_layer_state(layer, frozen=True):
         requires_grad = {param.requires_grad for param in params}
         all_params_same_state = len(requires_grad) == 1
         all_params_correct_state = (not frozen) is list(requires_grad)[0]
+        layer_state_correct = layer.is_frozen is frozen
     else:
         all_params_same_state = True
         all_params_correct_state = True
-
-    layer_state_correct = layer.is_frozen is frozen
+        if _module_is_batch_norm(layer.module):
+            layer_state_correct = layer.is_frozen is frozen
+        else:
+            layer_state_correct = True
 
     return all_params_same_state and all_params_correct_state and layer_state_correct
 
@@ -109,7 +112,7 @@ def test_can_freeze_model_except_batch_norm(model, from_index, to_index):
 
     for layer in layers:
         if from_index <= layer.layer_group_idx[0] <= to_index:
-            if module_is_batch_norm(layer.module):
+            if _module_is_batch_norm(layer.module):
                 assert verify_layer_state(layer, frozen=False)
             else:
                 assert verify_layer_state(layer, frozen=True)
