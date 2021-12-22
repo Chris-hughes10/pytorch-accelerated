@@ -32,14 +32,24 @@ from timm import create_model
 from torch import nn
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import Dataset
-from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor, Normalize
+from torchvision.transforms import (
+    Compose,
+    RandomResizedCrop,
+    Resize,
+    ToTensor,
+    Normalize,
+)
 
 from pytorch_accelerated import notebook_launcher
 from pytorch_accelerated.callbacks import (
     TrainerCallback,
 )
 from pytorch_accelerated.finetuning import ModelFreezer
-from pytorch_accelerated.trainer import Trainer, DEFAULT_CALLBACKS, TrainerPlaceholderValues
+from pytorch_accelerated.trainer import (
+    Trainer,
+    DEFAULT_CALLBACKS,
+    TrainerPlaceholderValues,
+)
 
 
 class ClassificationMetricsCallback(TrainerCallback):
@@ -101,15 +111,22 @@ class PetsDataset(Dataset):
         return {"image": image, "label": label}
 
 
-def create_datasets(file_names, label_to_id, image_size, normalization_mean, normalization_std):
+def create_datasets(
+    file_names, label_to_id, image_size, normalization_mean, normalization_std
+):
     random_perm = np.random.permutation(len(file_names))
     cut = int(0.8 * len(file_names))
     train_split = random_perm[:cut]
     eval_split = random_perm[cut:]
 
     # For training we use a simple RandomResizedCrop
-    train_tfm = Compose([RandomResizedCrop(image_size, scale=(0.5, 1.0)), ToTensor(),
-                         Normalize(normalization_mean, normalization_std), ])
+    train_tfm = Compose(
+        [
+            RandomResizedCrop(image_size, scale=(0.5, 1.0)),
+            ToTensor(),
+            Normalize(normalization_mean, normalization_std),
+        ]
+    )
     train_dataset = PetsDataset(
         [file_names[i] for i in train_split],
         image_transform=train_tfm,
@@ -117,7 +134,13 @@ def create_datasets(file_names, label_to_id, image_size, normalization_mean, nor
     )
 
     # For evaluation, we use a deterministic Resize
-    eval_tfm = Compose([Resize(image_size), ToTensor(), Normalize(normalization_mean, normalization_std), ])
+    eval_tfm = Compose(
+        [
+            Resize(image_size),
+            ToTensor(),
+            Normalize(normalization_mean, normalization_std),
+        ]
+    )
     eval_dataset = PetsDataset(
         [file_names[i] for i in eval_split],
         image_transform=eval_tfm,
@@ -163,11 +186,12 @@ def training_function(data_dir, config):
     freezer = ModelFreezer(model, freeze_batch_norms=False)
 
     model_config = model.default_cfg
-    normalization_mean = model_config['mean']
-    normalization_std = model_config['std']
+    normalization_mean = model_config["mean"]
+    normalization_std = model_config["std"]
 
-    train_dataset, eval_dataset = create_datasets(file_names, label_to_id, image_size, normalization_mean,
-                                                  normalization_std)
+    train_dataset, eval_dataset = create_datasets(
+        file_names, label_to_id, image_size, normalization_mean, normalization_std
+    )
 
     # Define a loss function
     loss_func = torch.nn.functional.cross_entropy
@@ -189,7 +213,7 @@ def training_function(data_dir, config):
         model=model,
         loss_func=loss_func,
         optimizer=optimizer,
-        callbacks=[ClassificationMetricsCallback, *DEFAULT_CALLBACKS]
+        callbacks=[ClassificationMetricsCallback, *DEFAULT_CALLBACKS],
     )
 
     trainer.train(
@@ -209,7 +233,7 @@ def training_function(data_dir, config):
 
     lr_scheduler = partial(
         OneCycleLR,
-        max_lr=lr/100,
+        max_lr=lr / 100,
         epochs=TrainerPlaceholderValues.NUM_EPOCHS,
         steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
     )

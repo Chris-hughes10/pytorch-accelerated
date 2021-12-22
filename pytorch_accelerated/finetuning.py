@@ -148,7 +148,12 @@ class ModelFreezer:
         :param set_modules_as_training: If True, unfrozen modules will also be placed in `train` mode. This is True by default.
         :return: a dictionary containing the parameters which have been unfrozen for each layer group.
         """
-        unfrozen_params = self.__freeze_unfreeze(from_index, to_index, freeze=False, toggle_train_eval=set_modules_as_training)
+        unfrozen_params = self.__freeze_unfreeze(
+            from_index,
+            to_index,
+            freeze=False,
+            toggle_train_eval=set_modules_as_training,
+        )
         return unfrozen_params
 
     def __freeze_unfreeze(
