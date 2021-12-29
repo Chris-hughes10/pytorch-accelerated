@@ -19,7 +19,7 @@
 #
 # Note: this example requires installing the torchvision, torchmetrics and timm packages
 ########################################################################
-
+import argparse
 import os
 import re
 from functools import partial
@@ -213,7 +213,7 @@ def training_function(data_dir, config):
         model=model,
         loss_func=loss_func,
         optimizer=optimizer,
-        callbacks=[ClassificationMetricsCallback, *DEFAULT_CALLBACKS],
+        callbacks=[ClassificationMetricsCallback(num_classes=len(id_to_label)), *DEFAULT_CALLBACKS],
     )
 
     trainer.train(
@@ -249,9 +249,9 @@ def training_function(data_dir, config):
 
 
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser(description="Simple examples of training script.")
-    # parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser(description="Simple examples of training script.")
+    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
+    args = parser.parse_args()
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     config = {
         "lr": 3e-2,
@@ -259,6 +259,4 @@ if __name__ == "__main__":
         "batch_size": 64,
         "image_size": 224,
     }
-
-    launch_fn = partial(training_function, "/home/chris/notebooks/pets", config)
-    notebook_launcher(launch_fn, num_processes=2, use_fp16=True)
+    training_function(args.data_dir, config)
