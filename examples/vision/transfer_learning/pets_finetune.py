@@ -152,7 +152,6 @@ def create_datasets(
 
 def training_function(data_dir, config):
     lr = config["lr"]
-    num_epochs = int(config["num_epochs"])
     batch_size = int(config["batch_size"])
     image_size = config["image_size"]
     if not isinstance(image_size, (list, tuple)):
@@ -183,7 +182,9 @@ def training_function(data_dir, config):
         nn.Linear(512, len(label_to_id)),
     )
 
+    # Freeze model backbone
     freezer = ModelFreezer(model, freeze_batch_norms=False)
+    freezer.freeze()
 
     model_config = model.default_cfg
     normalization_mean = model_config["mean"]
@@ -197,8 +198,8 @@ def training_function(data_dir, config):
     loss_func = torch.nn.functional.cross_entropy
 
     # Instantiate optimizer and scheduler type
-    # optimizer = torch.optim.Adam(params=[param for param in model.parameters() if param.requires_grad], lr=lr / 25)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr / 25)
+    # Only pass unfrozen parameters to optimizer
+    optimizer = torch.optim.Adam(params=[param for param in model.parameters() if param.requires_grad], lr=lr / 25)
 
     lr_scheduler = partial(
         OneCycleLR,
@@ -206,8 +207,6 @@ def training_function(data_dir, config):
         epochs=TrainerPlaceholderValues.NUM_EPOCHS,
         steps_per_epoch=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
     )
-
-    freezer.freeze(set_modules_as_eval=False)
 
     trainer = Trainer(
         model=model,
@@ -224,12 +223,12 @@ def training_function(data_dir, config):
         create_scheduler_fn=lr_scheduler,
     )
 
+    # Unfreeze backbone and pass parameters to optimizer
     param_groups = freezer.unfreeze()
 
-    # for idx, param_group in param_groups.items():
-    #     # print(f'adding param group {idx}')
-    #     param_group['lr'] = lr/1000
-    #     optimizer.add_param_group(param_group)
+    for idx, param_group in param_groups.items():
+        param_group['lr'] = lr/1000
+        optimizer.add_param_group(param_group)
 
     lr_scheduler = partial(
         OneCycleLR,
@@ -241,7 +240,7 @@ def training_function(data_dir, config):
     trainer.train(
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        num_epochs=4,
+        num_epochs=6,
         per_device_batch_size=batch_size,
         create_scheduler_fn=lr_scheduler,
         reset_run_history=False,
@@ -255,7 +254,6 @@ if __name__ == "__main__":
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     config = {
         "lr": 3e-2,
-        "num_epochs": 3,
         "batch_size": 64,
         "image_size": 224,
     }
