@@ -48,10 +48,10 @@ class PetsTrainer(Trainer):
         config = self._accelerator.unwrap_model(self.model).default_cfg
 
         self.mean = torch.tensor(config["mean"])[None, :, None, None].to(
-            self._accelerator.device
+            self.device
         )
         self.std = torch.tensor(config["std"])[None, :, None, None].to(
-            self._accelerator.device
+            self.device
         )
 
     def calculate_train_batch_loss(self, batch):
@@ -71,9 +71,9 @@ class PetsTrainer(Trainer):
             outputs = self.model(inputs)
             loss = self.loss_func(outputs, batch["label"])
         predictions = outputs.argmax(dim=-1)
-        accurate_preds = self._accelerator.gather(
+        accurate_preds = self.gather(
             predictions
-        ) == self._accelerator.gather(batch["label"])
+        ) == self.gather(batch["label"])
         self.num_elems += accurate_preds.shape[0]
         self.accurate += accurate_preds.long().sum()
 
