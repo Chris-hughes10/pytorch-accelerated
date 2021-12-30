@@ -65,7 +65,8 @@ Utility Methods
 
 .. automethod:: Trainer.save_checkpoint
 .. automethod:: Trainer.load_checkpoint
-.. automethod:: pytorch_accelerated.trainer.Trainer.print
+.. automethod:: Trainer.print
+.. automethod:: Trainer.gather
 
 Customizing Trainer Behaviour
 ================================
