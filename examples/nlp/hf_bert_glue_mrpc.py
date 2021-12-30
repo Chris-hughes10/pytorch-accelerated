@@ -62,8 +62,8 @@ class TransformersTrainer(Trainer):
             outputs = self.model(**batch)
         predictions = outputs.logits.argmax(dim=-1)
         self.metric.add_batch(
-            predictions=self._accelerator.gather(predictions),
-            references=self._accelerator.gather(batch["labels"]),
+            predictions=self.gather(predictions),
+            references=self.gather(batch["labels"]),
         )
         return {
             "loss": outputs.loss,
