@@ -7,9 +7,6 @@ BN_MODULES = (
     torch.nn.BatchNorm1d,
     torch.nn.BatchNorm2d,
     torch.nn.BatchNorm3d,
-    torch.nn.LazyBatchNorm1d,
-    torch.nn.LazyBatchNorm2d,
-    torch.nn.LazyBatchNorm3d,
     torch.nn.SyncBatchNorm,
 )
 

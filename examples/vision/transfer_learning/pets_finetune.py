@@ -108,7 +108,7 @@ class PetsDataset(Dataset):
         label = extract_label(fname)
         if self.label_to_id is not None:
             label = self.label_to_id[label]
-        return {"image": image, "label": label}
+        return image, label
 
 
 def create_datasets(
