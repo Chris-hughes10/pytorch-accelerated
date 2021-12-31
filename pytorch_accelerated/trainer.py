@@ -664,7 +664,7 @@ class Trainer:
             )
             batch_output = self.calculate_train_batch_loss(batch)
             self._loss_tracker.update(
-                self._accelerator.gather(batch_output["loss"]).detach().mean().item(),
+                self.gather(batch_output["loss"]).detach().mean().item(),
                 batch_output["batch_size"],
             )
             if self.run_config.gradient_accumulation_steps > 1:
@@ -727,7 +727,7 @@ class Trainer:
             )
             batch_output = self.calculate_eval_batch_loss(batch)
             self._loss_tracker.update(
-                self._accelerator.gather(batch_output["loss"]).detach().mean().item(),
+                self.gather(batch_output["loss"]).detach().mean().item(),
                 batch_output["batch_size"],
             )
             self.callback_handler.call_event(
@@ -740,6 +740,18 @@ class Trainer:
             "on_eval_epoch_end",
             self,
         )
+
+    def gather(self, tensor):
+        """
+        Gather the values in `tensor` across all processes and concatenate them on the first dimension. This can be
+        useful to regroup the predictions from all processes when doing evaluation.
+
+        .. Note:: This gather happens in all processes.
+
+        :param tensor: (:obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`) The tensors to gather across all processes.
+        :return: The gathered tensor(s) (:obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`). The first dimension of the result is `num_processes` multiplied by the first dimension of the input tensors.
+        """
+        return self._accelerator.gather(tensor)
 
     def print(self, *args, **kwargs):
         """
@@ -759,7 +771,7 @@ class Trainer:
         :param save_path: the path where to save the checkpoint, this should end in '.pt'
         :param checkpoint_kwargs: additional objects to include in the checkpoint
         :param save_optimizer: flag to indicate whether to include the optimizer in the checkpoint
-        :param save_per_node: flag to indicate whether to save the checkpoint once per machine, if False, the checkpoint will only be saved from the world process zero
+        :param save_per_node: flag to indicate whether to save the checkpoint once per machine, if False, the checkpoint will only be saved from the world process zero. This is True by default.
         """
         # TODO: add save method for run history?
 
