@@ -111,7 +111,7 @@ def training_function(config, args):
 
     # We also rename the 'label' column to 'labels' which is the expected name for labels by the models of the
     # transformers library
-    tokenized_datasets.rename_column_("label", "labels")
+    tokenized_datasets.rename_column("label", "labels")
 
     # If the batch size is too big we use gradient accumulation
     gradient_accumulation_steps = 1
@@ -132,7 +132,7 @@ def training_function(config, args):
 
     # Create an instance of our trainer
     trainer = TransformersTrainer(
-        model=model, optimizer=optimizer, collate_fn=collate_fn, metric=metric
+        model=model, optimizer=optimizer, metric=metric
     )
 
     # Wrap the scheduler factory function as a higher order function so that it will be created inside the trainer
