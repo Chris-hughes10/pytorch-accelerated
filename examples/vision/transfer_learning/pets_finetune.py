@@ -199,7 +199,10 @@ def training_function(data_dir, config):
 
     # Instantiate optimizer and scheduler type
     # Only pass unfrozen parameters to optimizer
-    optimizer = torch.optim.Adam(params=[param for param in model.parameters() if param.requires_grad], lr=lr / 25)
+    optimizer = torch.optim.Adam(
+        params=freezer.get_trainable_parameters(),
+        lr=lr / 25,
+    )
 
     lr_scheduler = partial(
         OneCycleLR,
@@ -212,7 +215,10 @@ def training_function(data_dir, config):
         model=model,
         loss_func=loss_func,
         optimizer=optimizer,
-        callbacks=[ClassificationMetricsCallback(num_classes=len(id_to_label)), *DEFAULT_CALLBACKS],
+        callbacks=[
+            ClassificationMetricsCallback(num_classes=len(id_to_label)),
+            *DEFAULT_CALLBACKS,
+        ],
     )
 
     trainer.train(
@@ -227,7 +233,7 @@ def training_function(data_dir, config):
     param_groups = freezer.unfreeze()
 
     for idx, param_group in param_groups.items():
-        param_group['lr'] = lr/1000
+        param_group["lr"] = lr / 1000
         optimizer.add_param_group(param_group)
 
     lr_scheduler = partial(

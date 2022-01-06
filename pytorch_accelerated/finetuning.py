@@ -122,6 +122,14 @@ class ModelFreezer:
 
         return layers
 
+    def get_trainable_parameters(self):
+        """
+        Return a list of all unfrozen model parameters, which will be updated during training.
+
+        :return: a list of all trainable parameters
+        """
+        return [param for param in self.model.parameters() if param.requires_grad]
+
     def freeze(self, from_index=0, to_index=-2, set_modules_as_eval=False):
         """
         Freeze layer groups corresponding to the specified indexes, which are inclusive. By default, this freezes all layer groups

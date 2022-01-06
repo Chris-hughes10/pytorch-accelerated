@@ -131,9 +131,7 @@ def training_function(config, args):
     optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
 
     # Create an instance of our trainer
-    trainer = TransformersTrainer(
-        model=model, optimizer=optimizer, metric=metric
-    )
+    trainer = TransformersTrainer(model=model, optimizer=optimizer, metric=metric)
 
     # Wrap the scheduler factory function as a higher order function so that it will be created inside the trainer
     lr_scheduler = partial(
