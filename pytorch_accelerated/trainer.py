@@ -442,6 +442,15 @@ class Trainer:
 
         self._prepare_model_optimizer_and_dataloaders()
 
+        if self.run_config is None:
+            self.run_config = self._create_run_config(
+                num_epochs=1,
+                gradient_accumulation_steps=0,
+                max_num_train_steps=None,
+                per_device_batch_size=per_device_batch_size,
+                gradient_clip_value=None,
+            )
+
         self._run_evaluation()
 
     def get_default_train_dl_kwargs(self, batch_size) -> dict:
@@ -554,9 +563,12 @@ class Trainer:
         else:
             eval_per_device_batch_size = train_per_device_batch_size
 
-        num_update_steps_per_epoch = math.ceil(
-            len(self._train_dataloader) / gradient_accumulation_steps
-        )
+        if self._train_dataloader is not None:
+            num_update_steps_per_epoch = math.ceil(
+                len(self._train_dataloader) / gradient_accumulation_steps
+            )
+        else:
+            num_update_steps_per_epoch = 0
 
         if max_num_train_steps is None:
             max_num_train_steps = num_epochs * num_update_steps_per_epoch
