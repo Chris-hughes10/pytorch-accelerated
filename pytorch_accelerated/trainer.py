@@ -425,6 +425,8 @@ class Trainer:
 
         .. Note:: Starting an evaluation run will reset the :class:`Trainer`'s run history.
 
+        .. Note:: During distributed evaluation, if the `per_device_batch_size` * the number of processes used does not exactly divide the dataset, and `drop_last=False` has not been passed as a dataloader kwarg, the dataloader will repeat from the start in processes that run out of batches. This should be taken into consideration when calculating metrics.
+
         :param dataset: the dataset to use during evaluation
         :param per_device_batch_size: the batch size to use per device
         :param dataloader_kwargs: a dictionary of keyword arguments to pass to the dataloader constructor, for details see :class:`torch.utils.data.DataLoader`
@@ -503,7 +505,9 @@ class Trainer:
         """
         Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap the model, optimizer and dataloaders in any wrappers necessary for training.
         (e.g. :class:`torch.nn.parallel.DistributedDataParallel`) and ensures the parameters are placed on the appropriate device.
-        By default, this will convert each dataloader to an instance of :class:`accelerate.data_loader.DataLoaderShard`.
+
+        By default, this will convert each dataloader to an instance of :class:`accelerate.data_loader.DataLoaderShard`. Depending on the value of the `drop_last` attribute of the dataloaders,
+        either iterations will stop at the first batch that would be too small / not present on all processes or loop with batches from the beginning on processes which run out of data, so that all batch sizes are the same size.
 
         .. Note:: This may change the length of the dataloaders, so this should be called *before* the number of update steps per epoch is calculated, i.e. to initialise a learning rate scheduler
         """
