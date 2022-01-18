@@ -817,16 +817,23 @@ class Trainer:
                     save_path,
                 )
 
-    def load_checkpoint(self, checkpoint_path):
+    def load_checkpoint(self, checkpoint_path, load_optimizer=True):
         """
         Load the model and optimizer from a checkpoint file.
 
         :param checkpoint_path: the path of the checkpoint file to load
+        :param load_optimizer: flag to indicate whether to load the optimizer if it is included in the checkpoint
         """
         self._accelerator.wait_for_everyone()
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         self._accelerator.unwrap_model(self.model).load_state_dict(
             checkpoint["model_state_dict"]
         )
-        if "optimizer_state_dict" in checkpoint:
+        if load_optimizer and "optimizer_state_dict" in checkpoint:
+            if self.optimizer is None:
+                raise ValueError(
+                    "You are trying to load an optimizer from a checkpoint, but no optimizer"
+                    "has been set in the Trainer. Either pass the correct optimizer instance when"
+                    "creating the trainer, or specify load_optimizer=False when loading the checkpoint."
+                )
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
