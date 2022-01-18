@@ -425,6 +425,8 @@ class Trainer:
 
         .. Note:: Starting an evaluation run will reset the :class:`Trainer`'s run history.
 
+        .. Note:: During distributed evaluation, if the `per_device_batch_size` * the number of processes used does not exactly divide the dataset, and `drop_last=False` has not been passed as a dataloader kwarg, the dataloader will repeat from the start in processes that run out of batches. This should be taken into consideration when calculating metrics.
+
         :param dataset: the dataset to use during evaluation
         :param per_device_batch_size: the batch size to use per device
         :param dataloader_kwargs: a dictionary of keyword arguments to pass to the dataloader constructor, for details see :class:`torch.utils.data.DataLoader`
@@ -441,6 +443,15 @@ class Trainer:
         )
 
         self._prepare_model_optimizer_and_dataloaders()
+
+        if self.run_config is None:
+            self.run_config = self._create_run_config(
+                num_epochs=1,
+                gradient_accumulation_steps=0,
+                max_num_train_steps=None,
+                per_device_batch_size=per_device_batch_size,
+                gradient_clip_value=None,
+            )
 
         self._run_evaluation()
 
@@ -494,7 +505,9 @@ class Trainer:
         """
         Uses the trainer's instance of :class:`accelerate.Accelerator` to wrap the model, optimizer and dataloaders in any wrappers necessary for training.
         (e.g. :class:`torch.nn.parallel.DistributedDataParallel`) and ensures the parameters are placed on the appropriate device.
-        By default, this will convert each dataloader to an instance of :class:`accelerate.data_loader.DataLoaderShard`.
+
+        By default, this will convert each dataloader to an instance of :class:`accelerate.data_loader.DataLoaderShard`. Depending on the value of the `drop_last` attribute of the dataloaders,
+        either iterations will stop at the first batch that would be too small / not present on all processes or loop with batches from the beginning on processes which run out of data, so that all batch sizes are the same size.
 
         .. Note:: This may change the length of the dataloaders, so this should be called *before* the number of update steps per epoch is calculated, i.e. to initialise a learning rate scheduler
         """
@@ -554,9 +567,12 @@ class Trainer:
         else:
             eval_per_device_batch_size = train_per_device_batch_size
 
-        num_update_steps_per_epoch = math.ceil(
-            len(self._train_dataloader) / gradient_accumulation_steps
-        )
+        if self._train_dataloader is not None:
+            num_update_steps_per_epoch = math.ceil(
+                len(self._train_dataloader) / gradient_accumulation_steps
+            )
+        else:
+            num_update_steps_per_epoch = 0
 
         if max_num_train_steps is None:
             max_num_train_steps = num_epochs * num_update_steps_per_epoch
@@ -801,16 +817,23 @@ class Trainer:
                     save_path,
                 )
 
-    def load_checkpoint(self, checkpoint_path):
+    def load_checkpoint(self, checkpoint_path, load_optimizer=True):
         """
         Load the model and optimizer from a checkpoint file.
 
         :param checkpoint_path: the path of the checkpoint file to load
+        :param load_optimizer: flag to indicate whether to load the optimizer if it is included in the checkpoint
         """
         self._accelerator.wait_for_everyone()
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         self._accelerator.unwrap_model(self.model).load_state_dict(
             checkpoint["model_state_dict"]
         )
-        if "optimizer_state_dict" in checkpoint:
+        if load_optimizer and "optimizer_state_dict" in checkpoint:
+            if self.optimizer is None:
+                raise ValueError(
+                    "You are trying to load an optimizer from a checkpoint, but no optimizer"
+                    "has been set in the Trainer. Either pass the correct optimizer instance when"
+                    "creating the trainer, or specify load_optimizer=False when loading the checkpoint."
+                )
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
