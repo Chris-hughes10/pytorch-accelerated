@@ -155,7 +155,7 @@ we can create a logger for AzureML (which uses the MLFlow API) as demonstrated b
 Example: Create a custom callback to save predictions on evaluation
 -------------------------------------------------------------------
 
-Here is an example custom callback to record predictions during evaluation and then save them to csv at the end of the evaluation epoch. 
+Here is an example custom callback to record predictions during evaluation and then save them to csv at the end of the evaluation epoch::
 
     from collections import defaultdict
     import pandas as pd
