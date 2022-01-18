@@ -142,15 +142,43 @@ we can create a logger for AzureML (which uses the MLFlow API) as demonstrated b
     import mlflow
 
     class AzureMLLoggerCallback(LogMetricsCallback):
-    def __init__(self):
-        mlflow.set_tracking_uri(os.environ['MLFLOW_TRACKING_URI'])
+        def __init__(self):
+            mlflow.set_tracking_uri(os.environ['MLFLOW_TRACKING_URI'])
 
-    def on_training_run_start(self, trainer, **kwargs):
-        mlflow.set_tags(trainer.run_config.to_dict())
+        def on_training_run_start(self, trainer, **kwargs):
+            mlflow.set_tags(trainer.run_config.to_dict())
 
-    def log_metrics(self, trainer, metrics):
-        if trainer.run_config.is_world_process_zero:
-            mlflow.log_metrics(metrics)
+        def log_metrics(self, trainer, metrics):
+            if trainer.run_config.is_world_process_zero:
+                mlflow.log_metrics(metrics)
+            
+Example: Create a custom callback to save predictions on evaluation
+-------------------------------------------------------------------
+
+Here is an example custom callback to record predictions during evaluation and then save them to csv at the end of the evaluation epoch. 
+
+    from collections import defaultdict
+    import pandas as pd
+
+    class SavePredictionsCallback(TrainerCallback):
+
+        def __init__(self, out_filename='./outputs/valid_predictions.csv') -> None:
+            super().__init__()
+            self.predictions = defaultdict(list)
+            self.out_filename = out_filename
+
+        def on_eval_step_end(self, trainer, batch, batch_output, **kwargs):
+            input_features, targets = batch
+            class_preds = trainer.gather(batch_output['model_outputs']).argmax(dim=-1)
+            self.predictions['prediction'].extend(class_preds.cpu().tolist())
+            self.predictions['targets'].extend(targets.cpu().tolist())
+
+        def on_eval_epoch_end(self, trainer, **kwargs):
+            trainer._accelerator.wait_for_everyone()
+            if  trainer._accelerator.is_local_main_process:
+                df = pd.DataFrame.from_dict(self.predictions)
+                df.to_csv(f'{self.out_filename}', index=False)
+            
 
 Callback handler
 ======================
