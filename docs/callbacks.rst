@@ -175,7 +175,7 @@ Here is an example custom callback to record predictions during evaluation and t
 
         def on_eval_epoch_end(self, trainer, **kwargs):
             trainer._accelerator.wait_for_everyone()
-            if  trainer._accelerator.is_local_main_process:
+            if trainer.run_config.is_local_process_zero:
                 df = pd.DataFrame.from_dict(self.predictions)
                 df.to_csv(f'{self.out_filename}', index=False)
             
