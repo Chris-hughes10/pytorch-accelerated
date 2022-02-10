@@ -837,3 +837,22 @@ class Trainer:
                     "creating the trainer, or specify load_optimizer=False when loading the checkpoint."
                 )
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+
+class TrainerWithTimmScheduler(Trainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.num_updates = None
+
+    def train_epoch_start(self):
+        super().train_epoch_start()
+        self.num_updates = self.run_history.current_epoch * len(self._train_dataloader)
+
+    def eval_epoch_end(self):
+        if self.scheduler is not None:
+            self.scheduler.step(self.run_history.current_epoch + 1)
+
+    def scheduler_step(self):
+        self.num_updates += 1
+        if self.scheduler is not None:
+            self.scheduler.step_update(num_updates=self.num_updates)
