@@ -9,12 +9,29 @@ Trainer
 
    .. automethod:: __init__
 
+.. autoclass:: TrainerWithTimmScheduler
+
 Training a model
 ==================
 
 The main entrypoint for the :class:`Trainer` is the :meth:`~Trainer.train` method, which is used to launch a training run.
 
 .. automethod:: Trainer.train
+
+Using ``TrainerPlaceHolderValues``
+--------------------------------------
+
+.. autoclass:: TrainerPlaceholderValues
+
+The list of the available placeholders are:
+
+- ``NUM_EPOCHS``
+- ``NUM_UPDATE_STEPS_PER_EPOCH``
+- ``TRAIN_DATALOADER_LEN``
+- ``EVAL_DATALOADER_LEN``
+
+Alternatively, the same outcome could be achieved by overriding the :class:`Trainer`'s :meth:`~Trainer.create_scheduler`
+method, which will be discussed below.
 
 Using learning rate schedulers
 ---------------------------------
@@ -36,21 +53,31 @@ A simple method of creating a scheduler factory function this is by using :meth:
     create_scheduler_fn = partial(lr_scheduler.StepLR, step_size=7, gamma=0.1)
 
 
-Using ``TrainerPlaceHolderValues``
---------------------------------------
+.. note::
+    The :class:`Trainer` calls a step on the provided scheduler after every batch. This can lead to
+    unexpected results as some PyTorch schedulers are expected to step only after every epoch.
 
-.. autoclass:: TrainerPlaceholderValues
+In the example above, for instance, the learning rate would be multiplied by ``0.1`` at every batch. This is probably
+not what someone would expect as the that particular scheduler is designed to be called once per epoch. We can solve
+it by modifying the ``step_size`` appropiately with the ``train_batch_size`` (which we need to decide on anyway) like this::
 
-The list of the available placeholders are:
+    from functools import Partial
+    import math
 
-- ``NUM_EPOCHS``
-- ``NUM_UPDATE_STEPS_PER_EPOCH``
-- ``TRAIN_DATALOADER_LEN``
-- ``EVAL_DATALOADER_LEN``
+    from pytorch_accelerated import TrainerPlaceholderValues
+    from torch.optim import lr_scheduler
 
-Alternatively, the same outcome could be achieved by overriding the :class:`Trainer`'s :meth:`~Trainer.create_scheduler`
-method, which will be discussed below.
+    epochs_step_size = 7
 
+    create_scheduler_fn = partial(
+        lr_scheduler.StepLR,
+        step_size=TrainerPlaceHolderValues.NUM_UPDATE_STEPS_PER_EPOCH * epochs_step_size
+    )
+
+Another solution consists in using a `timm schedulers <https://fastai.github.io/timmdocs/schedulers>`_ with
+the :class:`TrainerWithTimmScheduler` (they do not work with the base :class:`Trainer`). They have
+a more unified interface and do not suffer from the same problem. The scheduler should be fed the same
+way as described above.
 
 Evaluating a model
 ====================
