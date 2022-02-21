@@ -59,7 +59,27 @@ class TrainerPlaceholderValues(Enum):
 
     @classmethod
     def placeholder_set(cls):
-        return {placeholder for placeholder in cls}
+        return {placeholder.name for placeholder in cls}
+
+    @staticmethod
+    def __create_new_enum(original_enum, other, operation):
+        enum_members = {k: v.value for k, v in original_enum._member_map_.items()}
+        enum_members[
+            original_enum.name
+        ] = f"{enum_members[original_enum.name]}{operation}{other}"
+        new_enum = Enum("TrainerPlaceholderValues", enum_members)
+        return new_enum._member_map_[original_enum.name]
+
+    def __mul__(self, other):
+        return self.__create_new_enum(self, other, "*")
+
+    def __add__(self, other):
+        return self.__create_new_enum(self, other, "+")
+
+    def __sub__(self, other):
+        raise NotImplemented(
+            "Subtraction is not supported, please re-write the expression in terms of addition"
+        )
 
 
 def replace_trainer_placeholder_values(trainer, instance):
@@ -72,10 +92,21 @@ def replace_trainer_placeholder_values(trainer, instance):
         new_keywords = {}
 
         for keyword, value in keywords:
-            if value in placeholders:
-                new_keywords[keyword] = eval(value.value)
+            if hasattr(value, "name"):
+                if value.name in placeholders:
+                    new_keywords[keyword] = eval(value.value)
+                else:
+                    new_keywords[keyword] = value
             else:
                 new_keywords[keyword] = value
+
+            # if not isinstance(value, TrainerPlaceholderValues):
+            #     new_keywords[keyword] = value
+            # else:
+            #     if value.name in placeholders:
+            #         new_keywords[keyword] = eval(value.value)
+            #     else:
+            #         new_keywords[keyword] = value
 
         instance = partial(instance.func, *instance.args, **new_keywords)
 
@@ -178,7 +209,7 @@ class Trainer:
         return DataLoader(
             dataset=self.train_dataset,
             collate_fn=self.collate_fn,
-            **self._train_dl_kwargs
+            **self._train_dl_kwargs,
         )
 
     def create_eval_dataloader(
@@ -206,7 +237,7 @@ class Trainer:
         return DataLoader(
             dataset=self.eval_dataset,
             collate_fn=self.collate_fn,
-            **self._eval_dl_kwargs
+            **self._eval_dl_kwargs,
         )
 
     def create_scheduler(self):
