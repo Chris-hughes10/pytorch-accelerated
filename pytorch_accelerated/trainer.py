@@ -100,14 +100,6 @@ def replace_trainer_placeholder_values(trainer, instance):
             else:
                 new_keywords[keyword] = value
 
-            # if not isinstance(value, TrainerPlaceholderValues):
-            #     new_keywords[keyword] = value
-            # else:
-            #     if value.name in placeholders:
-            #         new_keywords[keyword] = eval(value.value)
-            #     else:
-            #         new_keywords[keyword] = value
-
         instance = partial(instance.func, *instance.args, **new_keywords)
 
     return instance
