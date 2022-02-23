@@ -863,6 +863,10 @@ class Trainer:
 
 
 class TrainerWithTimmScheduler(Trainer):
+    """Subclass of the :class:`Trainer` that works with `timm schedulers <https://fastai.github.io/timmdocs/schedulers>`_ instead
+    of standard PyTorch learning rate schedulers
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.num_updates = None
