@@ -13,6 +13,26 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
+def get_default_callbacks(progress_bar=True):
+    if progress_bar:
+        default_callbacks = (
+            MoveModulesToDeviceCallback,
+            TerminateOnNaNCallback,
+            PrintProgressCallback,
+            ProgressBarCallback,
+            LogMetricsCallback,
+        )
+    else:
+        default_callbacks = (
+            MoveModulesToDeviceCallback,
+            TerminateOnNaNCallback,
+            PrintProgressCallback,
+            LogMetricsCallback,
+        )
+
+    return default_callbacks
+
+
 class StopTrainingError(Exception):
     """
     An exception which can be raised in order to stop a training run early.
