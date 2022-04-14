@@ -59,7 +59,7 @@ A simple method of creating a scheduler factory function this is by using :meth:
 
 In the example above, for instance, the learning rate would be multiplied by ``0.1`` at every batch. This is probably
 not what someone would expect as the that particular scheduler is designed to be called once per epoch. We can solve
-it by modifying the ``step_size`` appropiately with the ``train_batch_size`` (which we need to decide on anyway) like this::
+it by modifying the ``step_size`` appropriately with the ``epochs_step_size`` (which we need to decide on anyway) like this::
 
     from functools import Partial
     import math

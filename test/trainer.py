@@ -142,9 +142,6 @@ def test_can_create_scheduler():
     pass
 
 
-def test_can_inject_placeholders():
-    pass
-
 
 def test_can_reset_run_history():
     pass
