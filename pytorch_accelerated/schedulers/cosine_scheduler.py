@@ -11,10 +11,10 @@ from pytorch_accelerated.schedulers.scheduler_base import StatefulSchedulerBase
 
 class CosineLrScheduler(StatefulSchedulerBase):
     """
-    Cosine decay.
+    Cosine decay. without restarts
     This is described in the paper https://arxiv.org/abs/1608.03983.
 
-    k-decay option based on `k-decay: A New Method For Learning Rate Schedule` - https://arxiv.org/abs/2004.05909
+    k-decay option based on `k-decay: A New Method For Learning Rate Schedule` - https://arxiv.org/abs/2004.05909, explain
     """
 
     def __init__(
