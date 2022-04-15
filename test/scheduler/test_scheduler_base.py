@@ -5,12 +5,12 @@ from pytorch_accelerated.schedulers.scheduler_base import SchedulerBase, Statefu
 
 class EqualIterationScheduler(SchedulerBase):
 
-    def get_updated_lrs(self, current_iteration_number: int):
-        return current_iteration_number
+    def get_updated_values(self, num_updates: int):
+        return num_updates
 
 class StatefulEqualIterationScheduler(StatefulSchedulerBase):
-    def get_updated_lrs(self, current_iteration_number: int):
-        return current_iteration_number
+    def get_updated_values(self, num_updates: int):
+        return num_updates
 
 
 def create_model_and_optimizer(lr_1, lr_2):

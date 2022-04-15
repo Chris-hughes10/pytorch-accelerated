@@ -29,6 +29,18 @@ class CosineScheduler(StatefulSchedulerBase):
         warmup_lr_init=0,
         num_cooldown_epochs=0,
     ):
+        """
+
+        :param optimizer:
+        :param total_num_epochs:
+        :param num_iterations_per_epoch:
+        :param k_decay:
+        :param lr_min:
+        :param min_lr_ratio:
+        :param num_warmup_epochs:
+        :param warmup_lr_init:
+        :param num_cooldown_epochs:
+        """
 
         super().__init__(optimizer)
         assert total_num_epochs > 0 and num_iterations_per_epoch > 0
@@ -41,24 +53,24 @@ class CosineScheduler(StatefulSchedulerBase):
         self.k_decay = k_decay
         self.num_cooldown_iterations = num_cooldown_epochs * num_iterations_per_epoch
         if self.warmup_iterations:
-            super().update_param_groups(self.warmup_lr_init)
+            super()._update_param_groups(self.warmup_lr_init)
 
-    def get_updated_lrs(self, current_iteration_number: int):
-        if current_iteration_number < self.warmup_iterations:
+    def get_updated_values(self, num_updates: int):
+        if num_updates < self.warmup_iterations:
             lrs = [
                 self.warmup_lr_init
-                + current_iteration_number
+                + num_updates
                 * ((lr - self.warmup_lr_init) / self.warmup_iterations)
                 for lr in self.base_lr_values
             ]
         else:
-            current_iteration_number = current_iteration_number - self.warmup_iterations
+            num_updates = num_updates - self.warmup_iterations
             total_cosine_iterations = self.total_iterations - (
                 self.warmup_iterations + self.num_cooldown_iterations
             )
 
             if (
-                current_iteration_number
+                num_updates
                 < self.total_iterations - self.num_cooldown_iterations
             ):
                 lrs = [
@@ -79,9 +91,9 @@ class CosineScheduler(StatefulSchedulerBase):
                     * (
                         1
                         + math.cos(
-                            math.pi
-                            * current_iteration_number ** self.k_decay
-                            / total_cosine_iterations ** self.k_decay
+                        math.pi
+                        * num_updates ** self.k_decay
+                        / total_cosine_iterations ** self.k_decay
                         )
                     )
                     for lr_max in self.base_lr_values

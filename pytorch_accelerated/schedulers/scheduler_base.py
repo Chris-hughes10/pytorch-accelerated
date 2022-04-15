@@ -1,25 +1,45 @@
 # inspired by ideas from https://github.com/rwightman/pytorch-image-models/blob/master/timm/scheduler/scheduler.py
 
 from abc import ABC, abstractmethod
+from numbers import Number
+from typing import Union, Iterable
 
 import torch
 
 
 class SchedulerBase(ABC):
-    """Parameter Scheduler Base Class
-    A scheduler base class that can be used to schedule any optimizer parameter groups.
+    """
+    A parameter scheduler base class that can be used to update any field within an optimizer's parameter groups.
+    The most common use case for this is learning rate scheduling.
 
-    Unlike the builtin PyTorch schedulers, this is intended to be consistently called
-    * At the END of each optimizer update, after incrementing the update count, to calculate next update's value
+    Unlike PyTorch's schedulers, which can be called at different points in the training loop depending on the
+    implementation, this class is intended to be consistently called at the end of each optimizer update. As this class
+    is stateless by default, it expects that the number of updates is explicitly provided, as illustrated below::
 
-    This family of schedulers is attempting to avoid the confusion of the meaning of 'last_epoch'
-    and -1 values for special behaviour. All epoch and update counts must be tracked in the training
-    code and explicitly passed in to the schedulers on the corresponding step or step_update call.
+        for current_epoch, epoch in enumerate(num_epochs):
+            num_updates = current_epoch * num_update_steps_per_epoch
+            for batch in train_dataloader:
+                xb, yb = batch
+                predictions = model(xb)
+                loss = loss_func(predictions, yb)
+
+                loss.backward()
+                optimizer.step()
+
+                num_updates +=1
+                scheduler.step_update(num_updates)
     """
 
     def __init__(
         self, optimizer: torch.optim.Optimizer, param_group_field: str = "lr"
-    ) -> None:
+    ):
+        """
+        Create a new instance of a parameter scheduler.
+
+        :param optimizer: a PyTorch optimizer
+        :param param_group_field: the field in the optimizer's parameter groups
+        corresponding to the parameter to be scheduled
+        """
 
         self.optimizer = optimizer
         self.param_group_field = param_group_field
@@ -29,9 +49,12 @@ class SchedulerBase(ABC):
             group[self._initial_param_group_field]
             for group in self.optimizer.param_groups
         ]
-        self.update_param_groups(self.base_lr_values)
+        self._update_param_groups(self.base_lr_values)
 
     def _store_initial_lrs(self):
+        """
+        Store the initial value of the scheduled parameter for each parameter group.
+        """
         for i, group in enumerate(self.optimizer.param_groups):
             if self.param_group_field not in group:
                 raise KeyError(
@@ -42,38 +65,65 @@ class SchedulerBase(ABC):
             )
 
     @abstractmethod
-    def get_updated_lrs(self, current_iteration_number: int):
+    def get_updated_values(self, num_updates: int) -> Union[Number, Iterable[Number]]:
+        """
+        Calculate updated values for the scheduled parameter. If a single number is returned, all parameter groups
+        will be updated with this number. To update each parameter group with a different value, an iterable collection,
+        containing an updated value for each parameter group, should be returned.
+
+        :param num_updates: the number of optimizer updates
+        :return: the updated values of the scheduled parameter. This should be either a single value,
+        or an iterable collection containing a value for each parameter group.
+        """
         pass
 
-    def step_update(self, current_iteration_number: int):
+    def step_update(self, num_updates: int):
         """
-        To be called after each optimizer step
-        """
-        values = self.get_updated_lrs(current_iteration_number)
-        if values is not None:
-            self.update_param_groups(values)
+       Calculate the updated value of the scheduled parameter and update the optimizer's parameter groups.
 
-    def update_param_groups(self, values):
+       :param num_updates: the number of optimizer updates
+       """
+        values = self.get_updated_values(num_updates)
+        if values is not None:
+            self._update_param_groups(values)
+
+    def _update_param_groups(self, values):
+        """
+        Update the scheduled parameter with the given values in all of the optimizer's parameter groups.
+
+        :param values: the updated values of the scheduled parameter
+        """
         if not isinstance(values, (list, tuple)):
             values = [values] * len(self.optimizer.param_groups)
         for param_group, value in zip(self.optimizer.param_groups, values):
             param_group[self.param_group_field] = value
 
     def state_dict(self):
+        """
+        Get the state dict for the scheduler, containing all attributes except the optimizer,
+        which should be saved separately.
+
+        :return: the scheduler's state dict
+        """
         return {
             key: value for key, value in self.__dict__.items() if key != "optimizer"
         }
 
     def load_state_dict(self, state_dict):
+        """
+        Updates the attributes of the given scheduler from the given state dict.
+
+        :param state_dict: the state dict to be loaded
+        """
         self.__dict__.update(state_dict)
 
 
 class StatefulSchedulerBase(SchedulerBase, ABC):
     def __init__(self, optimizer):
         super().__init__(optimizer=optimizer)
-        self.current_iteration_number = 0
+        self.current_iteration_number = -1
 
     def step(self):
-
-        self.step_update(self.current_iteration_number)
         self.current_iteration_number += 1
+        self.step_update(self.current_iteration_number)
+
