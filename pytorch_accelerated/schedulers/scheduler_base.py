@@ -32,9 +32,7 @@ class SchedulerBase(ABC):
                 scheduler.step_update(num_updates)
     """
 
-    def __init__(
-        self, optimizer: torch.optim.Optimizer, param_group_field: str = "lr"
-    ):
+    def __init__(self, optimizer: torch.optim.Optimizer, param_group_field: str = "lr"):
         """
         Create a new instance of a parameter scheduler.
 
@@ -81,10 +79,10 @@ class SchedulerBase(ABC):
 
     def step_update(self, num_updates: int):
         """
-       Calculate the updated value of the scheduled parameter and update the optimizer's parameter groups.
+        Calculate the updated value of the scheduled parameter and update the optimizer's parameter groups.
 
-       :param num_updates: the number of optimizer updates
-       """
+        :param num_updates: the number of optimizer updates
+        """
         values = self.get_updated_values(num_updates)
         if values is not None:
             self._update_param_groups(values)
@@ -144,6 +142,7 @@ class StatefulSchedulerBase(SchedulerBase, ABC):
 
                 scheduler.step()
     """
+
     def __init__(self, optimizer, param_group_field: str = "lr"):
         """
         Create a new instance of a stateful parameter scheduler.
@@ -161,4 +160,3 @@ class StatefulSchedulerBase(SchedulerBase, ABC):
         """
         self._num_updates += 1
         self.step_update(self._num_updates)
-
