@@ -13,8 +13,10 @@ class SchedulerBase(ABC):
     The most common use case for this is learning rate scheduling.
 
     Unlike PyTorch's schedulers, which can be called at different points in the training loop depending on the
-    implementation, this class is intended to be consistently called at the end of each optimizer update. As this class
-    is stateless by default, it expects that the number of updates is explicitly provided, as illustrated below::
+    implementation, this class is intended to be consistently called at the end of each optimizer update.
+
+    As this class is stateless by default, it expects that the number of updates is explicitly provided,
+    as illustrated below::
 
         for current_epoch, epoch in enumerate(num_epochs):
             num_updates = current_epoch * num_update_steps_per_epoch
@@ -119,11 +121,44 @@ class SchedulerBase(ABC):
 
 
 class StatefulSchedulerBase(SchedulerBase, ABC):
-    def __init__(self, optimizer):
-        super().__init__(optimizer=optimizer)
-        self.current_iteration_number = -1
+    """
+    A stateful parameter scheduler base class that can be used to update any field within an optimizer's parameter groups.
+    The most common use case for this is learning rate scheduling.
+
+    Unlike PyTorch's schedulers, which can be called at different points in the training loop depending on the
+    implementation, this class is intended to be consistently called at the end of each optimizer update.
+
+    This class is responsible for maintaining the number of updates, incrementing an internal count each time that
+    the scheduler step is calculated.
+
+    The usage of this class is illustrated below::
+
+        for current_epoch, epoch in enumerate(num_epochs):
+            for batch in train_dataloader:
+                xb, yb = batch
+                predictions = model(xb)
+                loss = loss_func(predictions, yb)
+
+                loss.backward()
+                optimizer.step()
+
+                scheduler.step()
+    """
+    def __init__(self, optimizer, param_group_field: str = "lr"):
+        """
+        Create a new instance of a stateful parameter scheduler.
+
+        :param optimizer: a PyTorch optimizer
+        :param param_group_field: the field in the optimizer's parameter groups
+        corresponding to the parameter to be scheduled
+        """
+        super().__init__(optimizer=optimizer, param_group_field=param_group_field)
+        self._num_updates = -1
 
     def step(self):
-        self.current_iteration_number += 1
-        self.step_update(self.current_iteration_number)
+        """
+        Calculate the updated value of the scheduled parameter and update the optimizer's parameter groups.
+        """
+        self._num_updates += 1
+        self.step_update(self._num_updates)
 
