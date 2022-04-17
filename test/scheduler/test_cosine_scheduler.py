@@ -6,18 +6,19 @@ from pytorch_accelerated.schedulers.cosine_scheduler import CosineLrScheduler
 def create_model_and_optimizer(lr_1, lr_2):
     model = torch.nn.Linear(2, 1)
     params = list(model.parameters())
-    optimizer = torch.optim.SGD([{'params': params[0],
-                                  },
-                                 {'params': params[1],
-                                  'lr': lr_2
-                                  }],
-                                lr=lr_1)
+    optimizer = torch.optim.SGD(
+        [
+            {
+                "params": params[0],
+            },
+            {"params": params[1], "lr": lr_2},
+        ],
+        lr=lr_1,
+    )
     return model, optimizer
 
 
-def collect_lrs_for_scheduler(scheduler,
-                              num_epochs,
-                              num_steps_per_epoch):
+def collect_lrs_for_scheduler(scheduler, num_epochs, num_steps_per_epoch):
     group_1_lrs = []
     group_2_lrs = []
 
@@ -38,12 +39,15 @@ def test_lr_maxes_equal():
     lr_1_max = 0.01
     lr_2_max = 0.002
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
-    scheduler = CosineLrScheduler(optimizer, total_num_epochs=num_epochs,
-                                  num_update_steps_per_epoch=num_steps_per_epoch)
+    scheduler = CosineLrScheduler(
+        optimizer,
+        total_num_epochs=num_epochs,
+        num_update_steps_per_epoch=num_steps_per_epoch,
+    )
 
-    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(scheduler,
-                                                         num_epochs,
-                                                         num_steps_per_epoch)
+    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
+        scheduler, num_epochs, num_steps_per_epoch
+    )
 
     assert group_1_lrs[0] == lr_1_max
     assert max(group_1_lrs) == lr_1_max
@@ -58,13 +62,16 @@ def test_lr_mins_at_schedule_end():
     lr_2_max = 0.002
     lr_min = 0.0001
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
-    scheduler = CosineLrScheduler(optimizer, total_num_epochs=num_epochs,
-                                  num_update_steps_per_epoch=num_steps_per_epoch,
-                                  lr_min=lr_min)
+    scheduler = CosineLrScheduler(
+        optimizer,
+        total_num_epochs=num_epochs,
+        num_update_steps_per_epoch=num_steps_per_epoch,
+        lr_min=lr_min,
+    )
 
-    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(scheduler,
-                                                         num_epochs,
-                                                         num_steps_per_epoch + 1)
+    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
+        scheduler, num_epochs, num_steps_per_epoch + 1
+    )
 
     assert group_1_lrs[-1] == lr_min
     assert min(group_1_lrs) == lr_min
@@ -83,13 +90,16 @@ def test_lr_min_ratio_at_schedule_end():
     expected_lr_2_min = lr_min_ratio * lr_2_max
 
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
-    scheduler = CosineLrScheduler(optimizer, total_num_epochs=num_epochs,
-                                  num_update_steps_per_epoch=num_steps_per_epoch,
-                                  min_lr_ratio=lr_min_ratio)
+    scheduler = CosineLrScheduler(
+        optimizer,
+        total_num_epochs=num_epochs,
+        num_update_steps_per_epoch=num_steps_per_epoch,
+        min_lr_ratio=lr_min_ratio,
+    )
 
-    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(scheduler,
-                                                         num_epochs,
-                                                         num_steps_per_epoch + 1)
+    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
+        scheduler, num_epochs, num_steps_per_epoch + 1
+    )
 
     assert group_1_lrs[-1] == expected_lr_1_min
     assert min(group_1_lrs) == expected_lr_1_min
@@ -108,16 +118,17 @@ def test_cooldown_epochs_at_lr_min():
     expected_cooldown_steps = [lr_min] * num_cooldown_steps
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
 
+    scheduler = CosineLrScheduler(
+        optimizer,
+        total_num_epochs=num_epochs,
+        num_update_steps_per_epoch=num_steps_per_epoch,
+        lr_min=lr_min,
+        num_cooldown_epochs=num_cooldown_epochs,
+    )
 
-    scheduler = CosineLrScheduler(optimizer,
-                                  total_num_epochs=num_epochs,
-                                  num_update_steps_per_epoch=num_steps_per_epoch,
-                                  lr_min=lr_min,
-                                  num_cooldown_epochs=num_cooldown_epochs)
-
-    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(scheduler,
-                                                         num_epochs,
-                                                         num_steps_per_epoch)
+    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
+        scheduler, num_epochs, num_steps_per_epoch
+    )
 
     assert group_1_lrs[-num_cooldown_steps:] == expected_cooldown_steps
     assert group_2_lrs[-num_cooldown_steps:] == expected_cooldown_steps
@@ -132,20 +143,23 @@ def test_warmup():
     lr_2_max = 0.002
     warmup_lr = 1e-6
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
-    scheduler = CosineLrScheduler(optimizer,
-                                  total_num_epochs=num_epochs,
-                                  num_update_steps_per_epoch=num_steps_per_epoch,
-                                  num_warmup_epochs=num_warmup_epochs,
-                                  warmup_starting_lr=warmup_lr)
+    scheduler = CosineLrScheduler(
+        optimizer,
+        total_num_epochs=num_epochs,
+        num_update_steps_per_epoch=num_steps_per_epoch,
+        num_warmup_epochs=num_warmup_epochs,
+        warmup_starting_lr=warmup_lr,
+    )
 
-    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(scheduler,
-                                                         num_epochs,
-                                                         num_steps_per_epoch)
+    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
+        scheduler, num_epochs, num_steps_per_epoch
+    )
 
     assert group_1_lrs[0] == warmup_lr
     assert group_2_lrs[0] == warmup_lr
     assert group_1_lrs[num_warmup_steps] == max(group_1_lrs)
     assert group_2_lrs[num_warmup_steps] == max(group_2_lrs)
+
 
 def test_warmup_from_ratio():
     num_epochs = 10
@@ -159,15 +173,17 @@ def test_warmup_from_ratio():
     starting_lr_2 = warmup_lr_ratio * lr_2_max
 
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
-    scheduler = CosineLrScheduler(optimizer,
-                                  total_num_epochs=num_epochs,
-                                  num_update_steps_per_epoch=num_steps_per_epoch,
-                                  num_warmup_epochs=num_warmup_epochs,
-                                  warmup_starting_lr_ratio=warmup_lr_ratio)
+    scheduler = CosineLrScheduler(
+        optimizer,
+        total_num_epochs=num_epochs,
+        num_update_steps_per_epoch=num_steps_per_epoch,
+        num_warmup_epochs=num_warmup_epochs,
+        warmup_starting_lr_ratio=warmup_lr_ratio,
+    )
 
-    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(scheduler,
-                                                         num_epochs,
-                                                         num_steps_per_epoch)
+    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
+        scheduler, num_epochs, num_steps_per_epoch
+    )
 
     assert group_1_lrs[0] == starting_lr_1
     assert group_2_lrs[0] == starting_lr_2
@@ -187,17 +203,19 @@ def test_warmup_and_cooldown():
     lr_min = 1e-6
     expected_cooldown_steps = [lr_min] * num_cooldown_steps
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
-    scheduler = CosineLrScheduler(optimizer,
-                                  total_num_epochs=num_epochs,
-                                  num_update_steps_per_epoch=num_steps_per_epoch,
-                                  num_warmup_epochs=num_warmup_epochs,
-                                  warmup_starting_lr=lr_min,
-                                  lr_min=lr_min,
-                                  num_cooldown_epochs=2)
+    scheduler = CosineLrScheduler(
+        optimizer,
+        total_num_epochs=num_epochs,
+        num_update_steps_per_epoch=num_steps_per_epoch,
+        num_warmup_epochs=num_warmup_epochs,
+        warmup_starting_lr=lr_min,
+        lr_min=lr_min,
+        num_cooldown_epochs=2,
+    )
 
-    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(scheduler,
-                                                         num_epochs,
-                                                         num_steps_per_epoch)
+    group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
+        scheduler, num_epochs, num_steps_per_epoch
+    )
 
     assert group_1_lrs[0] == lr_min
     assert group_2_lrs[0] == lr_min

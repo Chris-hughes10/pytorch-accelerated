@@ -57,9 +57,11 @@ def main(data_dir):
 
     # The Trainer calls schedulers after every step, not every epoch as StepLr expects
     # To use this as intended, we need to represent the step size as the number of iterations
-    exp_lr_scheduler = partial(lr_scheduler.StepLR,
-                               step_size=TrainerPlaceHolderValues.NUM_UPDATE_STEPS_PER_EPOCH * 7,
-                               gamma=0.1)
+    exp_lr_scheduler = partial(
+        lr_scheduler.StepLR,
+        step_size=TrainerPlaceHolderValues.NUM_UPDATE_STEPS_PER_EPOCH * 7,
+        gamma=0.1,
+    )
 
     trainer = Trainer(
         model,

@@ -1,4 +1,5 @@
-# inspired by ideas from https://github.com/rwightman/pytorch-image-models/blob/master/timm/scheduler/scheduler.py
+# Modifications Copyright © 2022 Chris Hughes
+# SchedulerBase adapted from https://github.com/rwightman/pytorch-image-models/blob/master/timm/scheduler/scheduler.py
 
 from abc import ABC, abstractmethod
 from numbers import Number
@@ -37,8 +38,7 @@ class SchedulerBase(ABC):
         Create a new instance of a parameter scheduler.
 
         :param optimizer: a PyTorch optimizer
-        :param param_group_field: the field in the optimizer's parameter groups
-        corresponding to the parameter to be scheduled
+        :param param_group_field: the field in the optimizer's parameter groups corresponding to the parameter to be scheduled
         """
 
         self.optimizer = optimizer
@@ -65,15 +65,20 @@ class SchedulerBase(ABC):
             )
 
     @abstractmethod
-    def get_updated_values(self, num_updates: int) -> Union[Number, Iterable[Number]]:
+    def get_updated_values(self, num_updates: int) -> Union[None, Number, Iterable[Number]]:
         """
-        Calculate updated values for the scheduled parameter. If a single number is returned, all parameter groups
-        will be updated with this number. To update each parameter group with a different value, an iterable collection,
+        Calculate updated values for the scheduled parameter.
+
+        If a single value is returned, all parameter groups will be updated with this value.
+
+        To update each parameter group with a different value, an iterable collection,
         containing an updated value for each parameter group, should be returned.
 
+        If None is returned, the parameter groups will not be updated.
+
         :param num_updates: the number of optimizer updates
-        :return: the updated values of the scheduled parameter. This should be either a single value,
-        or an iterable collection containing a value for each parameter group.
+        :return: the updated values of the scheduled parameter. This should be either a single value, or an iterable collection containing a value for each parameter group.
+
         """
         pass
 
@@ -82,6 +87,7 @@ class SchedulerBase(ABC):
         Calculate the updated value of the scheduled parameter and update the optimizer's parameter groups.
 
         :param num_updates: the number of optimizer updates
+
         """
         values = self.get_updated_values(num_updates)
         if values is not None:
@@ -148,8 +154,7 @@ class StatefulSchedulerBase(SchedulerBase, ABC):
         Create a new instance of a stateful parameter scheduler.
 
         :param optimizer: a PyTorch optimizer
-        :param param_group_field: the field in the optimizer's parameter groups
-        corresponding to the parameter to be scheduled
+        :param param_group_field: the field in the optimizer's parameter groups corresponding to the parameter to be scheduled
         """
         super().__init__(optimizer=optimizer, param_group_field=param_group_field)
         self._num_updates = -1
