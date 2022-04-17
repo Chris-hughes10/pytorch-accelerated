@@ -2,6 +2,8 @@
 
 .. _trainer:
 
+.. _timm: https://github.com/rwightman/pytorch-image-models
+
 Trainer
 *********
 
@@ -18,23 +20,10 @@ The main entrypoint for the :class:`Trainer` is the :meth:`~Trainer.train` metho
 
 .. automethod:: Trainer.train
 
-Using ``TrainerPlaceHolderValues``
---------------------------------------
-
-.. autoclass:: TrainerPlaceholderValues
-
-The list of the available placeholders are:
-
-- ``NUM_EPOCHS``
-- ``NUM_UPDATE_STEPS_PER_EPOCH``
-- ``TRAIN_DATALOADER_LEN``
-- ``EVAL_DATALOADER_LEN``
-
-Alternatively, the same outcome could be achieved by overriding the :class:`Trainer`'s :meth:`~Trainer.create_scheduler`
-method, which will be discussed below.
-
 Using learning rate schedulers
 ---------------------------------
+As Pytorch schedulers are not consistently called in the same way, to enable maximum flexibility, PyTorch-accelerated's
+:class:`Trainer` expects that a given scheduler should be called after **each optimizer update** by default.
 
 Note that, as the optimizer and dataloaders need to be internally prepared prior to training, in order to use a learning
 rate scheduler, a factory function must be provided to :meth:`~Trainer.train` as the ``create_scheduler_fn`` argument.
@@ -52,20 +41,19 @@ A simple method of creating a scheduler factory function this is by using :meth:
 
     create_scheduler_fn = partial(lr_scheduler.StepLR, step_size=7, gamma=0.1)
 
-
 .. note::
     The :class:`Trainer` calls a step on the provided scheduler after every batch. This can lead to
     unexpected results as some PyTorch schedulers are expected to step only after every epoch.
 
-In the example above, for instance, the learning rate would be multiplied by ``0.1`` at every batch. This is probably
-not what someone would expect as the that particular scheduler is designed to be called once per epoch. We can solve
-it by modifying the ``step_size`` appropriately with the ``epochs_step_size`` (which we need to decide on anyway) like this::
+For instance, in the example above, the learning rate would be multiplied by ``0.1`` at every batch. As this particular
+scheduler is designed to be called once per epoch, this is not the desired behaviour!
+We can resolve this by representing the ``step_size`` in terms of the number of updates, like this::
 
     from functools import Partial
-    import math
+
+    from torch.optim import lr_scheduler
 
     from pytorch_accelerated import TrainerPlaceholderValues
-    from torch.optim import lr_scheduler
 
     epochs_step_size = 7
 
@@ -74,10 +62,53 @@ it by modifying the ``step_size`` appropriately with the ``epochs_step_size`` (w
         step_size=TrainerPlaceHolderValues.NUM_UPDATE_STEPS_PER_EPOCH * epochs_step_size
     )
 
-Another solution consists in using a `timm schedulers <https://fastai.github.io/timmdocs/schedulers>`_ with
-the :class:`TrainerWithTimmScheduler` (they do not work with the base :class:`Trainer`). They have
-a more unified interface and do not suffer from the same problem. The scheduler should be fed the same
-way as described above.
+Here, to determine the value of the number of steps per epoch, we have used a :class:`TrainerPlaceholderValues`
+placeholder, which are described below.
+
+Using ``TrainerPlaceHolderValues``
+++++++++++++++++++++++++++++++++++
+
+.. autoclass:: TrainerPlaceholderValues
+
+The list of the available placeholders are:
+
+- ``NUM_EPOCHS``
+- ``NUM_UPDATE_STEPS_PER_EPOCH``
+- ``TRAIN_DATALOADER_LEN``
+- ``EVAL_DATALOADER_LEN``
+
+Alternatively, the same outcome could be achieved by overriding the :class:`Trainer`'s :meth:`~Trainer.create_scheduler`
+method.
+
+Using PyTorch-accelerated schedulers
+++++++++++++++++++++++++++++++++++++++++++
+
+PyTorch-accelerated includes some implementations of schedulers, which have the same interface as PyTorch schedulers,
+as well as base classes to easily create custom schedules; these are discussed in more detail in :ref:`schedulers`.
+
+These scheduler implementations have an alternative constructor, which can be passed to :meth:`~Trainer.train` as the
+the ``create_scheduler_fn`` argument directly, as demonstrated below::
+
+    from pytorch_accelerated.schedulers import CosineLrScheduler
+
+    trainer.train(
+            train_dataset=train_dataset,
+            num_epochs=num_epochs,
+            per_device_batch_size=batch_size,
+            create_scheduler_fn=CosineLrScheduler.create_scheduler_fn(num_warmup_epochs=5,
+                                                                      warmup_starting_lr=1e-6,
+                                                                      num_cooldown_epochs=5),
+            )
+
+
+Using timm schedulers
+++++++++++++++++++++++++++++++
+
+The schedulers included in `timm`_  have a different interface to the native PyTorch schedulers,
+so do not work with the base :class:`Trainer` by default.
+
+PyTorch-accelerated includes an alternative trainer :class:`TrainerWithTimmScheduler`, which is compatible with
+timm schedulers; schedulers should be passed to this trainer as a factory function the same way as described above.
 
 Evaluating a model
 ====================
