@@ -13,7 +13,7 @@
 import os
 import sys
 
-# sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, os.path.abspath(".."))
 
 # -- Project information -----------------------------------------------------
 
@@ -40,7 +40,7 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "torch": ("https://pytorch.org/docs/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
-    "accelerate": ("https://huggingface.co/docs/accelerate/", None),
+    "accelerate": ("https://huggingface.co/docs/accelerate/main/en/", None),
 }
 
 # Add any paths that contain templates here, relative to this directory.

@@ -15,7 +15,7 @@ from torch import nn, optim
 from torch.optim import lr_scheduler
 from torchvision import transforms, datasets, models
 
-from pytorch_accelerated.trainer import Trainer
+from pytorch_accelerated.trainer import Trainer, TrainerPlaceHolderValues
 
 
 def main(data_dir):
@@ -54,7 +54,14 @@ def main(data_dir):
 
     # Create optimizer and scheduler
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-    exp_lr_scheduler = partial(lr_scheduler.StepLR, step_size=7, gamma=0.1)
+
+    # The Trainer calls schedulers after every step, not every epoch as StepLr expects
+    # To use this as intended, we need to represent the step size as the number of iterations
+    exp_lr_scheduler = partial(
+        lr_scheduler.StepLR,
+        step_size=TrainerPlaceHolderValues.NUM_UPDATE_STEPS_PER_EPOCH * 7,
+        gamma=0.1,
+    )
 
     trainer = Trainer(
         model,
