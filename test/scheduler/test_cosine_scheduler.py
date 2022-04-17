@@ -23,7 +23,6 @@ def collect_lrs_for_scheduler(scheduler, num_epochs, num_steps_per_epoch):
     group_2_lrs = []
 
     for epoch in range(num_epochs):
-
         for i in range(num_steps_per_epoch):
             scheduler.step()
 
@@ -39,12 +38,12 @@ def test_lr_maxes_equal():
     lr_1_max = 0.01
     lr_2_max = 0.002
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
+
     scheduler = CosineLrScheduler(
         optimizer,
         total_num_epochs=num_epochs,
         num_update_steps_per_epoch=num_steps_per_epoch,
     )
-
     group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
         scheduler, num_epochs, num_steps_per_epoch
     )
@@ -62,13 +61,13 @@ def test_lr_mins_at_schedule_end():
     lr_2_max = 0.002
     lr_min = 0.0001
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
+
     scheduler = CosineLrScheduler(
         optimizer,
         total_num_epochs=num_epochs,
         num_update_steps_per_epoch=num_steps_per_epoch,
         lr_min=lr_min,
     )
-
     group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
         scheduler, num_epochs, num_steps_per_epoch + 1
     )
@@ -85,18 +84,16 @@ def test_lr_min_ratio_at_schedule_end():
     lr_1_max = 0.01
     lr_2_max = 0.002
     lr_min_ratio = 0.5
-
     expected_lr_1_min = lr_min_ratio * lr_1_max
     expected_lr_2_min = lr_min_ratio * lr_2_max
-
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
+
     scheduler = CosineLrScheduler(
         optimizer,
         total_num_epochs=num_epochs,
         num_update_steps_per_epoch=num_steps_per_epoch,
         min_lr_ratio=lr_min_ratio,
     )
-
     group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
         scheduler, num_epochs, num_steps_per_epoch + 1
     )
@@ -125,7 +122,6 @@ def test_cooldown_epochs_at_lr_min():
         lr_min=lr_min,
         num_cooldown_epochs=num_cooldown_epochs,
     )
-
     group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
         scheduler, num_epochs, num_steps_per_epoch
     )
@@ -143,6 +139,7 @@ def test_warmup():
     lr_2_max = 0.002
     warmup_lr = 1e-6
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
+
     scheduler = CosineLrScheduler(
         optimizer,
         total_num_epochs=num_epochs,
@@ -150,7 +147,6 @@ def test_warmup():
         num_warmup_epochs=num_warmup_epochs,
         warmup_starting_lr=warmup_lr,
     )
-
     group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
         scheduler, num_epochs, num_steps_per_epoch
     )
@@ -171,8 +167,8 @@ def test_warmup_from_ratio():
     warmup_lr_ratio = 0.01
     starting_lr_1 = warmup_lr_ratio * lr_1_max
     starting_lr_2 = warmup_lr_ratio * lr_2_max
-
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
+
     scheduler = CosineLrScheduler(
         optimizer,
         total_num_epochs=num_epochs,
@@ -180,7 +176,6 @@ def test_warmup_from_ratio():
         num_warmup_epochs=num_warmup_epochs,
         warmup_starting_lr_ratio=warmup_lr_ratio,
     )
-
     group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
         scheduler, num_epochs, num_steps_per_epoch
     )
@@ -203,6 +198,7 @@ def test_warmup_and_cooldown():
     lr_min = 1e-6
     expected_cooldown_steps = [lr_min] * num_cooldown_steps
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
+
     scheduler = CosineLrScheduler(
         optimizer,
         total_num_epochs=num_epochs,
@@ -212,7 +208,6 @@ def test_warmup_and_cooldown():
         lr_min=lr_min,
         num_cooldown_epochs=2,
     )
-
     group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(
         scheduler, num_epochs, num_steps_per_epoch
     )

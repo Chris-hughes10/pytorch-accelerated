@@ -65,7 +65,9 @@ class SchedulerBase(ABC):
             )
 
     @abstractmethod
-    def get_updated_values(self, num_updates: int) -> Union[None, Number, Iterable[Number]]:
+    def get_updated_values(
+        self, num_updates: int
+    ) -> Union[None, Number, Iterable[Number]]:
         """
         Calculate updated values for the scheduled parameter.
 
