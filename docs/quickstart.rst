@@ -106,4 +106,3 @@ Next steps
 
 More complex training examples can be seen in the examples folder `here <https://github.com/Chris-hughes10/pytorch-accelerated/tree/main/examples/>`_
 
-Alternatively, if you would prefer to read more about the :class:`~pytorch_accelerated.trainer.Trainer`, you can do so here: :ref:`trainer`.
