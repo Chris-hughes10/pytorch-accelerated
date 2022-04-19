@@ -1,7 +1,7 @@
 .. currentmodule:: pytorch_accelerated.trainer
 
-.. _trainer:
 .. _timm: https://github.com/rwightman/pytorch-image-models
+.. _trainer:
 
 Trainer
 *********
