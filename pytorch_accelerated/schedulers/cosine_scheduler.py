@@ -147,7 +147,7 @@ class CosineLrScheduler(StatefulSchedulerBase):
     def create_scheduler_fn(
         cls,
         total_num_epochs: int = TrainerPlaceholderValues.NUM_EPOCHS,
-        num_iterations_per_epoch: int = TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
+        num_update_steps_per_epoch: int = TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
         k_decay=1.0,
         lr_min: float = 1e-6,
         min_lr_ratio=None,
@@ -185,7 +185,7 @@ class CosineLrScheduler(StatefulSchedulerBase):
         return partial(
             cls,
             total_num_epochs=total_num_epochs,
-            num_iterations_per_epoch=num_iterations_per_epoch,
+            num_update_steps_per_epoch=num_update_steps_per_epoch,
             lr_min=lr_min,
             min_lr_ratio=min_lr_ratio,
             k_decay=k_decay,
