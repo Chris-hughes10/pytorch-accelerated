@@ -454,7 +454,7 @@ class TerminateOnNaNCallback(TrainerCallback):
     def check_for_nan_after_batch(self, batch_output, step=None):
         """Test if loss is NaN and interrupts training."""
         loss = batch_output["loss"]
-        if torch.isinf(loss) or torch.isnan(loss):
+        if torch.isinf(loss).any() or torch.isnan(loss).any():
             self.triggered = True
             raise StopTrainingError(f"Stopping training due to NaN loss in {step} step")
 
