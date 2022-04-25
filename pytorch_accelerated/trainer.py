@@ -265,7 +265,7 @@ class Trainer:
         :param batch: the output of the train dataloader
         :return: A dictionary containing the training loss, model outputs and batch size. Can include any keys, but must include the keys 'loss', 'model_outputs' and 'batch_size'
         """
-        xb, yb = batch
+        xb, yb = batch[0], batch[1]
 
         model_outputs = self.model(xb)
         loss = self.loss_func(model_outputs, yb)
@@ -328,7 +328,7 @@ class Trainer:
         :return: A dictionary containing the evaluation loss, model outputs and batch size. Can include any keys, but must include the keys ``loss``, ``model_outputs`` and ``batch_size``
         """
         with torch.no_grad():
-            xb, yb = batch
+            xb, yb = batch[0], batch[1]
             model_outputs = self.model(xb)
             val_loss = self.loss_func(model_outputs, yb)
 
