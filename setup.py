@@ -68,7 +68,7 @@ setup(
     extras_require={"examples": EXAMPLES_REQUIRED},
     include_package_data=True,
     classifiers=[
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
