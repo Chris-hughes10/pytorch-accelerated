@@ -11,6 +11,7 @@ def local_process_zero_only(func):
 
     :param func: the function to be decorated
     """
+
     @wraps(func)
     def wrapper_func(*args, **kwargs):
         state = AcceleratorState(_from_accelerator=True)
@@ -20,17 +21,19 @@ def local_process_zero_only(func):
             return result
         else:
             wait_for_everyone()
+
     return wrapper_func
 
 
 def world_process_zero_only(func):
     """
-       A decorator which can be used to ensure that the decorated function is only executed on the global main process
-       during distributed training
+    A decorator which can be used to ensure that the decorated function is only executed on the global main process
+    during distributed training
 
-       :param func: the function to be decorated
+    :param func: the function to be decorated
 
-       """
+    """
+
     @wraps(func)
     def wrapper_func(*args, **kwargs):
         state = AcceleratorState(_from_accelerator=True)
@@ -40,4 +43,5 @@ def world_process_zero_only(func):
             return result
         else:
             wait_for_everyone()
+
     return wrapper_func
