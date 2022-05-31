@@ -23,7 +23,7 @@ class TrainerRunConfig:
     :param is_local_process_zero: ``True`` if the current process is the main process on the current node, ``False`` otherwise
     :param is_world_process_zero: ``True`` if the current process is the main process across all nodes, ``False`` otherwise
     :param is_distributed: ``True`` if the trainer is set up to perform distributed training, ``False`` otherwise
-    :param using_fp16: ``True`` if the trainer is set up to use fp16, ``False`` otherwise
+    :param mixed_precision: A string containing the type of mixed precision the trainer is set up to use, ``no`` otherwise
 
 
     """
@@ -42,7 +42,7 @@ class TrainerRunConfig:
     is_local_process_zero: bool
     is_world_process_zero: bool
     is_distributed: bool
-    using_fp16: bool
+    mixed_precision: bool
 
     def to_dict(self):
         return asdict(self)
