@@ -701,25 +701,22 @@ class Trainer:
                 "on_train_step_start",
                 self,
             )
-            batch_output = self.calculate_train_batch_loss(batch)
-            self._loss_tracker.update(
-                self.gather(batch_output["loss"]).detach().mean().item(),
-                batch_output["batch_size"],
-            )
-            if self.run_config.gradient_accumulation_steps > 1:
-                batch_output["loss"] /= self.run_config.gradient_accumulation_steps
 
-            self.callback_handler.call_event(
-                "on_train_step_end", self, batch_output=batch_output, batch=batch
-            )
-            self.backward_step(batch_output["loss"])
+            perform_gradient_update = (
+                (step + 1) % self.run_config.gradient_accumulation_steps == 0
+            ) or (step + 1 == len(train_dl))
+
+            if not perform_gradient_update:
+                # accumulate gradients locally
+                with self._accelerator.no_sync(self.model):
+                    self._perform_forward_and_backward_passes(batch)
+            else:
+                self._perform_forward_and_backward_passes(batch)
 
             if self.run_config.gradient_clip_value is not None:
                 self._clip_gradients()
 
-            if (step + 1) % self.run_config.gradient_accumulation_steps == 0 or (
-                step + 1 == len(train_dl)
-            ):
+            if perform_gradient_update:
                 self.optimizer_step()
                 if (
                     self.scheduler is not None
@@ -734,6 +731,26 @@ class Trainer:
             "on_train_epoch_end",
             self,
         )
+
+    def _perform_forward_and_backward_passes(self, batch):
+        """
+        Perform the forward and backward passes of the training loop
+
+        :param batch: the current batch of data
+        """
+        batch_output = self.calculate_train_batch_loss(batch)
+        if self.run_config.gradient_accumulation_steps > 1:
+            batch_output["loss"] /= self.run_config.gradient_accumulation_steps
+
+        self._loss_tracker.update(
+            self.gather(batch_output["loss"]).detach().mean().item(),
+            batch_output["batch_size"],
+        )
+
+        self.callback_handler.call_event(
+            "on_train_step_end", self, batch_output=batch_output, batch=batch
+        )
+        self.backward_step(batch_output["loss"])
 
     def _clip_gradients(self):
         """
