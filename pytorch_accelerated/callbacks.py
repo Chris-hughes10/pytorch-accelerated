@@ -1,5 +1,6 @@
 # Copyright © 2021 Chris Hughes
 import inspect
+import itertools
 import logging
 import sys
 import time
@@ -495,3 +496,35 @@ class MoveModulesToDeviceCallback(TrainerCallback):
 
     def on_evaluation_run_start(self, trainer, **kwargs):
         self._move_modules_to_device(trainer)
+
+class DataLoaderSlice:
+    def __init__(self, dl, slice_size):
+        self.dl = dl
+        self.slice_size = slice_size
+
+    def __iter__(self):
+        return itertools.islice(self.dl, self.slice_size)
+
+    def __len__(self):
+        return self.slice_size
+
+
+class LimitBatchesCallback(TrainerCallback):
+    """
+    A callback that that limits the number of batches used during training and evaluation
+    """
+    def __init__(self, num_batches):
+        self.num_batches = num_batches
+
+    def on_training_run_start(self, trainer, **kwargs):
+        trainer._train_dataloader = DataLoaderSlice(
+            trainer._train_dataloader, self.num_batches
+        )
+        trainer._eval_dataloader = DataLoaderSlice(
+            trainer._eval_dataloader, self.num_batches
+        )
+
+    def on_evaluation_run_start(self, trainer, **kwargs):
+        trainer._eval_dataloader = DataLoaderSlice(
+            trainer._eval_dataloader, self.num_batches
+        )
