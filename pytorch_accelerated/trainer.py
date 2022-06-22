@@ -8,6 +8,7 @@ from typing import Iterable
 
 import torch
 from accelerate import Accelerator, DistributedType
+from accelerate.utils import set_seed
 from torch.utils.data import DataLoader
 
 from pytorch_accelerated.callbacks import (
@@ -173,6 +174,7 @@ class Trainer:
         Create an instance of :class:`accelerate.Accelerator` which will be used to manage training.
         :return:
         """
+
         return Accelerator()
 
     def create_train_dataloader(
@@ -536,6 +538,8 @@ class Trainer:
         """
         self._accelerator.free_memory()
         self._accelerator = self._create_accelerator()
+        # set different seed on each device to ensure any augmentations are different across processes
+        set_seed(42, device_specific=True)
 
         components = [self.model, self.optimizer]
 
