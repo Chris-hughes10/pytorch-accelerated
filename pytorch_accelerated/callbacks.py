@@ -182,9 +182,12 @@ class CallbackHandler:
         cb = callback() if isinstance(callback, type) else callback
         cb_class = callback if isinstance(callback, type) else callback.__class__
         if cb_class in {c.__class__ for c in self.callbacks}:
+
+            existing_callbacks = "\n".join(cb for cb in self.callback_list)
+
             raise ValueError(
                 f"You attempted to add multiple instances of the callback {cb_class} to a single Trainer"
-                f" The list of callbacks already present is\n: {self.callback_list}"
+                f" The list of callbacks already present is\n: {existing_callbacks}"
             )
         self.callbacks.append(cb)
 
@@ -196,7 +199,7 @@ class CallbackHandler:
 
     @property
     def callback_list(self):
-        return "\n".join(cb.__class__.__name__ for cb in self.callbacks)
+        return [cb.__class__.__name__ for cb in self.callbacks]
 
     def call_event(self, event, *args, **kwargs):
         """
@@ -497,6 +500,7 @@ class MoveModulesToDeviceCallback(TrainerCallback):
     def on_evaluation_run_start(self, trainer, **kwargs):
         self._move_modules_to_device(trainer)
 
+
 class DataLoaderSlice:
     def __init__(self, dl, slice_size):
         self.dl = dl
@@ -513,6 +517,7 @@ class LimitBatchesCallback(TrainerCallback):
     """
     A callback that that limits the number of batches used during training and evaluation
     """
+
     def __init__(self, num_batches):
         self.num_batches = num_batches
 
