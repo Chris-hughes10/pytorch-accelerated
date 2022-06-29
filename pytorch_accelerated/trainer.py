@@ -19,9 +19,11 @@ from pytorch_accelerated.callbacks import (
     StopTrainingError,
     ProgressBarCallback,
     MoveModulesToDeviceCallback,
+    LimitBatchesCallback,
 )
 from pytorch_accelerated.run_config import TrainerRunConfig
 from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, LossTracker
+from pytorch_accelerated.utils import LIMIT_BATCHES_ENV_VAR
 
 DEFAULT_CALLBACKS = (
     MoveModulesToDeviceCallback,
@@ -147,9 +149,8 @@ class Trainer:
         self.model = model
         self.loss_func = loss_func
         self.optimizer = optimizer
-        self.callback_handler = CallbackHandler(
-            callbacks,
-        )
+        self._callbacks = callbacks
+        self.callback_handler = self._create_callback_handler()
         self.run_history: RunHistory = (
             run_history if run_history is not None else InMemoryRunHistory()
         )
@@ -169,10 +170,27 @@ class Trainer:
 
         self.callback_handler.call_event("on_init_end", self)
 
+    def _create_callback_handler(self):
+        """
+        Create an instance of :class:pytorch_accelerated.callbacks.CallbackHandler`, which will be used to
+        manage callback execution.
+        """
+
+        limit_batches = os.getenv(LIMIT_BATCHES_ENV_VAR, None)
+        if limit_batches is not None or limit_batches.lower() == "none":
+            callbacks = [LimitBatchesCallback(int(limit_batches))]
+        else:
+            callbacks = []
+
+        callbacks.extend(self._callbacks)
+
+        return CallbackHandler(
+            callbacks,
+        )
+
     def _create_accelerator(self):
         """
         Create an instance of :class:`accelerate.Accelerator` which will be used to manage training.
-        :return:
         """
 
         return Accelerator()
