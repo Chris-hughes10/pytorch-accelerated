@@ -25,25 +25,6 @@ class LimitBatches:
         del os.environ[LIMIT_BATCHES_ENV_VAR]
 
 
-def limit_trainer_batches(func, *, num_batches):
-    """
-    A decorator which can be used to ensure that the decorated function is only executed on the local main process
-    during distributed training
-
-    :param func: the function to be decorated
-    """
-
-    @wraps(func)
-    def wrapper_func(*args, **kwargs):
-        os.environ[LIMIT_BATCHES_ENV_VAR] = num_batches
-        result = func(*args, **kwargs)
-        del os.environ[LIMIT_BATCHES_ENV_VAR]
-
-        return result
-
-    return wrapper_func
-
-
 def local_process_zero_only(func):
     """
     A decorator which can be used to ensure that the decorated function is only executed on the local main process
