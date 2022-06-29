@@ -177,7 +177,7 @@ class Trainer:
         """
 
         limit_batches = os.getenv(LIMIT_BATCHES_ENV_VAR, None)
-        if limit_batches is not None or limit_batches.lower() == "none":
+        if limit_batches is not None and limit_batches.lower() == "none":
             callbacks = [LimitBatchesCallback(int(limit_batches))]
         else:
             callbacks = []
