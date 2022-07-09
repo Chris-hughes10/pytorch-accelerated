@@ -47,7 +47,7 @@ class TrainerRunConfig:
     def to_dict(self):
         # cannot pickle torch._C.Generators, so must remove before dict creation
         custom_train_sampler = 'sampler' in self.train_dl_kwargs
-        custom_eval_sampler = 'sampler' in self.train_dl_kwargs
+        custom_eval_sampler = 'sampler' in self.eval_dl_kwargs
 
         if custom_train_sampler:
             train_sampler = self.train_dl_kwargs.pop('sampler')
