@@ -214,6 +214,9 @@ class Trainer:
         default_train_dl_kwargs = self.get_default_train_dl_kwargs(batch_size)
 
         if train_dl_kwargs is not None:
+            if 'sampler' in train_dl_kwargs:
+                default_train_dl_kwargs.pop('shuffle')
+
             default_train_dl_kwargs.update(train_dl_kwargs)
 
         self._train_dl_kwargs = default_train_dl_kwargs
@@ -242,6 +245,8 @@ class Trainer:
         default_eval_dl_kwargs = self.get_default_eval_dl_kwargs(batch_size)
 
         if eval_dl_kwargs is not None:
+            if 'sampler' in eval_dl_kwargs:
+                default_eval_dl_kwargs.pop('shuffle')
             default_eval_dl_kwargs.update(eval_dl_kwargs)
 
         self._eval_dl_kwargs = default_eval_dl_kwargs
