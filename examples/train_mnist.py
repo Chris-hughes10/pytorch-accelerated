@@ -8,7 +8,7 @@
 import os
 
 from torch import nn, optim
-from torch.utils.data import random_split, RandomSampler, SequentialSampler
+from torch.utils.data import random_split
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
@@ -49,8 +49,6 @@ def main():
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
         num_epochs=2,
-        train_dataloader_kwargs={'sampler': RandomSampler(train_dataset)},
-        eval_dataloader_kwargs={'sampler': SequentialSampler(validation_dataset)},
         per_device_batch_size=32,
     )
 
