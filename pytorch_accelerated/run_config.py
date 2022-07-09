@@ -45,4 +45,22 @@ class TrainerRunConfig:
     mixed_precision: bool
 
     def to_dict(self):
-        return asdict(self)
+        # cannot pickle torch._C.Generators, so must remove before dict creation
+        custom_train_sampler = 'sampler' in self.train_dl_kwargs
+        custom_eval_sampler = 'sampler' in self.train_dl_kwargs
+
+        if custom_train_sampler:
+            train_sampler = self.train_dl_kwargs.pop('sampler')
+
+        if custom_eval_sampler:
+            eval_sampler = self.eval_dl_kwargs.pop('sampler')
+
+        run_config_dict = asdict(self)
+
+        if custom_train_sampler:
+            run_config_dict['train_dl_kwargs']['sampler'] = train_sampler
+
+        if custom_eval_sampler:
+            run_config_dict['eval_dl_kwargs']['sampler'] = eval_sampler
+
+        return run_config_dict
