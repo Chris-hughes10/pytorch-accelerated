@@ -43,7 +43,7 @@ class RunHistory(ABC):
         """
         Set a prefix which will be prepended to any metric name which is tracked.
 
-        :param prefix: a prefix which will be prepended to any metric name which is tracked in the form prefix_metric_name
+        :param prefix: a prefix which will be prepended to any metric name which is tracked
         """
         pass
 
@@ -115,7 +115,7 @@ class InMemoryRunHistory(RunHistory):
             )
 
     def update_metric(self, metric_name, metric_value):
-        self._metrics[f"{self._prefix}_metric_name"].append(metric_value)
+        self._metrics[f"{self._prefix}metric_name"].append(metric_value)
 
     def set_metric_name_prefix(self, prefix=""):
         self._prefix = prefix

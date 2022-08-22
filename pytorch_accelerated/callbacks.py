@@ -570,7 +570,7 @@ class LimitBatchesCallback(TrainerCallback):
             )
             self.decay = decay
             self.ema_model = None
-            self._track_prefix = "ema_model"
+            self._track_prefix = "ema_model_"
             self.evaluate_during_training = evaluate_during_training
 
         def on_training_run_start(self, trainer, **kwargs):
