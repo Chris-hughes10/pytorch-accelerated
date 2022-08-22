@@ -8,6 +8,7 @@ from abc import ABC
 
 import numpy as np
 import torch
+from pytorch_accelerated.utils import ModelEma
 from torch import nn
 from tqdm import tqdm
 
@@ -182,7 +183,6 @@ class CallbackHandler:
         cb = callback() if isinstance(callback, type) else callback
         cb_class = callback if isinstance(callback, type) else callback.__class__
         if cb_class in {c.__class__ for c in self.callbacks}:
-
             existing_callbacks = "\n".join(cb for cb in self.callback_list)
 
             raise ValueError(
@@ -333,6 +333,7 @@ class SaveBestModelCallback(TrainerCallback):
         watch_metric="eval_loss_epoch",
         greater_is_better: bool = False,
         reset_on_train: bool = True,
+        save_optimizer: bool = True,
     ):
         """
 
@@ -340,6 +341,7 @@ class SaveBestModelCallback(TrainerCallback):
         :param watch_metric: the metric used to compare model performance. This should be accessible from the trainer's run history.
         :param greater_is_better: whether an increase in the ``watch_metric`` should be interpreted as the model performing better.
         :param reset_on_train: whether to reset the best metric on subsequent training runs. If ``True``, only the metrics observed during the current training run will be compared.
+        :param save_optimizer: whether to also save the optimizer as part of the model checkpoint
         """
         self.watch_metric = watch_metric
         self.greater_is_better = greater_is_better
@@ -347,6 +349,7 @@ class SaveBestModelCallback(TrainerCallback):
         self.best_metric = None
         self.save_path = save_path
         self.reset_on_train = reset_on_train
+        self.save_optimizer = save_optimizer
 
     def on_training_run_start(self, args, **kwargs):
         if self.reset_on_train:
@@ -359,6 +362,7 @@ class SaveBestModelCallback(TrainerCallback):
             trainer.save_checkpoint(
                 save_path=self.save_path,
                 checkpoint_kwargs={self.watch_metric: self.best_metric},
+                save_optimizer=self.save_optimizer,
             )
         else:
             is_improvement = self.operator(current_metric, self.best_metric)
@@ -368,6 +372,7 @@ class SaveBestModelCallback(TrainerCallback):
                 trainer.save_checkpoint(
                     save_path=self.save_path,
                     checkpoint_kwargs={"loss": self.best_metric},
+                    save_optimizer=self.save_optimizer,
                 )
 
     def on_training_run_end(self, trainer, **kwargs):
@@ -533,3 +538,69 @@ class LimitBatchesCallback(TrainerCallback):
         trainer._eval_dataloader = DataLoaderSlice(
             trainer._eval_dataloader, self.num_batches
         )
+
+    class ModelEmaCallback(SaveBestModelCallback):
+        """
+        A callback which maintains and saves an exponential moving average of the weights of the model that is currently
+        being trained.
+        """
+
+        def __init__(
+            self,
+            decay: float = 0.99,
+            evaluate_during_training: bool = True,
+            save_path: str = "ema_model.pt",
+            watch_metric: str = "ema_model_eval_loss_epoch",
+            greater_is_better: bool = False,
+        ):
+            """
+            This callback offers the option of evaluating the EMA model during
+
+            :param decay: the amount of decay to use, which determines how much of the previous state will be maintained.
+            :param evaluate_during_training: whether to evaluate the EMA model during training. If True, an additional validation epoch will be conducted after each training epoch, which will use additional GPU resources, and the best model will be saved. If False, the saved EMA model checkpoint will be updated at the end of each epoch.
+            :param watch_metric: the metric used to compare model performance. This should be accessible from the trainer's run history. This is only used when `evaluate_during_training` is enabled.
+            :param greater_is_better: whether an increase in the ``watch_metric`` should be interpreted as the model performing better.
+            """
+            super().__init__(
+                save_path=save_path,
+                watch_metric=watch_metric,
+                greater_is_better=greater_is_better,
+                reset_on_train=False,
+                save_optimizer=False,
+            )
+            self.decay = decay
+            self.ema_model = None
+            self._track_prefix = "ema_model"
+            self.evaluate_during_training = evaluate_during_training
+
+        def on_training_run_start(self, trainer, **kwargs):
+            self.ema_model = ModelEma(
+                trainer._accelerator.unwrap_model(trainer.model), decay=self.decay
+            )
+            if self.evaluate_during_training:
+                self.ema_model.to(trainer.device)
+
+        def on_train_epoch_end(self, trainer, **kwargs):
+            self.ema_model.update(trainer._accelerator.unwrap_model(trainer.model))
+
+        def on_eval_epoch_end(self, trainer, **kwargs):
+            if self.evaluate_during_training:
+                model = trainer.model
+                trainer.model = self.ema_model.module
+                run_history_prefix = trainer.run_history.metric_name_prefix
+
+                trainer.run_history.set_metric_name_prefix(self._track_prefix)
+                trainer._run_eval_epoch(trainer._eval_dataloader)
+
+                trainer.model = model
+                trainer.run_history.set_metric_name_prefix(run_history_prefix)
+
+        def on_training_run_epoch_end(self, trainer, **kwargs):
+            if self.evaluate_during_training:
+                super().on_training_run_epoch_end(trainer)
+            else:
+                model = trainer.model
+                trainer.model = self.ema_model.module
+
+                trainer.save_checkpoint(save_path=self.save_path, save_optimizer=False)
+                trainer.model = model
