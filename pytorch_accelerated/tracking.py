@@ -115,7 +115,7 @@ class InMemoryRunHistory(RunHistory):
             )
 
     def update_metric(self, metric_name, metric_value):
-        self._metrics[f"{self._prefix}metric_name"].append(metric_value)
+        self._metrics[f"{self._prefix}{metric_name}"].append(metric_value)
 
     def set_metric_name_prefix(self, prefix=""):
         self._prefix = prefix
