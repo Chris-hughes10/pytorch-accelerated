@@ -588,7 +588,6 @@ class ModelEmaCallback(SaveBestModelCallback):
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         if self.evaluate_during_training:
-            self._evaluating = True
             model = trainer.model
             trainer.model = self.ema_model.module
             run_history_prefix = trainer.run_history.metric_name_prefix
@@ -610,3 +609,7 @@ class ModelEmaCallback(SaveBestModelCallback):
 
             trainer.save_checkpoint(save_path=self.save_path, save_optimizer=False)
             trainer.model = model
+
+    def on_training_run_end(self, trainer, **kwargs):
+        # Overriding, as we do not want to load the EMA model
+        pass
