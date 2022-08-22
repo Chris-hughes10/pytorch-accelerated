@@ -55,6 +55,9 @@ Implemented Callbacks
 .. autoclass:: MoveModulesToDeviceCallback
     :show-inheritance:
 
+.. autoclass:: ConvertSyncBatchNormCallback
+    :show-inheritance:
+
 
 Creating New Callbacks
 ========================
