@@ -39,6 +39,23 @@ class RunHistory(ABC):
         pass
 
     @abstractmethod
+    def set_metric_name_prefix(self, prefix=""):
+        """
+        Set a prefix which will be prepended to any metric name which is tracked.
+
+        :param prefix: a prefix which will be prepended to any metric name which is tracked
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def metric_name_prefix(self):
+        """
+        :return: the prefix which wil be prepended to any metric name
+        """
+        pass
+
+    @abstractmethod
     def update_metric(self, metric_name, metric_value):
         """
         Record the value for the given metric.
@@ -81,6 +98,7 @@ class InMemoryRunHistory(RunHistory):
     def __init__(self):
         self._current_epoch = 1
         self._metrics = defaultdict(list)
+        self._prefix = ""
 
     def get_metric_names(self):
         return set(self._metrics.keys())
@@ -97,7 +115,14 @@ class InMemoryRunHistory(RunHistory):
             )
 
     def update_metric(self, metric_name, metric_value):
-        self._metrics[metric_name].append(metric_value)
+        self._metrics[f"{self._prefix}{metric_name}"].append(metric_value)
+
+    def set_metric_name_prefix(self, prefix=""):
+        self._prefix = prefix
+
+    @property
+    def metric_name_prefix(self):
+        return self._prefix
 
     @property
     def current_epoch(self):

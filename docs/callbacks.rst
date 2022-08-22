@@ -42,6 +42,11 @@ Implemented Callbacks
 
     .. automethod:: __init__
 
+.. autoclass:: ModelEmaCallback
+    :show-inheritance:
+
+    .. automethod:: __init__
+
 .. autoclass:: EarlyStoppingCallback
     :show-inheritance:
 

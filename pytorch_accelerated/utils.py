@@ -1,8 +1,14 @@
+# Modifications Copyright (C) 2021 Chris Hughes
+# Model EMA code adapted from https://github.com/rwightman/pytorch-image-models/blob/master/timm/utils/model_ema.py
+
 import os
+from copy import deepcopy
 from functools import wraps
 
+import torch
 from accelerate.state import AcceleratorState
 from accelerate.utils import wait_for_everyone
+from torch import nn
 
 LIMIT_BATCHES_ENV_VAR = "PT_ACC_LIMIT_BATCHES"
 
@@ -88,3 +94,56 @@ def world_process_zero_only(func):
             wait_for_everyone()
 
     return wrapper_func
+
+
+class ModelEma(nn.Module):
+    """
+    Maintains a moving average of everything in the model state_dict (parameters and buffers), based on the ideas
+    from https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage.
+
+    This class maintains a copy of the model that we are training. However,
+    rather than updating all of the parameters of this model after every update step,
+    we set these parameters using a linear combination of the existing parameter values and the updated values
+
+    .. Note:: It is important to note that this class is sensitive to where it is initialised.
+    During distributed training, it should be applied before before the conversion to :class:`~torch.nn.SyncBatchNorm`
+    takes place and before the :class:`torch.nn.parallel.DistributedDataParallel` wrapper is used!
+    """
+
+    def __init__(self, model, decay=0.9999):
+        """
+        Create an instance of :class:`torch.nn.Module` to maintain an exponential moving average of the weights of
+        the given model.
+
+        This is done using the following formula:
+
+        `updated_EMA_model_weights = decay * EMA_model_weights + (1. — decay) * updated_model_weights`
+
+        where the decay is a parameter that we set.
+
+        :param model: the subclass of :class: `torch.nn.Module` that we are training. This is the model that will be updated in our training loop as normal.
+        :param decay: the amount of decay to use, which determines how much of the previous state will be maintained. The TensorFlow documentation suggests that reasonable values for decay are close to 1.0, typically in the multiple-nines range: 0.999, 0.9999
+        """
+        super().__init__()
+        # make a copy of the model for accumulating moving average of weights
+        self.module = deepcopy(model)
+        self.module.eval()
+        self.decay = decay
+
+    def _update(self, model, update_fn):
+        with torch.no_grad():
+            for ema_v, model_v in zip(
+                self.module.state_dict().values(), model.state_dict().values()
+            ):
+                ema_v.copy_(update_fn(ema_v, model_v))
+
+    def update(self, model):
+        self._update(
+            model,
+            update_fn=lambda ema_model_weights, updated_model_weights: self.decay
+            * ema_model_weights
+            + (1.0 - self.decay) * updated_model_weights,
+        )
+
+    def set(self, model):
+        self._update(model, update_fn=lambda e, m: m)
