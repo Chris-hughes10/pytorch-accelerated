@@ -164,6 +164,7 @@ class CallbackHandler:
     def __init__(self, callbacks):
         self.callbacks = []
         self.add_callbacks(callbacks)
+        self._enabled = True
 
     def add_callbacks(self, callbacks):
         """
@@ -210,14 +211,15 @@ class CallbackHandler:
         :param args: a list of arguments to be passed to each callback
         :param kwargs: a list of keyword arguments to be passed to each callback
         """
-        for callback in self.callbacks:
-            try:
-                getattr(callback, event)(
-                    *args,
-                    **kwargs,
-                )
-            except CallbackMethodNotImplementedError as e:
-                continue
+        if self._enabled:
+            for callback in self.callbacks:
+                try:
+                    getattr(callback, event)(
+                        *args,
+                        **kwargs,
+                    )
+                except CallbackMethodNotImplementedError as e:
+                    continue
 
 
 class LogMetricsCallback(TrainerCallback):
@@ -574,9 +576,6 @@ class ModelEmaCallback(SaveBestModelCallback):
         self._track_prefix = "ema_model_"
         self.evaluate_during_training = evaluate_during_training
 
-        self._evaluating = False
-        self._finished_evaluation = False
-
     def on_training_run_start(self, trainer, **kwargs):
         self.ema_model = ModelEma(
             trainer._accelerator.unwrap_model(trainer.model), decay=self.decay
@@ -589,20 +588,18 @@ class ModelEmaCallback(SaveBestModelCallback):
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         if self.evaluate_during_training:
-            if not self._evaluating:
-                self._evaluating = True
-                model = trainer.model
-                trainer.model = self.ema_model.module
-                run_history_prefix = trainer.run_history.metric_name_prefix
+            self._evaluating = True
+            model = trainer.model
+            trainer.model = self.ema_model.module
+            run_history_prefix = trainer.run_history.metric_name_prefix
 
-                trainer.run_history.set_metric_name_prefix(self._track_prefix)
-                trainer._run_eval_epoch(trainer._eval_dataloader)
+            trainer.callback_handler._enabled = False
+            trainer.run_history.set_metric_name_prefix(self._track_prefix)
+            trainer._run_eval_epoch(trainer._eval_dataloader)
 
-                trainer.model = model
-                trainer.run_history.set_metric_name_prefix(run_history_prefix)
-                self._finished_evaluation = True
-            if self._finished_evaluation:
-                self._evaluating = False
+            trainer.model = model
+            trainer.callback_handler._enabled = True
+            trainer.run_history.set_metric_name_prefix(run_history_prefix)
 
     def on_training_run_epoch_end(self, trainer, **kwargs):
         if self.evaluate_during_training:
