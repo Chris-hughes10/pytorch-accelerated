@@ -536,3 +536,12 @@ class LimitBatchesCallback(TrainerCallback):
         trainer._eval_dataloader = DataLoaderSlice(
             trainer._eval_dataloader, self.num_batches
         )
+
+
+class ConvertSyncBatchNormCallback(TrainerCallback):
+    """
+    A callback which converts all BatchNorm*D layers in the model to :class:`torch.nn.SyncBatchNorm` layers.
+    """
+    def on_training_run_start(self, trainer, **kwargs):
+        if trainer.run_config.is_distributed:
+            trainer.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(trainer.model)
