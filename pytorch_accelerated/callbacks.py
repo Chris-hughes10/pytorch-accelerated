@@ -598,6 +598,7 @@ class ModelEmaCallback(SaveBestModelCallback):
             trainer.model = self.ema_model.module
             run_history_prefix = trainer.run_history.metric_name_prefix
 
+            trainer.print("Running evaluation on EMA model")
             trainer.callback_handler._enabled = False
             trainer.run_history.set_metric_name_prefix(self._track_prefix)
             trainer._run_eval_epoch(trainer._eval_dataloader)
