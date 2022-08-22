@@ -546,6 +546,9 @@ class ModelEmaCallback(SaveBestModelCallback):
     """
     A callback which maintains and saves an exponential moving average of the weights of the model that is currently
     being trained.
+
+    .. Note:: this callback is sensitive to the order that it is executed. This should always be the first callback that
+    is passed to the trainer.
     """
 
     def __init__(
