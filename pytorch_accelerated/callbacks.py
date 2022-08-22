@@ -574,6 +574,9 @@ class ModelEmaCallback(SaveBestModelCallback):
         self._track_prefix = "ema_model_"
         self.evaluate_during_training = evaluate_during_training
 
+        self._evaluating = False
+        self._finished_evaluation = False
+
     def on_training_run_start(self, trainer, **kwargs):
         self.ema_model = ModelEma(
             trainer._accelerator.unwrap_model(trainer.model), decay=self.decay
@@ -586,15 +589,20 @@ class ModelEmaCallback(SaveBestModelCallback):
 
     def on_eval_epoch_end(self, trainer, **kwargs):
         if self.evaluate_during_training:
-            model = trainer.model
-            trainer.model = self.ema_model.module
-            run_history_prefix = trainer.run_history.metric_name_prefix
+            if not self._evaluating:
+                self._evaluating = True
+                model = trainer.model
+                trainer.model = self.ema_model.module
+                run_history_prefix = trainer.run_history.metric_name_prefix
 
-            trainer.run_history.set_metric_name_prefix(self._track_prefix)
-            trainer._run_eval_epoch(trainer._eval_dataloader)
+                trainer.run_history.set_metric_name_prefix(self._track_prefix)
+                trainer._run_eval_epoch(trainer._eval_dataloader)
 
-            trainer.model = model
-            trainer.run_history.set_metric_name_prefix(run_history_prefix)
+                trainer.model = model
+                trainer.run_history.set_metric_name_prefix(run_history_prefix)
+                self._finished_evaluation = True
+            if self._finished_evaluation:
+                self._evaluating = False
 
     def on_training_run_epoch_end(self, trainer, **kwargs):
         if self.evaluate_during_training:
