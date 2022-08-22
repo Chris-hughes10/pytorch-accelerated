@@ -345,6 +345,7 @@ class SaveBestModelCallback(TrainerCallback):
         self.greater_is_better = greater_is_better
         self.operator = np.greater if self.greater_is_better else np.less
         self.best_metric = None
+        self.best_metric_epoch = None
         self.save_path = save_path
         self.reset_on_train = reset_on_train
 
@@ -356,6 +357,7 @@ class SaveBestModelCallback(TrainerCallback):
         current_metric = trainer.run_history.get_latest_metric(self.watch_metric)
         if self.best_metric is None:
             self.best_metric = current_metric
+            self.best_metric_epoch = trainer.run_history.current_epoch
             trainer.save_checkpoint(
                 save_path=self.save_path,
                 checkpoint_kwargs={self.watch_metric: self.best_metric},
@@ -365,6 +367,7 @@ class SaveBestModelCallback(TrainerCallback):
 
             if is_improvement:
                 self.best_metric = current_metric
+                self.best_metric_epoch = trainer.run_history.current_epoch
                 trainer.save_checkpoint(
                     save_path=self.save_path,
                     checkpoint_kwargs={"loss": self.best_metric},
@@ -372,7 +375,7 @@ class SaveBestModelCallback(TrainerCallback):
 
     def on_training_run_end(self, trainer, **kwargs):
         trainer.print(
-            f"Loading checkpoint with {self.watch_metric}: {self.best_metric}"
+            f"Loading checkpoint with {self.watch_metric}: {self.best_metric} from epoch {self.best_metric_epoch}"
         )
         trainer.load_checkpoint(self.save_path)
 
