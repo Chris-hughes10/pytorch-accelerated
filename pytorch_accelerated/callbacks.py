@@ -554,8 +554,9 @@ class ModelEmaCallback(SaveBestModelCallback):
     validation after each training epoch, which will use additional GPU resources. During this additional epoch,
     no callbacks will be executed.
 
-    .. Note:: this callback is sensitive to the order that it is executed. This should always be the first callback that
-    is passed to the trainer.
+    .. Note:: This callback is sensitive to the order that it is executed. This should always be the first callback that
+        is passed to the trainer.
+
     """
 
     def __init__(
@@ -569,8 +570,9 @@ class ModelEmaCallback(SaveBestModelCallback):
         """
         :param decay: the amount of decay to use, which determines how much of the previous state will be maintained.
         :param evaluate_during_training: whether to evaluate the EMA model during training. If True, an additional validation epoch will be conducted after each training epoch, which will use additional GPU resources, and the best model will be saved. If False, the saved EMA model checkpoint will be updated at the end of each epoch.
-        :param watch_metric: the metric used to compare model performance. This should be accessible from the trainer's run history. This is only used when `evaluate_during_training` is enabled.
+        :param watch_metric: the metric used to compare model performance. This should be accessible from the trainer's run history. This is only used when ``evaluate_during_training`` is enabled.
         :param greater_is_better: whether an increase in the ``watch_metric`` should be interpreted as the model performing better.
+
         """
         super().__init__(
             save_path=save_path,

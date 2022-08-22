@@ -106,8 +106,8 @@ class ModelEma(nn.Module):
     we set these parameters using a linear combination of the existing parameter values and the updated values
 
     .. Note:: It is important to note that this class is sensitive to where it is initialised.
-    During distributed training, it should be applied before before the conversion to :class:`~torch.nn.SyncBatchNorm`
-    takes place and before the :class:`torch.nn.parallel.DistributedDataParallel` wrapper is used!
+        During distributed training, it should be applied before before the conversion to :class:`~torch.nn.SyncBatchNorm`
+        takes place and before the :class:`torch.nn.parallel.DistributedDataParallel` wrapper is used!
     """
 
     def __init__(self, model, decay=0.9999):
@@ -123,6 +123,7 @@ class ModelEma(nn.Module):
 
         :param model: the subclass of :class: `torch.nn.Module` that we are training. This is the model that will be updated in our training loop as normal.
         :param decay: the amount of decay to use, which determines how much of the previous state will be maintained. The TensorFlow documentation suggests that reasonable values for decay are close to 1.0, typically in the multiple-nines range: 0.999, 0.9999
+
         """
         super().__init__()
         # make a copy of the model for accumulating moving average of weights
