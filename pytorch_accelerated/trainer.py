@@ -668,12 +668,12 @@ class Trainer:
                 self._run_train_epoch(self._train_dataloader)
                 if self.eval_dataset is not None:
                     self._run_eval_epoch(self._eval_dataloader)
-                self.run_history._increment_epoch()
                 self.training_run_epoch_end()
                 self.callback_handler.call_event(
                     "on_training_run_epoch_end",
                     self,
                 )
+                self.run_history._increment_epoch()
             except StopTrainingError as e:
                 self._accelerator.print(e)
                 self.callback_handler.call_event(
