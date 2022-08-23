@@ -1,7 +1,7 @@
 # Copyright © 2021 Chris Hughes
 import math
 import os
-from collections import Callable
+
 from enum import Enum
 from functools import partial
 from typing import Iterable
@@ -402,7 +402,7 @@ class Trainer:
         max_num_train_steps=None,
         gradient_accumulation_steps=1,
         gradient_clip_value=None,
-        create_scheduler_fn: Callable = None,
+        create_scheduler_fn=None,
         train_dataloader_kwargs: dict = None,
         eval_dataloader_kwargs: dict = None,
         reset_run_history=True,
