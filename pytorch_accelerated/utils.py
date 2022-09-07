@@ -148,3 +148,12 @@ class ModelEma(nn.Module):
 
     def set(self, model):
         self._update(model, update_fn=lambda e, m: m)
+
+
+def worker_init_fn(worker_id):
+    """
+    Function that is used to set the random seed in each dataloader worker.
+    This differs from the default by using the current random seed, which should be different in each process,
+    rather than the initial random seed.
+    """
+    return torch.seed() + worker_id
