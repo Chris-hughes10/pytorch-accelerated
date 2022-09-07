@@ -566,12 +566,14 @@ class ModelEmaCallback(SaveBestModelCallback):
         save_path: str = "ema_model.pt",
         watch_metric: str = "ema_model_eval_loss_epoch",
         greater_is_better: bool = False,
+        model_ema=ModelEma
     ):
         """
         :param decay: the amount of decay to use, which determines how much of the previous state will be maintained.
         :param evaluate_during_training: whether to evaluate the EMA model during training. If True, an additional validation epoch will be conducted after each training epoch, which will use additional GPU resources, and the best model will be saved. If False, the saved EMA model checkpoint will be updated at the end of each epoch.
         :param watch_metric: the metric used to compare model performance. This should be accessible from the trainer's run history. This is only used when ``evaluate_during_training`` is enabled.
         :param greater_is_better: whether an increase in the ``watch_metric`` should be interpreted as the model performing better.
+        :param model_ema: the class which is responsible for maintaining the moving average of the model.
 
         """
         super().__init__(
@@ -585,9 +587,10 @@ class ModelEmaCallback(SaveBestModelCallback):
         self.ema_model = None
         self._track_prefix = "ema_model_"
         self.evaluate_during_training = evaluate_during_training
+        self.model_ema_cls = model_ema
 
     def on_training_run_start(self, trainer, **kwargs):
-        self.ema_model = ModelEma(
+        self.ema_model = self.model_ema(
             trainer._accelerator.unwrap_model(trainer.model), decay=self.decay
         )
         if self.evaluate_during_training:
