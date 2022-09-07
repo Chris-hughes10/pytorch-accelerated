@@ -131,19 +131,20 @@ class ModelEma(nn.Module):
         self.module.eval()
         self.decay = decay
 
+    def update_fn(self, ema_model_weights, updated_model_weights):
+        return self.decay * ema_model_weights + (1.0 - self.decay) * updated_model_weights,
+
     def _update(self, model, update_fn):
         with torch.no_grad():
             for ema_v, model_v in zip(
-                self.module.state_dict().values(), model.state_dict().values()
+                    self.module.state_dict().values(), model.state_dict().values()
             ):
                 ema_v.copy_(update_fn(ema_v, model_v))
 
     def update(self, model):
         self._update(
             model,
-            update_fn=lambda ema_model_weights, updated_model_weights: self.decay
-            * ema_model_weights
-            + (1.0 - self.decay) * updated_model_weights,
+            update_fn=self.update_fn
         )
 
     def set(self, model):
