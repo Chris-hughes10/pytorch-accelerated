@@ -23,7 +23,7 @@ from pytorch_accelerated.callbacks import (
 )
 from pytorch_accelerated.run_config import TrainerRunConfig
 from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, LossTracker
-from pytorch_accelerated.utils import LIMIT_BATCHES_ENV_VAR
+from pytorch_accelerated.utils import LIMIT_BATCHES_ENV_VAR, worker_init_fn
 
 DEFAULT_CALLBACKS = (
     MoveModulesToDeviceCallback,
@@ -520,6 +520,7 @@ class Trainer:
                 else os.cpu_count(),
                 1,
             ),
+            "worker_init_fn": worker_init_fn
         }
 
     def get_default_eval_dl_kwargs(self, batch_size) -> dict:
@@ -539,6 +540,7 @@ class Trainer:
                 else os.cpu_count(),
                 1,
             ),
+            "worker_init_fn": worker_init_fn
         }
 
     @property
