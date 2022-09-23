@@ -23,7 +23,12 @@ from pytorch_accelerated.callbacks import (
 )
 from pytorch_accelerated.run_config import TrainerRunConfig
 from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, LossTracker
-from pytorch_accelerated.utils import LIMIT_BATCHES_ENV_VAR, worker_init_fn
+from pytorch_accelerated.utils import (
+    LIMIT_BATCHES_ENV_VAR,
+    worker_init_fn,
+    remove_padding,
+)
+
 
 DEFAULT_CALLBACKS = (
     MoveModulesToDeviceCallback,
@@ -520,7 +525,7 @@ class Trainer:
                 else os.cpu_count(),
                 1,
             ),
-            "worker_init_fn": worker_init_fn
+            "worker_init_fn": worker_init_fn,
         }
 
     def get_default_eval_dl_kwargs(self, batch_size) -> dict:
@@ -540,7 +545,7 @@ class Trainer:
                 else os.cpu_count(),
                 1,
             ),
-            "worker_init_fn": worker_init_fn
+            "worker_init_fn": worker_init_fn,
         }
 
     @property
@@ -826,17 +831,34 @@ class Trainer:
             self,
         )
 
-    def gather(self, tensor):
+    def gather(self, tensor, padding_value=None):
         """
         Gather the values in `tensor` across all processes and concatenate them on the first dimension. This can be
         useful to regroup the predictions from all processes when doing evaluation.
 
-        .. Note:: This gather happens in all processes.
+        If a padding value is provided, padding will be applied along the first dimension where necessary, to ensure that tensors
+        in all processes have the same shape.
+
+        .. Note:: The given value of `padding_value` should ideally not appear in the expected range of values that the tensor may contain
 
         :param tensor: (:obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`) The tensors to gather across all processes.
+        :param padding_value: if provided, the value with which to pad tensors to ensure that all processes have the same shape
         :return: The gathered tensor(s) (:obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`). The first dimension of the result is `num_processes` multiplied by the first dimension of the input tensors.
+
+        .. Note:: This gather happens in all processes.
         """
-        return self._accelerator.gather(tensor)
+        if padding_value is not None:
+            pad_value = (
+                torch.as_tensor(padding_value).to(dtype=tensor.dtype).item()
+            )  # ensure correct type
+            tensor = self._accelerator.pad_across_processes(tensor, pad_index=pad_value)
+
+        gathered_tensor = self._accelerator.gather(tensor)
+
+        if padding_value is not None:
+            gathered_tensor = remove_padding(gathered_tensor, padding_value)
+
+        return gathered_tensor
 
     def print(self, *args, **kwargs):
         """

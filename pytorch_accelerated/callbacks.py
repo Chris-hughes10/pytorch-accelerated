@@ -566,7 +566,7 @@ class ModelEmaCallback(SaveBestModelCallback):
         save_path: str = "ema_model.pt",
         watch_metric: str = "ema_model_eval_loss_epoch",
         greater_is_better: bool = False,
-        model_ema=ModelEma
+        model_ema=ModelEma,
     ):
         """
         :param decay: the amount of decay to use, which determines how much of the previous state will be maintained.

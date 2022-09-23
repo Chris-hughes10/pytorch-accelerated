@@ -8,7 +8,7 @@ from functools import wraps
 import torch
 from accelerate.state import AcceleratorState
 from accelerate.utils import wait_for_everyone
-from torch import nn
+from torch import nn, Tensor
 
 LIMIT_BATCHES_ENV_VAR = "PT_ACC_LIMIT_BATCHES"
 
@@ -132,20 +132,19 @@ class ModelEma(nn.Module):
         self.decay = decay
 
     def update_fn(self, ema_model_weights, updated_model_weights):
-        return self.decay * ema_model_weights + (1.0 - self.decay) * updated_model_weights,
+        return (
+            self.decay * ema_model_weights + (1.0 - self.decay) * updated_model_weights,
+        )
 
     def _update(self, model, update_fn):
         with torch.no_grad():
             for ema_v, model_v in zip(
-                    self.module.state_dict().values(), model.state_dict().values()
+                self.module.state_dict().values(), model.state_dict().values()
             ):
                 ema_v.copy_(update_fn(ema_v, model_v))
 
     def update(self, model):
-        self._update(
-            model,
-            update_fn=self.update_fn
-        )
+        self._update(model, update_fn=self.update_fn)
 
     def set(self, model):
         self._update(model, update_fn=lambda e, m: m)
@@ -158,3 +157,22 @@ def worker_init_fn(worker_id):
     rather than the initial random seed.
     """
     return torch.seed() + worker_id
+
+
+def remove_padding(padded_tensor: Tensor, pad_value):
+    """
+    A utility function to remove padding tokens from a tensor. This can be useful after applying padding
+    in order to gather a tensor.
+
+    :param padded_tensor: the tensor containing padding
+    :param pad_value: the padding token to be removed
+    :return: a new tensor with padding tokens removed
+    """
+    padding_mask = padded_tensor == pad_value
+
+    if padding_mask.ndim > 1:
+        padding_mask = torch.all(padding_mask, dim=-1)
+
+    result = padded_tensor[~padding_mask]
+
+    return result
