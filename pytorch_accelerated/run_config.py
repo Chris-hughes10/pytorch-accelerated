@@ -15,7 +15,7 @@ class TrainerRunConfig:
     :param eval_per_device_batch_size: the device size per batch used during evaluation epochs
     :param eval_dl_kwargs: the arguments that have been used to create the evaluation dataloader
     :param gradient_accumulation_steps: the number of gradient accumulation steps which will be used during training
-    :param  gradient_clip_value: the value used to determine the threshold to clip the gradients of the model's parameters
+    :param gradient_clip_value: the value used to determine the threshold to clip the gradients of the model's parameters
     :param train_total_batch_size: the total batch size used during training
     :param eval_total_batch_size: the total batch size used during evaluation
     :param num_update_steps_per_epoch: the number of steps per training epoch where the model's parameters will be updated
@@ -24,6 +24,7 @@ class TrainerRunConfig:
     :param is_world_process_zero: ``True`` if the current process is the main process across all nodes, ``False`` otherwise
     :param is_distributed: ``True`` if the trainer is set up to perform distributed training, ``False`` otherwise
     :param mixed_precision: A string containing the type of mixed precision the trainer is set up to use, ``no`` otherwise
+    :param num_processes: the number of processes being used during training
 
 
     """
@@ -42,7 +43,8 @@ class TrainerRunConfig:
     is_local_process_zero: bool
     is_world_process_zero: bool
     is_distributed: bool
-    mixed_precision: bool
+    mixed_precision: str
+    num_processes: int
 
     def to_dict(self):
         # cannot pickle torch._C.Generators, so must remove before dict creation

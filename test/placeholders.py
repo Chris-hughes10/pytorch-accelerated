@@ -38,7 +38,8 @@ def create_run_config(
         is_local_process_zero=True,
         is_world_process_zero=True,
         is_distributed=True,
-        using_fp16=True,
+        mixed_precision='fp16',
+        num_processes=1,
         num_update_steps_per_epoch=num_update_steps_per_epoch,
     )
 

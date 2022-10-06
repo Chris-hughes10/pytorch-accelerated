@@ -657,6 +657,7 @@ class Trainer:
             else False,
             "mixed_precision": self._accelerator.mixed_precision,
             "gradient_clip_value": gradient_clip_value,
+            "num_processes": self._accelerator.num_processes
         }
 
         return TrainerRunConfig(**config)
