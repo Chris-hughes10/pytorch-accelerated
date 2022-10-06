@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, Mock, call
 
 import torch
 from pytest import fixture
+from pytorch_accelerated.utils import worker_init_fn
 from torch import optim, nn
 
 from pytorch_accelerated.trainer import Trainer
@@ -99,6 +100,7 @@ def test_can_override_train_dataloader_kwargs(mocker):
         "batch_size": 100,
         "pin_memory": False,
         "num_workers": 0,
+        "worker_init_fn": worker_init_fn,
     }
 
     trainer.create_train_dataloader(10, override_dl_kwargs)
@@ -121,6 +123,7 @@ def test_can_override_eval_dataloader_kwargs(mocker):
         "batch_size": 100,
         "pin_memory": False,
         "num_workers": 0,
+        "worker_init_fn": worker_init_fn,
     }
 
     trainer.create_eval_dataloader(10, override_dl_kwargs)
