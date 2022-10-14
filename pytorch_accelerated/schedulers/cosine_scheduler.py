@@ -125,8 +125,8 @@ class CosineLrScheduler(StatefulSchedulerBase):
                     1
                     + math.cos(
                         math.pi
-                        * num_updates ** self.k_decay
-                        / total_cosine_iterations ** self.k_decay
+                        * num_updates**self.k_decay
+                        / total_cosine_iterations**self.k_decay
                     )
                 )
                 for lr_max in self.base_lr_values
