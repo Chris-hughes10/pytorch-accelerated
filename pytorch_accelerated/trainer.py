@@ -657,7 +657,7 @@ class Trainer:
             else False,
             "mixed_precision": self._accelerator.mixed_precision,
             "gradient_clip_value": gradient_clip_value,
-            "num_processes": self._accelerator.num_processes
+            "num_processes": self._accelerator.num_processes,
         }
 
         return TrainerRunConfig(**config)
@@ -884,7 +884,7 @@ class Trainer:
         # TODO: add save method for run history?
 
         checkpoint = {
-            "model_state_dict": self._accelerator.unwrap_model(self.model).state_dict(),
+            "model_state_dict": self.get_model().state_dict(),
         }
 
         if save_optimizer:
@@ -918,9 +918,7 @@ class Trainer:
         """
         self._accelerator.wait_for_everyone()
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
-        self._accelerator.unwrap_model(self.model).load_state_dict(
-            checkpoint["model_state_dict"]
-        )
+        self.get_model().load_state_dict(checkpoint["model_state_dict"])
         if load_optimizer and "optimizer_state_dict" in checkpoint:
             if self.optimizer is None:
                 raise ValueError(
@@ -929,6 +927,15 @@ class Trainer:
                     "creating the trainer, or specify load_optimizer=False when loading the checkpoint."
                 )
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+    def get_model(self):
+        """
+        Extract the model in :class:`Trainer` from its distributed containers.
+        Useful before saving a model.
+
+        :return: the model in :class:`Trainer`, subclassed from :class:`~torch.nn.Module`
+        """
+        return self._accelerator.unwrap_model(self.model)
 
 
 class TrainerWithTimmScheduler(Trainer):

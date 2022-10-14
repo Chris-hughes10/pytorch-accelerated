@@ -124,6 +124,7 @@ Utility Methods
 .. automethod:: Trainer.load_checkpoint
 .. automethod:: Trainer.print
 .. automethod:: Trainer.gather
+.. automethod:: Trainer.get_model
 
 Customizing Trainer Behaviour
 ================================
