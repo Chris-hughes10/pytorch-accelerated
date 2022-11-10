@@ -17,7 +17,3 @@ COPY --from=compile-image /opt/conda /opt/conda
 ENV PATH /opt/conda/bin:$PATH
 
 RUN echo "source activate core" >> ~/.profile
-
-# COPY requirements.txt .
-
-# RUN pip install -r requirements.txt
