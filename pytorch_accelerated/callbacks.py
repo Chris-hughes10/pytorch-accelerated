@@ -552,10 +552,11 @@ class ModelEmaCallback(SaveBestModelCallback):
 
     This callback offers the option of evaluating the EMA model during. If enabled, this is done by running an additional
     validation after each training epoch, which will use additional GPU resources. During this additional epoch,
-    no callbacks will be executed.
+    only the provided callbacks will be executed.
 
-    .. Note:: This callback is sensitive to the order that it is executed. This should always be the first callback that
-        is passed to the trainer.
+    .. Note:: This callback is sensitive to the order that it is executed. This should be placed after any callbacks that
+        modify state (e.g. metrics) but before any callbacks that read state (e.g. loggers) or :class:`ConvertSyncBatchNormCallback`.
+
 
     """
 
@@ -567,6 +568,7 @@ class ModelEmaCallback(SaveBestModelCallback):
         watch_metric: str = "ema_model_eval_loss_epoch",
         greater_is_better: bool = False,
         model_ema=ModelEma,
+        callbacks=(),
     ):
         """
         :param decay: the amount of decay to use, which determines how much of the previous state will be maintained.
@@ -574,6 +576,7 @@ class ModelEmaCallback(SaveBestModelCallback):
         :param watch_metric: the metric used to compare model performance. This should be accessible from the trainer's run history. This is only used when ``evaluate_during_training`` is enabled.
         :param greater_is_better: whether an increase in the ``watch_metric`` should be interpreted as the model performing better.
         :param model_ema: the class which is responsible for maintaining the moving average of the model.
+        :param callbacks: an iterable of callbacks that will be executed during the evaluation loop of the EMA model
 
         """
         super().__init__(
@@ -588,9 +591,10 @@ class ModelEmaCallback(SaveBestModelCallback):
         self._track_prefix = "ema_model_"
         self.evaluate_during_training = evaluate_during_training
         self.model_ema_cls = model_ema
+        self.callback_handler = CallbackHandler(callbacks)
 
     def on_training_run_start(self, trainer, **kwargs):
-        self.ema_model = self.model_ema(
+        self.ema_model = self.model_ema_cls(
             trainer._accelerator.unwrap_model(trainer.model), decay=self.decay
         )
         if self.evaluate_during_training:
@@ -604,25 +608,28 @@ class ModelEmaCallback(SaveBestModelCallback):
             model = trainer.model
             trainer.model = self.ema_model.module
             run_history_prefix = trainer.run_history.metric_name_prefix
+            trainer_callback_handler = trainer.callback_handler
 
             trainer.print("Running evaluation on EMA model")
-            trainer.callback_handler._enabled = False
+
+            trainer.callback_handler = self.callback_handler
             trainer.run_history.set_metric_name_prefix(self._track_prefix)
             trainer._run_eval_epoch(trainer._eval_dataloader)
 
             trainer.model = model
-            trainer.callback_handler._enabled = True
+            trainer.callback_handler = trainer_callback_handler
             trainer.run_history.set_metric_name_prefix(run_history_prefix)
 
     def on_training_run_epoch_end(self, trainer, **kwargs):
+        model = trainer.model
+        trainer.model = self.ema_model.module
+
         if self.evaluate_during_training:
             super().on_training_run_epoch_end(trainer)
         else:
-            model = trainer.model
-            trainer.model = self.ema_model.module
-
             trainer.save_checkpoint(save_path=self.save_path, save_optimizer=False)
-            trainer.model = model
+
+        trainer.model = model
 
     def on_training_run_end(self, trainer, **kwargs):
         # Overriding, as we do not want to load the EMA model

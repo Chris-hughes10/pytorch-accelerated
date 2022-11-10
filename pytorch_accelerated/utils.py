@@ -128,12 +128,14 @@ class ModelEma(nn.Module):
         super().__init__()
         # make a copy of the model for accumulating moving average of weights
         self.module = deepcopy(model)
+        for p in self.module.parameters():
+            p.requires_grad_(False)
         self.module.eval()
         self.decay = decay
 
     def update_fn(self, ema_model_weights, updated_model_weights):
         return (
-            self.decay * ema_model_weights + (1.0 - self.decay) * updated_model_weights,
+            self.decay * ema_model_weights + (1.0 - self.decay) * updated_model_weights
         )
 
     def _update(self, model, update_fn):
@@ -141,7 +143,8 @@ class ModelEma(nn.Module):
             for ema_v, model_v in zip(
                 self.module.state_dict().values(), model.state_dict().values()
             ):
-                ema_v.copy_(update_fn(ema_v, model_v))
+                updated_v = update_fn(ema_v, model_v)
+                ema_v.copy_(updated_v)
 
     def update(self, model):
         self._update(model, update_fn=self.update_fn)
