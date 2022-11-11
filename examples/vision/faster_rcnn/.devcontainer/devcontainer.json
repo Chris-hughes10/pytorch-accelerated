@@ -3,7 +3,7 @@
     // ACTION NEEDED: For sanity, change "name" to the name of the experiment
     "name": "faster_rcnn_example",
     "build": {
-        "dockerfile": "../environment/Dockerfile"
+        "dockerfile": "Dockerfile"
     },
     "runArgs": [
         // ACTION NEEDED: Uncomment the next line if your local machine has GPUs available

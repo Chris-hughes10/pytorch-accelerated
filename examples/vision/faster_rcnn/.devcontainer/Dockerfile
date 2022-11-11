@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:1.12.1-cuda11.3-cudnn8-runtime
+FROM pytorch/pytorch:1.13.0-cuda11.6-cudnn8-runtime
 
 # Need gcc for pycocotools
 RUN apt-get update && apt-get install -y gcc
@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir \
                 'pandas==1.3.5' \
                 'matplotlib==3.5.3' \
                 'pycocotools==2.0.5' \
-                'timm==0.6.7'
 
 # Remove compiler after using it for smaller image
 RUN apt-get purge -y --auto-remove gcc
