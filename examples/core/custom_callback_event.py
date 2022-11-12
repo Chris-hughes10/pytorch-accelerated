@@ -6,20 +6,19 @@
 # Note: this example requires installing the torchvision package
 ########################################################################
 
-import os
+from pathlib import Path
 
-from accelerate import notebook_launcher
 from torch import nn, optim
 from torch.utils.data import random_split
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
 from pytorch_accelerated.callbacks import (
-    TrainerCallback,
-    TerminateOnNaNCallback,
+    LogMetricsCallback,
     PrintProgressCallback,
     ProgressBarCallback,
-    LogMetricsCallback,
+    TerminateOnNaNCallback,
+    TrainerCallback,
 )
 from pytorch_accelerated.trainer import Trainer
 
@@ -41,11 +40,11 @@ class MNISTModel(nn.Module):
 
 class VerifyBatchCallback(TrainerCallback):
     def verify_train_batch(self, trainer, xb, yb):
-        assert xb.shape[0] == trainer.run_config["train_per_device_batch_size"]
+        assert xb.shape[0] == trainer.run_config.train_per_device_batch_size
         assert xb.shape[1] == 1
         assert xb.shape[2] == 28
         assert xb.shape[3] == 28
-        assert yb.shape[0] == trainer.run_config["train_per_device_batch_size"]
+        assert yb.shape[0] == trainer.run_config.train_per_device_batch_size
 
 
 class TrainerWithCustomCallbackEvent(Trainer):
@@ -57,8 +56,11 @@ class TrainerWithCustomCallbackEvent(Trainer):
         return super().calculate_train_batch_loss(batch)
 
 
+DATA_PATH = Path("/".join(Path(__file__).absolute().parts[:-2])) / "data"
+
+
 def main():
-    dataset = MNIST(os.getcwd(), download=True, transform=transforms.ToTensor())
+    dataset = MNIST(DATA_PATH, download=True, transform=transforms.ToTensor())
     train_dataset, validation_dataset = random_split(dataset, [55000, 5000])
     model = MNISTModel()
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
@@ -80,12 +82,11 @@ def main():
     trainer.train(
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
+        train_dataloader_kwargs={"drop_last": True},
         num_epochs=8,
-        train_dataloader_kwargs={"num_workers": 0},
         per_device_batch_size=32,
     )
 
 
 if __name__ == "__main__":
-    notebook_launcher(main, num_processes=1)
-    # main()
+    main()

@@ -5,7 +5,7 @@
 # Note: this example requires installing the torchvision package
 ########################################################################
 
-import os
+from pathlib import Path
 
 from torch import nn, optim
 from torch.utils.data import random_split
@@ -30,8 +30,11 @@ class MNISTModel(nn.Module):
         return self.main(x.view(x.shape[0], -1))
 
 
+DATA_PATH = Path("/".join(Path(__file__).absolute().parts[:-2])) / "data"
+
+
 def main():
-    dataset = MNIST(os.getcwd(), download=True, transform=transforms.ToTensor())
+    dataset = MNIST(DATA_PATH, download=True, transform=transforms.ToTensor())
     train_dataset, validation_dataset, test_dataset = random_split(
         dataset, [50000, 5000, 5000]
     )

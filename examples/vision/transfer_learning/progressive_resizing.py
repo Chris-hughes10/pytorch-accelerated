@@ -69,9 +69,11 @@ def create_transforms(train_image_size=224, val_image_size=224):
         ),
     }
 
+
 DATA_PATH = (
     Path("/".join(Path(__file__).absolute().parts[:-3])) / "data/imagenette2-320"
 )
+
 
 @script
 def main(data_dir: str = DATA_PATH):
