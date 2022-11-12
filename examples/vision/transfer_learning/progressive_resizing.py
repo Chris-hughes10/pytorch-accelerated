@@ -9,6 +9,7 @@ import os
 from collections import namedtuple
 from functools import partial
 from pathlib import Path
+from func_to_script import script
 
 import torch
 from timm import create_model
@@ -68,8 +69,12 @@ def create_transforms(train_image_size=224, val_image_size=224):
         ),
     }
 
+DATA_PATH = (
+    Path("/".join(Path(__file__).absolute().parts[:-3])) / "data/imagenette2-320"
+)
 
-def main(data_dir):
+@script
+def main(data_dir: str = DATA_PATH):
 
     data_dir = Path(data_dir)
     num_classes = len(list((data_dir / "train").iterdir()))
@@ -142,7 +147,4 @@ def main(data_dir):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simple example of training script.")
-    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
-    args = parser.parse_args()
-    main(args.data_dir)
+    main()

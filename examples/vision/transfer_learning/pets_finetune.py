@@ -55,8 +55,10 @@ class ClassificationMetricsCallback(TrainerCallback):
         self.metrics = torchmetrics.MetricCollection(
             {
                 "accuracy": torchmetrics.Accuracy(num_classes=num_classes),
-                "precision": torchmetrics.Precision(num_classes=num_classes, average='macro'),
-                "recall": torchmetrics.Recall(num_classes=num_classes, average='macro'),
+                "precision": torchmetrics.Precision(
+                    num_classes=num_classes, average="macro"
+                ),
+                "recall": torchmetrics.Recall(num_classes=num_classes, average="macro"),
             }
         )
 
@@ -148,13 +150,16 @@ def create_datasets(
     return train_dataset, eval_dataset
 
 
-DATA_PATH = (
-    Path("/".join(Path(__file__).absolute().parts[:-3])) / "data/pets/images"
-)
+DATA_PATH = Path("/".join(Path(__file__).absolute().parts[:-3])) / "data/pets/images"
 
 
 @script
-def main(data_dir:str = DATA_PATH, lr: float = 3e-2, batch_size: int = 64, image_size: int = 224):
+def main(
+    data_dir: str = DATA_PATH,
+    lr: float = 3e-2,
+    batch_size: int = 64,
+    image_size: int = 224,
+):
     image_size = (image_size, image_size)
 
     # Grab all the image filenames
