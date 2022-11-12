@@ -204,7 +204,7 @@ def main(
     trainer.train(
         per_device_batch_size=batch_size,
         train_dataset=train_dataset,
-        train_dataloader_kwargs={'drop_last': True}, # mixup requires even batches
+        train_dataloader_kwargs={"drop_last": True},  # mixup requires even batches
         eval_dataset=eval_dataset,
         num_epochs=num_epochs,
         create_scheduler_fn=trainer.create_scheduler,
