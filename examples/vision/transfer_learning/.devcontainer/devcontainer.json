@@ -1,7 +1,7 @@
 // File only needed for VSCode users to have proper Docker based interpreters
 {
     // ACTION NEEDED: For sanity, change "name" to the name of the experiment
-    "name": "timm_examples",
+    "name": "transfer_learning_examples",
     "build": {
         "dockerfile": "Dockerfile"
     },
