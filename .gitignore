@@ -5,6 +5,7 @@ pytorch_accelerated.egg-info/*
 __pycache__/
 *.py[cod]
 *$py.class
+*.pt
 
 # C extensions
 *.so

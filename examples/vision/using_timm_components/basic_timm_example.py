@@ -17,13 +17,11 @@ import timm.loss
 import timm.optim
 import timm.scheduler
 import torch
-from accelerate import notebook_launcher
+from func_to_script import script
 from torchmetrics import Accuracy
 
-from pytorch_accelerated.callbacks import (
-    TrainerCallback,
-)
-from pytorch_accelerated.trainer import Trainer, DEFAULT_CALLBACKS
+from pytorch_accelerated.callbacks import TrainerCallback
+from pytorch_accelerated.trainer import DEFAULT_CALLBACKS, Trainer
 
 
 class TimmTrainer(Trainer):
@@ -86,22 +84,27 @@ class AccuracyCallback(TrainerCallback):
         self.accuracy.reset()
 
 
-def main():
-    data_path = Path(r"/home/chris/notebooks/imagenette2/")
+DATA_PATH = (
+    Path("/".join(Path(__file__).absolute().parts[:-3])) / "data/imagenette2-320"
+)
 
-    train_path = data_path / "train"
-    val_path = data_path / "val"
 
-    batch_size = 32
-    num_epochs = 10
-    opt = "adamp"
-    lr = 5e-3
-    model = "resnetrs50"
+@script
+def main(
+    data_path: str = DATA_PATH,
+    model: str = "resnetrs50",
+    optimizer: str = "adamp",
+    lr: float = 5e-3,
+    batch_size: int = 32,
+    num_epochs: int = 10,
+    pretrained: bool = True,
+):
+    data_path = Path(data_path)
+    train_dir_name = "train"
+    val_dir_name = "val"
+
+    train_path = data_path / train_dir_name
     num_classes = len(list(train_path.iterdir()))
-    pretrained = True
-
-    args_train_split = "train"
-    args_val_split = "val"
 
     # Create model
     model = timm.create_model(
@@ -116,14 +119,14 @@ def main():
     dataset_train = timm.data.create_dataset(
         "imagenette",
         root=data_path,
-        split=args_train_split,
+        split=train_dir_name,
         is_training=True,
         batch_size=batch_size,
     )
     dataset_eval = timm.data.create_dataset(
         "imagenette",
         root=data_path,
-        split=args_val_split,
+        split=val_dir_name,
         is_training=False,
         batch_size=batch_size,
     )
@@ -135,7 +138,7 @@ def main():
         "mean": data_config["mean"],
         "std": data_config["std"],
         "interpolation": data_config["interpolation"],
-        "num_workers": 0,
+        # "num_workers": 0,
         "distributed": False,
         "pin_memory": True,
         "persistent_workers": False,
@@ -147,7 +150,7 @@ def main():
         "interpolation": data_config["interpolation"],
         "mean": data_config["mean"],
         "std": data_config["std"],
-        "num_workers": 0,
+        # "num_workers": 0,
         "distributed": False,
         "crop_pct": data_config["crop_pct"],
         "pin_memory": True,
@@ -158,7 +161,7 @@ def main():
     # Create optimizer and scheduler
     optimizer = timm.optim.create_optimizer_v2(
         model,
-        opt,
+        optimizer,
         lr,
     )
 
@@ -177,7 +180,7 @@ def main():
     )
 
     trainer.train(
-        per_device_batch_size=64,
+        per_device_batch_size=batch_size,
         train_dataset=dataset_train,
         eval_dataset=dataset_eval,
         num_epochs=num_epochs,
@@ -188,4 +191,4 @@ def main():
 
 
 if __name__ == "__main__":
-    notebook_launcher(main, num_processes=2)
+    main()
