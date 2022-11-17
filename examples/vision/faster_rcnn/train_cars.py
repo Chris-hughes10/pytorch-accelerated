@@ -116,6 +116,7 @@ def main(
     data_path: str = DATA_PATH,
     image_size: int = 800,
     num_epochs: int = 30,
+    batch_size: int = 8,
 ):
 
     data_path = Path(data_path)
@@ -137,9 +138,6 @@ def main(
 
     model = create_frcnn_model(num_classes=num_classes, image_size=image_size)
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
-
-    cooldown_epochs = 5
-    batch_size = 8
 
     trainer = FasterRCNNTrainer(
         model=model,
@@ -163,12 +161,11 @@ def main(
         per_device_batch_size=batch_size,
         create_scheduler_fn=CosineLrScheduler.create_scheduler_fn(
             num_warmup_epochs=5,
-            num_cooldown_epochs=cooldown_epochs,
+            num_cooldown_epochs=5,
         ),
         collate_fn=faster_rcnn_collate_fn,
     )
 
 
 if __name__ == "__main__":
-    os.environ["mixed_precision"] = "fp16"
     main()
