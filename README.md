@@ -52,7 +52,7 @@ and then launch training using the
 described below.
 
 ```python
-# examples/train_mnist.py
+# examples/core/train_mnist.py
 import os
 
 from torch import nn, optim
@@ -124,7 +124,7 @@ over the launch command.
 More complex training examples can be seen in the examples folder 
 [here](https://github.com/Chris-hughes10/pytorch-accelerated/tree/main/examples). 
 
-Alternatively, if you would rather undertsand the core concepts first, this can be found in the [documentation](https://pytorch-accelerated.readthedocs.io/en/latest/).
+Alternatively, if you would rather understand the core concepts first, this can be found in the [documentation](https://pytorch-accelerated.readthedocs.io/en/latest/).
 
 ## Usage
 

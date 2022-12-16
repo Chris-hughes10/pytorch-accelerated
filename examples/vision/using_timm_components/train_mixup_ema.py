@@ -8,7 +8,6 @@
 # Note: this example requires installing the torchvision, torchmetrics and timm packages
 ########################################################################
 
-import argparse
 from pathlib import Path
 
 import timm
@@ -16,12 +15,13 @@ import timm.data
 import timm.loss
 import timm.optim
 import timm.utils
+import timm.scheduler
 import torch
 import torchmetrics
-from timm.scheduler import CosineLRScheduler
+from func_to_script import script
 
 from pytorch_accelerated.callbacks import SaveBestModelCallback
-from pytorch_accelerated.trainer import Trainer, DEFAULT_CALLBACKS
+from pytorch_accelerated.trainer import DEFAULT_CALLBACKS, Trainer
 
 
 def create_datasets(image_size, data_mean, data_std, train_path, val_path):
@@ -125,22 +125,30 @@ class TimmMixupTrainer(Trainer):
         self.ema_accuracy.reset()
 
 
-def main(data_path):
+DATA_PATH = (
+    Path("/".join(Path(__file__).absolute().parts[:-3])) / "data/imagenette2-320"
+)
 
-    # Set training arguments, hardcoded here for clarity
-    image_size = (224, 224)
-    lr = 5e-3
-    smoothing = 0.1
-    mixup = 0.2
-    cutmix = 1.0
-    batch_size = 32
-    bce_target_thresh = 0.2
-    num_epochs = 40
+
+@script
+def main(
+    data_path: str = DATA_PATH,
+    image_size: int = 224,
+    lr: float = 5e-3,
+    batch_size: int = 32,
+    num_epochs: int = 40,
+    pretrained: bool = False,
+    smoothing: float = 0.1,
+    mixup: float = 0.2,
+    cutmix: float = 1.0,
+    bce_target_thresh: float = 0.2,
+):
 
     data_path = Path(data_path)
     train_path = data_path / "train"
     val_path = data_path / "val"
     num_classes = len(list(train_path.iterdir()))
+    image_size = (image_size, image_size)
 
     mixup_args = dict(
         mixup_alpha=mixup,
@@ -151,7 +159,7 @@ def main(data_path):
 
     # Create model using timm
     model = timm.create_model(
-        "resnet50d", pretrained=False, num_classes=num_classes, drop_path_rate=0.05
+        "resnet50d", pretrained=pretrained, num_classes=num_classes, drop_path_rate=0.05
     )
 
     # Load data config associated with the model to use in data augmentation pipeline
@@ -196,6 +204,7 @@ def main(data_path):
     trainer.train(
         per_device_batch_size=batch_size,
         train_dataset=train_dataset,
+        train_dataloader_kwargs={"drop_last": True},  # mixup requires even batches
         eval_dataset=eval_dataset,
         num_epochs=num_epochs,
         create_scheduler_fn=trainer.create_scheduler,
@@ -203,9 +212,4 @@ def main(data_path):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Simple example of training script using timm."
-    )
-    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
-    args = parser.parse_args()
-    main(args.data_dir)
+    main()

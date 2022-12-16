@@ -1,0 +1,28 @@
+// File only needed for VSCode users to have proper Docker based interpreters
+{
+    // ACTION NEEDED: For sanity, change "name" to the name of the experiment
+    "name": "timm_examples",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "runArgs": [
+        // ACTION NEEDED: Uncomment the next line if your local machine has GPUs available
+        "--gpus",
+        "all",
+        "--ipc",
+        "host"
+    ],
+    "remoteEnv": {
+        // Make the `common` package available when running things local
+        // ACTION NEEDED: If your code folder is not `src` you need to change the last bit
+        "PYTHONPATH": "${containerEnv:PATH}:${containerWorkspaceFolder}/examples/vision/faster_rcnn"
+    },
+    "extensions": [
+        // Ensure we have IntelliSense and all the nice things of VSCode when running inside container
+        "ms-python.python"
+    ],
+    // ACTION NEEDED: The name after /workspaces/ needs to be changed to your project name (and folder name)
+    "workspaceFolder": "/workspaces/pytorch-accelerated",
+    // Need git for VSCode to color code modifications. Only runs when building environment.
+    "onCreateCommand": "apt-get update && apt-get install -y git && pip install -e ."
+}

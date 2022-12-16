@@ -7,18 +7,25 @@
 #
 # Note: this example requires installing the torchvision package
 ########################################################################
-import argparse
 import os
 from functools import partial
+from pathlib import Path
 
+from func_to_script import script
 from torch import nn, optim
 from torch.optim import lr_scheduler
-from torchvision import transforms, datasets, models
+from torchvision import datasets, models, transforms
+from torchvision.models import ResNet18_Weights
 
-from pytorch_accelerated.trainer import Trainer, TrainerPlaceHolderValues
+from pytorch_accelerated.trainer import Trainer, TrainerPlaceholderValues
+
+DATA_PATH = (
+    Path("/".join(Path(__file__).absolute().parts[:-3])) / "data/hymenoptera_data"
+)
 
 
-def main(data_dir):
+@script
+def main(data_dir: str = DATA_PATH):
     # Data augmentation and normalization for training
     # Just normalization for validation
     data_transforms = {
@@ -46,7 +53,7 @@ def main(data_dir):
         for x in ["train", "val"]
     }
     # Create model
-    model = models.resnet18(pretrained=True)
+    model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
     model.fc = nn.Linear(model.fc.in_features, len(image_datasets["train"].classes))
 
     # Define loss function
@@ -59,7 +66,7 @@ def main(data_dir):
     # To use this as intended, we need to represent the step size as the number of iterations
     exp_lr_scheduler = partial(
         lr_scheduler.StepLR,
-        step_size=TrainerPlaceHolderValues.NUM_UPDATE_STEPS_PER_EPOCH * 7,
+        step_size=TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH * 7,
         gamma=0.1,
     )
 
@@ -79,7 +86,4 @@ def main(data_dir):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simple example of training script.")
-    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
-    args = parser.parse_args()
-    main(args.data_dir)
+    main()

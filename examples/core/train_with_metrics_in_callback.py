@@ -8,11 +8,11 @@
 # Note, this example requires installing the torchmetrics package
 ########################################################################
 
-import os
+from pathlib import Path
 
 from torch import nn, optim
 from torch.utils.data import random_split
-from torchmetrics import MetricCollection, Accuracy, Precision, Recall
+from torchmetrics import Accuracy, MetricCollection, Precision, Recall
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
@@ -41,8 +41,8 @@ class ClassificationMetricsCallback(TrainerCallback):
         self.metrics = MetricCollection(
             {
                 "accuracy": Accuracy(num_classes=num_classes),
-                "precision": Precision(num_classes=num_classes),
-                "recall": Recall(num_classes=num_classes),
+                "precision": Precision(num_classes=num_classes, average="macro"),
+                "recall": Recall(num_classes=num_classes, average="macro"),
             }
         )
 
@@ -68,8 +68,11 @@ class ClassificationMetricsCallback(TrainerCallback):
         self.metrics.reset()
 
 
+DATA_PATH = Path("/".join(Path(__file__).absolute().parts[:-2])) / "data"
+
+
 def main():
-    dataset = MNIST(os.getcwd(), download=True, transform=transforms.ToTensor())
+    dataset = MNIST(DATA_PATH, download=True, transform=transforms.ToTensor())
     num_classes = len(dataset.class_to_idx)
 
     train_dataset, validation_dataset, test_dataset = random_split(

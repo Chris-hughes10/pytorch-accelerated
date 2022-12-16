@@ -19,17 +19,17 @@
 # was adapted from an example produced by HuggingFace available here:
 # https://github.com/huggingface/accelerate/blob/main/examples/nlp_example.py
 #
-# Note: This example requires installing the datasets and transformers packages
+# Note: This example requires installing the datasets, evaluate, and transformers packages
 ########################################################################
 
 
-import argparse
 from functools import partial
 
+import evaluate
 import torch
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
+from func_to_script import script
 from transformers import (
-    AdamW,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
@@ -81,16 +81,16 @@ class TransformersTrainer(Trainer):
         )
 
 
-def training_function(config, args):
-    # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
-    lr = config["lr"]
-    num_epochs = int(config["num_epochs"])
-    correct_bias = config["correct_bias"]
-    batch_size = int(config["batch_size"])
+@script
+def main(
+    lr: float = 2e-5,
+    num_epochs: int = 3,
+    batch_size: int = 16,
+):
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     datasets = load_dataset("glue", "mrpc")
-    metric = load_metric("glue", "mrpc")
+    metric = evaluate.load("glue", "mrpc")
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
@@ -128,7 +128,7 @@ def training_function(config, args):
     )
 
     # Instantiate optimizer
-    optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
+    optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr)
 
     # Create an instance of our trainer
     trainer = TransformersTrainer(model=model, optimizer=optimizer, metric=metric)
@@ -152,25 +152,6 @@ def training_function(config, args):
         gradient_accumulation_steps=gradient_accumulation_steps,
         collate_fn=collate_fn,
     )
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Simple example of training script.")
-    parser.add_argument(
-        "--fp16", action="store_true", help="If passed, will use FP16 training."
-    )
-    parser.add_argument(
-        "--cpu", action="store_true", help="If passed, will train on the CPU."
-    )
-    args = parser.parse_args()
-    config = {
-        "lr": 2e-5,
-        "num_epochs": 3,
-        "correct_bias": True,
-        "seed": 42,
-        "batch_size": 16,
-    }
-    training_function(config, args)
 
 
 if __name__ == "__main__":

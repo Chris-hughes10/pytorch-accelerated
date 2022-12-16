@@ -19,35 +19,33 @@
 #
 # Note: this example requires installing the torchvision, torchmetrics and timm packages
 ########################################################################
-import argparse
 import os
+from pathlib import Path
 import re
 from functools import partial
 
-import PIL
 import numpy as np
+import PIL
 import torch
 import torchmetrics
+from func_to_script import script
 from timm import create_model
 from torch import nn
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import Dataset
 from torchvision.transforms import (
     Compose,
+    Normalize,
     RandomResizedCrop,
     Resize,
     ToTensor,
-    Normalize,
 )
 
-from pytorch_accelerated import notebook_launcher
-from pytorch_accelerated.callbacks import (
-    TrainerCallback,
-)
+from pytorch_accelerated.callbacks import TrainerCallback
 from pytorch_accelerated.finetuning import ModelFreezer
 from pytorch_accelerated.trainer import (
-    Trainer,
     DEFAULT_CALLBACKS,
+    Trainer,
     TrainerPlaceholderValues,
 )
 
@@ -57,8 +55,10 @@ class ClassificationMetricsCallback(TrainerCallback):
         self.metrics = torchmetrics.MetricCollection(
             {
                 "accuracy": torchmetrics.Accuracy(num_classes=num_classes),
-                "precision": torchmetrics.Precision(num_classes=num_classes),
-                "recall": torchmetrics.Recall(num_classes=num_classes),
+                "precision": torchmetrics.Precision(
+                    num_classes=num_classes, average="macro"
+                ),
+                "recall": torchmetrics.Recall(num_classes=num_classes, average="macro"),
             }
         )
 
@@ -150,12 +150,17 @@ def create_datasets(
     return train_dataset, eval_dataset
 
 
-def training_function(data_dir, config):
-    lr = config["lr"]
-    batch_size = int(config["batch_size"])
-    image_size = config["image_size"]
-    if not isinstance(image_size, (list, tuple)):
-        image_size = (image_size, image_size)
+DATA_PATH = Path("/".join(Path(__file__).absolute().parts[:-3])) / "data/pets/images"
+
+
+@script
+def main(
+    data_dir: str = DATA_PATH,
+    lr: float = 3e-2,
+    batch_size: int = 64,
+    image_size: int = 224,
+):
+    image_size = (image_size, image_size)
 
     # Grab all the image filenames
     file_names = [
@@ -254,13 +259,4 @@ def training_function(data_dir, config):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simple examples of training script.")
-    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
-    args = parser.parse_args()
-    # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
-    config = {
-        "lr": 3e-2,
-        "batch_size": 64,
-        "image_size": 224,
-    }
-    training_function(args.data_dir, config)
+    main()
