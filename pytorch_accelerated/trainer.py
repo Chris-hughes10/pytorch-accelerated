@@ -1,7 +1,6 @@
 # Copyright © 2021 Chris Hughes
 import math
 import os
-
 from enum import Enum
 from functools import partial
 from typing import Iterable
@@ -13,22 +12,21 @@ from torch.utils.data import DataLoader
 
 from pytorch_accelerated.callbacks import (
     CallbackHandler,
-    LogMetricsCallback,
-    PrintProgressCallback,
-    TerminateOnNaNCallback,
-    StopTrainingError,
-    ProgressBarCallback,
-    MoveModulesToDeviceCallback,
     LimitBatchesCallback,
+    LogMetricsCallback,
+    MoveModulesToDeviceCallback,
+    PrintProgressCallback,
+    ProgressBarCallback,
+    StopTrainingError,
+    TerminateOnNaNCallback,
 )
 from pytorch_accelerated.run_config import TrainerRunConfig
-from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, LossTracker
+from pytorch_accelerated.tracking import InMemoryRunHistory, LossTracker, RunHistory
 from pytorch_accelerated.utils import (
     LIMIT_BATCHES_ENV_VAR,
-    worker_init_fn,
     remove_padding,
+    worker_init_fn,
 )
-
 
 DEFAULT_CALLBACKS = (
     MoveModulesToDeviceCallback,
@@ -161,6 +159,7 @@ class Trainer:
         )
         self._accelerator = self._create_accelerator()
         self._loss_tracker = LossTracker()
+        self._pad_uneven_batches = False
         # placeholders which will be set during training
         self.create_scheduler_fn = None
         self.scheduler = None
@@ -811,19 +810,23 @@ class Trainer:
             self,
         )
 
-        for batch in valid_dl:
-            self.callback_handler.call_event(
-                "on_eval_step_start",
-                self,
-            )
-            batch_output = self.calculate_eval_batch_loss(batch)
-            self._loss_tracker.update(
-                self.gather(batch_output["loss"]).detach().mean().item(),
-                batch_output["batch_size"],
-            )
-            self.callback_handler.call_event(
-                "on_eval_step_end", self, batch_output=batch_output, batch=batch
-            )
+        with self._accelerator.join_uneven_inputs(
+            [self.model], even_batches=self._pad_uneven_batches
+        ):
+            for batch in valid_dl:
+                self.callback_handler.call_event(
+                    "on_eval_step_start",
+                    self,
+                )
+                batch_output = self.calculate_eval_batch_loss(batch)
+                self._loss_tracker.update(
+                    self.gather(batch_output["loss"]).detach().mean().item(),
+                    batch_output["batch_size"],
+                )
+                self.callback_handler.call_event(
+                    "on_eval_step_end", self, batch_output=batch_output, batch=batch
+                )
+
         self.eval_epoch_end()
         metric_name = "eval_loss_epoch" if is_training else "evaluation_loss"
         self.run_history.update_metric(metric_name, self._loss_tracker.average)
