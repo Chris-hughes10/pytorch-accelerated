@@ -810,22 +810,26 @@ class Trainer:
             self,
         )
 
-        with self._accelerator.join_uneven_inputs(
-            [self.model], even_batches=self._pad_uneven_batches
-        ):
-            for batch in valid_dl:
-                self.callback_handler.call_event(
-                    "on_eval_step_start",
-                    self,
-                )
-                batch_output = self.calculate_eval_batch_loss(batch)
-                self._loss_tracker.update(
-                    self.gather(batch_output["loss"]).detach().mean().item(),
-                    batch_output["batch_size"],
-                )
-                self.callback_handler.call_event(
-                    "on_eval_step_end", self, batch_output=batch_output, batch=batch
-                )
+        with self._accelerator.no_sync(self.model):
+            with self._accelerator.join_uneven_inputs(
+                [self.model], even_batches=self._pad_uneven_batches
+            ):
+                for batch_idx, batch in enumerate(valid_dl, start=1):
+                    self.callback_handler.call_event(
+                        "on_eval_step_start",
+                        self,
+                    )
+                    batch_output = self.calculate_eval_batch_loss(batch)
+
+                    # TODO gather is hanging with uneven inputs
+                    # gather loss at end of epoch after averaging?
+                    self._loss_tracker.update(
+                        self.gather(batch_output["loss"]).detach().mean().item(),
+                        batch_output["batch_size"],
+                    )
+                    self.callback_handler.call_event(
+                        "on_eval_step_end", self, batch_output=batch_output, batch=batch
+                    )
 
         self.eval_epoch_end()
         metric_name = "eval_loss_epoch" if is_training else "evaluation_loss"
