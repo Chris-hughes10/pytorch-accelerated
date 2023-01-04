@@ -796,13 +796,17 @@ class Trainer:
         """
         Update the run history with the average of all batch losses calculated during the epoch across all processes.
         """
-        total_loss_per_process = torch.tensor(self._loss_tracker.total_loss)
-        running_count_per_process = torch.tensor(self._loss_tracker.running_count)
+        total_loss_per_process = torch.tensor(
+            self._loss_tracker.total_loss, device=self.device
+        )
+        running_count_per_process = torch.tensor(
+            self._loss_tracker.running_count, device=self.device
+        )
 
         total_loss = self.gather(total_loss_per_process)
         running_count = self.gather(running_count_per_process)
 
-        average_loss = total_loss / running_count
+        average_loss = total_loss.sum() / running_count.sum()
         self.run_history.update_metric(metric_name, average_loss.item())
 
     def _clip_gradients(self):
