@@ -383,7 +383,7 @@ class Trainer:
         """
         This method is called at the end of a training run.
         """
-        pass
+        self.model = self.get_model()
 
     def evaluation_run_start(self):
         """
@@ -395,7 +395,7 @@ class Trainer:
         """
         This method is called at the end of an evaluation run.
         """
-        pass
+        self.model = self.get_model()
 
     def train(
         self,
@@ -834,7 +834,9 @@ class Trainer:
             self,
         )
 
+        # as no gradients are calculated, we do not need to sync model parameters during evaluation
         with self._accelerator.no_sync(self.model):
+            # handle uneven batch sizes during distributed evaluation
             with self._accelerator.join_uneven_inputs(
                 [self.model], even_batches=self._pad_uneven_batches
             ):
@@ -845,9 +847,6 @@ class Trainer:
                     )
                     batch_output = self.calculate_eval_batch_loss(batch)
 
-                    # if batch_output["batch_size"] != 64:
-                    #     print('here')
-
                     self._update_loss_tracker(
                         batch_output["loss"], batch_output["batch_size"]
                     )
@@ -855,7 +854,6 @@ class Trainer:
                     self.callback_handler.call_event(
                         "on_eval_step_end", self, batch_output=batch_output, batch=batch
                     )
-                self._accelerator.wait_for_everyone()
 
         self.eval_epoch_end()
         metric_name = "eval_loss_epoch" if is_training else "evaluation_loss"
