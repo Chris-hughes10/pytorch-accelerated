@@ -13,24 +13,18 @@ from torch.utils.data import DataLoader
 from pytorch_accelerated.callbacks import (
     CallbackHandler,
     LimitBatchesCallback,
-    LimitBatchesCallback,
     LogMetricsCallback,
-    MoveModulesToDeviceCallback,
     MoveModulesToDeviceCallback,
     PrintProgressCallback,
     ProgressBarCallback,
     StopTrainingError,
     TerminateOnNaNCallback,
-    StopTrainingError,
-    TerminateOnNaNCallback,
 )
 from pytorch_accelerated.run_config import TrainerRunConfig
-from pytorch_accelerated.tracking import InMemoryRunHistory, LossTracker, RunHistory
 from pytorch_accelerated.tracking import InMemoryRunHistory, LossTracker, RunHistory
 from pytorch_accelerated.utils import (
     LIMIT_BATCHES_ENV_VAR,
     remove_padding,
-    worker_init_fn,
     worker_init_fn,
 )
 
@@ -844,22 +838,24 @@ class Trainer:
             with self._accelerator.join_uneven_inputs(
                 [self.model], even_batches=self._pad_uneven_batches
             ):
-                for batch_idx, batch in enumerate(valid_dl, start=1):
+                for batch in valid_dl:
                     self.callback_handler.call_event(
                         "on_eval_step_start",
                         self,
                     )
                     batch_output = self.calculate_eval_batch_loss(batch)
 
-                    # TODO gather is hanging with uneven inputs
-                    # gather loss at end of epoch after averaging?
-                    self._loss_tracker.update(
-                        self.gather(batch_output["loss"]).detach().mean().item(),
-                        batch_output["batch_size"],
+                    # if batch_output["batch_size"] != 64:
+                    #     print('here')
+
+                    self._update_loss_tracker(
+                        batch_output["loss"], batch_output["batch_size"]
                     )
+
                     self.callback_handler.call_event(
                         "on_eval_step_end", self, batch_output=batch_output, batch=batch
                     )
+                self._accelerator.wait_for_everyone()
 
         self.eval_epoch_end()
         metric_name = "eval_loss_epoch" if is_training else "evaluation_loss"
