@@ -1,7 +1,6 @@
 # Copyright © 2021 Chris Hughes
 import math
 import os
-
 from enum import Enum
 from functools import partial
 from typing import Iterable
@@ -13,22 +12,21 @@ from torch.utils.data import DataLoader
 
 from pytorch_accelerated.callbacks import (
     CallbackHandler,
-    LogMetricsCallback,
-    PrintProgressCallback,
-    TerminateOnNaNCallback,
-    StopTrainingError,
-    ProgressBarCallback,
-    MoveModulesToDeviceCallback,
     LimitBatchesCallback,
+    LogMetricsCallback,
+    MoveModulesToDeviceCallback,
+    PrintProgressCallback,
+    ProgressBarCallback,
+    StopTrainingError,
+    TerminateOnNaNCallback,
 )
 from pytorch_accelerated.run_config import TrainerRunConfig
-from pytorch_accelerated.tracking import RunHistory, InMemoryRunHistory, LossTracker
+from pytorch_accelerated.tracking import InMemoryRunHistory, LossTracker, RunHistory
 from pytorch_accelerated.utils import (
     LIMIT_BATCHES_ENV_VAR,
-    worker_init_fn,
     remove_padding,
+    worker_init_fn,
 )
-
 
 DEFAULT_CALLBACKS = (
     MoveModulesToDeviceCallback,
@@ -761,7 +759,7 @@ class Trainer:
                 self.optimizer_zero_grad()
 
         self.train_epoch_end()
-        self.run_history.update_metric("train_loss_epoch", self._loss_tracker.average)
+        self._add_epoch_loss_to_run_history("train_loss_epoch")
         self.callback_handler.call_event(
             "on_train_epoch_end",
             self,
@@ -777,15 +775,21 @@ class Trainer:
         if self.run_config.gradient_accumulation_steps > 1:
             batch_output["loss"] /= self.run_config.gradient_accumulation_steps
 
-        self._loss_tracker.update(
-            self.gather(batch_output["loss"]).detach().mean().item(),
-            batch_output["batch_size"],
-        )
+        self._update_loss_tracker(batch_output["loss"], batch_output["batch_size"])
 
         self.callback_handler.call_event(
             "on_train_step_end", self, batch_output=batch_output, batch=batch
         )
         self.backward_step(batch_output["loss"])
+
+    def _update_loss_tracker(self, batch_loss, batch_size):
+        self._loss_tracker.update(
+            self.gather(batch_loss).detach().mean().item(),
+            batch_size,
+        )
+
+    def _add_epoch_loss_to_run_history(self, metric_name):
+        self.run_history.update_metric(metric_name, self._loss_tracker.average)
 
     def _clip_gradients(self):
         """
@@ -817,16 +821,15 @@ class Trainer:
                 self,
             )
             batch_output = self.calculate_eval_batch_loss(batch)
-            self._loss_tracker.update(
-                self.gather(batch_output["loss"]).detach().mean().item(),
-                batch_output["batch_size"],
-            )
+            self._update_loss_tracker(batch_output["loss"], batch_output["batch_size"])
+
             self.callback_handler.call_event(
                 "on_eval_step_end", self, batch_output=batch_output, batch=batch
             )
         self.eval_epoch_end()
         metric_name = "eval_loss_epoch" if is_training else "evaluation_loss"
-        self.run_history.update_metric(metric_name, self._loss_tracker.average)
+        self._add_epoch_loss_to_run_history(metric_name)
+
         self.callback_handler.call_event(
             "on_eval_epoch_end",
             self,
