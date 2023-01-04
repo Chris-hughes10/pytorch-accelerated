@@ -783,13 +783,27 @@ class Trainer:
         self.backward_step(batch_output["loss"])
 
     def _update_loss_tracker(self, batch_loss, batch_size):
+        """
+        Update the loss calculated for each batch using the internal loss tracker.
+        During each epoch, losses are tracked in individual processes.
+        """
         self._loss_tracker.update(
-            self.gather(batch_loss).detach().mean().item(),
+            batch_loss.detach().mean().item(),
             batch_size,
         )
 
     def _add_epoch_loss_to_run_history(self, metric_name):
-        self.run_history.update_metric(metric_name, self._loss_tracker.average)
+        """
+        Update the run history with the average of all batch losses calculated during the epoch across all processes.
+        """
+        total_loss_per_process = torch.tensor(self._loss_tracker.total_loss)
+        running_count_per_process = torch.tensor(self._loss_tracker.running_count)
+
+        total_loss = self.gather(total_loss_per_process)
+        running_count = self.gather(running_count_per_process)
+
+        average_loss = total_loss / running_count
+        self.run_history.update_metric(metric_name, average_loss.item())
 
     def _clip_gradients(self):
         """
