@@ -17,10 +17,14 @@
         // ACTION NEEDED: If your code folder is not `src` you need to change the last bit
         "PYTHONPATH": "${containerEnv:PATH}:${containerWorkspaceFolder}/examples/vision/faster_rcnn"
     },
-    "extensions": [
-        // Ensure we have IntelliSense and all the nice things of VSCode when running inside container
-        "ms-python.python"
-    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                // Ensure we have IntelliSense in VSCode when running inside container
+                "ms-python.python"
+            ]
+        }
+    },
     // ACTION NEEDED: The name after /workspaces/ needs to be changed to your project name (and folder name)
     "workspaceFolder": "/workspaces/pytorch-accelerated",
     // Need git for VSCode to color code modifications. Only runs when building environment.
