@@ -15,7 +15,7 @@
     "remoteEnv": {
         // Make the `common` package available when running things local
         // ACTION NEEDED: If your code folder is not `src` you need to change the last bit
-        "PYTHONPATH": "${containerEnv:PATH}:${containerWorkspaceFolder}/examples/vision/faster_rcnn"
+        "PYTHONPATH": "${containerEnv:PATH}:${containerWorkspaceFolder}/examples/core"
     },
     "customizations": {
         "vscode": {
