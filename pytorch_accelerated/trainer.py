@@ -928,13 +928,11 @@ class Trainer:
         self._accelerator.wait_for_everyone()
 
         if save_per_node:
-
             self._accelerator.save(
                 checkpoint,
                 save_path,
             )
         else:
-
             if self.run_config.is_world_process_zero:
                 self._accelerator.save(
                     checkpoint,
