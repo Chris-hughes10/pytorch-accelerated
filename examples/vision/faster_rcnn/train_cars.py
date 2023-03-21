@@ -118,7 +118,6 @@ def main(
     num_epochs: int = 30,
     batch_size: int = 8,
 ):
-
     data_path = Path(data_path)
     images_path = data_path / "training_images"
     annotations_file_path = data_path / "annotations.csv"

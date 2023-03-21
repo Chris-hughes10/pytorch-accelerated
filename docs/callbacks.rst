@@ -109,9 +109,9 @@ computed using `TorchMetrics <https://torchmetrics.readthedocs.io/en/latest/page
         def __init__(self, num_classes):
             self.metrics = MetricCollection(
                 {
-                    "accuracy": Accuracy(num_classes=num_classes),
-                    "precision": Precision(num_classes=num_classes),
-                    "recall": Recall(num_classes=num_classes),
+                    "accuracy": Accuracy(task="multiclass", num_classes=num_classes),
+                    "precision": Precision(task="multiclass", num_classes=num_classes),
+                    "recall": Recall(task="multiclass", num_classes=num_classes),
                 }
             )
 

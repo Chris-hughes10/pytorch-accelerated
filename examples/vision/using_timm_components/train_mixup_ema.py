@@ -52,8 +52,12 @@ class TimmMixupTrainer(Trainer):
         self.num_updates = None
         self.mixup_fn = timm.data.Mixup(**mixup_args)
 
-        self.accuracy = torchmetrics.Accuracy(num_classes=num_classes)
-        self.ema_accuracy = torchmetrics.Accuracy(num_classes=num_classes)
+        self.accuracy = torchmetrics.Accuracy(
+            task="multiclass", num_classes=num_classes
+        )
+        self.ema_accuracy = torchmetrics.Accuracy(
+            task="multiclass", num_classes=num_classes
+        )
         self.ema_model = None
 
     def create_scheduler(self):
@@ -143,7 +147,6 @@ def main(
     cutmix: float = 1.0,
     bce_target_thresh: float = 0.2,
 ):
-
     data_path = Path(data_path)
     train_path = data_path / "train"
     val_path = data_path / "val"

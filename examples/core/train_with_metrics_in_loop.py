@@ -44,8 +44,12 @@ class TrainerWithMetrics(Trainer):
         self.metrics = MetricCollection(
             {
                 "accuracy": Accuracy(task="multiclass", num_classes=num_classes),
-                "precision": Precision(task="multiclass", num_classes=num_classes, average="macro"),
-                "recall": Recall(task="multiclass", num_classes=num_classes, average="macro"),
+                "precision": Precision(
+                    task="multiclass", num_classes=num_classes, average="macro"
+                ),
+                "recall": Recall(
+                    task="multiclass", num_classes=num_classes, average="macro"
+                ),
             }
         )
 

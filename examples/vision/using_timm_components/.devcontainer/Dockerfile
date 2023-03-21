@@ -12,5 +12,5 @@ RUN pip install --no-cache-dir \
                 'pandas==1.3.5' \
                 'matplotlib==3.5.3' \
                 'timm==0.6.11' \
-                'torchmetrics==0.10.'
+                'torchmetrics==0.11.4'
 
