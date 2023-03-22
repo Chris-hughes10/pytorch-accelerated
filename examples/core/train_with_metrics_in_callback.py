@@ -40,9 +40,13 @@ class ClassificationMetricsCallback(TrainerCallback):
     def __init__(self, num_classes):
         self.metrics = MetricCollection(
             {
-                "accuracy": Accuracy(num_classes=num_classes),
-                "precision": Precision(num_classes=num_classes, average="macro"),
-                "recall": Recall(num_classes=num_classes, average="macro"),
+                "accuracy": Accuracy(task="multiclass", num_classes=num_classes),
+                "precision": Precision(
+                    task="multiclass", num_classes=num_classes, average="macro"
+                ),
+                "recall": Recall(
+                    task="multiclass", num_classes=num_classes, average="macro"
+                ),
             }
         )
 

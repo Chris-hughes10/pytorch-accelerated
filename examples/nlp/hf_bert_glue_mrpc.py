@@ -87,7 +87,6 @@ def main(
     num_epochs: int = 3,
     batch_size: int = 16,
 ):
-
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     datasets = load_dataset("glue", "mrpc")
     metric = evaluate.load("glue", "mrpc")

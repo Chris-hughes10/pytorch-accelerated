@@ -33,7 +33,7 @@ from pytorch_accelerated.trainer import Trainer, TrainerPlaceholderValues
 
 class AccuracyCallback(TrainerCallback):
     def __init__(self, num_classes):
-        self.accuracy = Accuracy(num_classes=num_classes)
+        self.accuracy = Accuracy(task="multiclass", num_classes=num_classes)
 
     def on_training_run_start(self, trainer, **kwargs):
         self.accuracy.to(trainer._eval_dataloader.device)
@@ -77,7 +77,6 @@ DATA_PATH = (
 
 @script
 def main(data_dir: str = DATA_PATH):
-
     data_dir = Path(data_dir)
     num_classes = len(list((data_dir / "train").iterdir()))
 

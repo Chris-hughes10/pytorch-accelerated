@@ -32,7 +32,6 @@ class TimmTrainer(Trainer):
         self.eval_loss_func = eval_loss_func
 
     def create_train_dataloader(self, batch_size: int, train_dl_kwargs: dict = None):
-
         return timm.data.create_loader(
             dataset=self.train_dataset,
             collate_fn=self.collate_fn,
@@ -41,7 +40,6 @@ class TimmTrainer(Trainer):
         )
 
     def create_eval_dataloader(self, batch_size: int, eval_dl_kwargs: dict = None):
-
         return timm.data.create_loader(
             dataset=self.eval_dataset,
             collate_fn=self.collate_fn,
@@ -70,7 +68,7 @@ class TimmTrainer(Trainer):
 
 class AccuracyCallback(TrainerCallback):
     def __init__(self, num_classes):
-        self.accuracy = Accuracy(num_classes=num_classes)
+        self.accuracy = Accuracy(task="multiclass", num_classes=num_classes)
 
     def on_training_run_start(self, trainer, **kwargs):
         self.accuracy.to(trainer.device)

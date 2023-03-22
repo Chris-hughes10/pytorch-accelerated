@@ -12,7 +12,7 @@ RUN chsh -s /bin/bash
 SHELL ["/bin/bash", "-c"]
 
 # Stage 2
-FROM nvidia/cuda:11.2.2-cudnn8-runtime-ubuntu20.04 AS build-image
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04 AS build-image
 COPY --from=compile-image /opt/conda /opt/conda
 ENV PATH /opt/conda/bin:$PATH
 

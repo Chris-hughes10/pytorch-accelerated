@@ -54,11 +54,15 @@ class ClassificationMetricsCallback(TrainerCallback):
     def __init__(self, num_classes):
         self.metrics = torchmetrics.MetricCollection(
             {
-                "accuracy": torchmetrics.Accuracy(num_classes=num_classes),
-                "precision": torchmetrics.Precision(
-                    num_classes=num_classes, average="macro"
+                "accuracy": torchmetrics.Accuracy(
+                    task="multiclass", num_classes=num_classes
                 ),
-                "recall": torchmetrics.Recall(num_classes=num_classes, average="macro"),
+                "precision": torchmetrics.Precision(
+                    task="multiclass", num_classes=num_classes, average="macro"
+                ),
+                "recall": torchmetrics.Recall(
+                    task="multiclass", num_classes=num_classes, average="macro"
+                ),
             }
         )
 

@@ -43,9 +43,13 @@ class TrainerWithMetrics(Trainer):
         # MoveModulesToDeviceCallback callback, which is used by default
         self.metrics = MetricCollection(
             {
-                "accuracy": Accuracy(num_classes=num_classes),
-                "precision": Precision(num_classes=num_classes, average="macro"),
-                "recall": Recall(num_classes=num_classes, average="macro"),
+                "accuracy": Accuracy(task="multiclass", num_classes=num_classes),
+                "precision": Precision(
+                    task="multiclass", num_classes=num_classes, average="macro"
+                ),
+                "recall": Recall(
+                    task="multiclass", num_classes=num_classes, average="macro"
+                ),
             }
         )
 
