@@ -159,7 +159,7 @@ class Trainer:
         )
         self._accelerator = self._create_accelerator()
         self._loss_tracker = LossTracker()
-        self._pad_uneven_batches = False
+        self._pad_uneven_eval_batches = False
         # placeholders which will be set during training
         self.create_scheduler_fn = None
         self.scheduler = None
@@ -460,6 +460,8 @@ class Trainer:
             gradient_clip_value=gradient_clip_value,
         )
 
+        self._check_eval_batch_size()
+
         if self.create_scheduler_fn is not None:
             self.scheduler = self.create_scheduler()
 
@@ -504,6 +506,8 @@ class Trainer:
                 per_device_batch_size=per_device_batch_size,
                 gradient_clip_value=None,
             )
+
+        self._check_eval_batch_size()
 
         self._run_evaluation()
 
@@ -585,11 +589,18 @@ class Trainer:
 
         if self._train_dataloader is not None:
             self._train_dataloader = prepared_components[2]
+            self._train_dataloader.batch_sampler.even_batches = True
             if self._eval_dataloader is not None:
                 self._eval_dataloader = prepared_components[3]
+                self._eval_dataloader.batch_sampler.even_batches = (
+                    self._pad_uneven_eval_batches
+                )
 
         elif self._eval_dataloader is not None:
             self._eval_dataloader = prepared_components[2]
+            self._eval_dataloader.batch_sampler.even_batches = (
+                self._pad_uneven_eval_batches
+            )
 
     def _create_run_config(
         self,
@@ -660,6 +671,17 @@ class Trainer:
         }
 
         return TrainerRunConfig(**config)
+
+    def _check_eval_batch_size(self):
+        if (
+            self.run_config.eval_total_batch_size > len(self.eval_dataset)
+            and self.run_config.is_distributed
+        ):
+            raise ValueError(
+                f"The total batch size {self.run_config.eval_total_batch_size} \
+                  across all processes is bigger than eval dataset size {len(self.eval_dataset)}. \
+                  This can be resolved by lowering the batch size"
+            )
 
     def _run_training(self):
         """
@@ -838,7 +860,7 @@ class Trainer:
         with self._accelerator.no_sync(self.model):
             # handle uneven batch sizes during distributed evaluation
             with self._accelerator.join_uneven_inputs(
-                [self.model], even_batches=self._pad_uneven_batches
+                [self.model], even_batches=self._pad_uneven_eval_batches
             ):
                 for batch in valid_dl:
                     self.callback_handler.call_event(
