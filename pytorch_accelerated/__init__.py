@@ -8,7 +8,6 @@ from . import _version
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-logging.basicConfig(level=logging.INFO)
 
 logger.info("Setting random seeds")
 set_seed(42)
