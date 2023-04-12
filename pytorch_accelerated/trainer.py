@@ -674,7 +674,8 @@ class Trainer:
 
     def _check_eval_batch_size(self):
         if (
-            self.run_config.eval_total_batch_size > len(self.eval_dataset)
+            self.eval_dataset is not None
+            and self.run_config.eval_total_batch_size > len(self.eval_dataset)
             and self.run_config.is_distributed
         ):
             raise ValueError(
