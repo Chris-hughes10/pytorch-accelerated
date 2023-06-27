@@ -6,7 +6,7 @@ from copy import deepcopy
 from functools import wraps
 
 import torch
-from accelerate.state import AcceleratorState
+from accelerate.state import PartialState
 from accelerate.utils import wait_for_everyone
 from torch import nn, Tensor
 
@@ -41,7 +41,7 @@ def local_process_zero_only(func):
 
     @wraps(func)
     def wrapper_func(*args, **kwargs):
-        state = AcceleratorState(_from_accelerator=True)
+        state = PartialState()
         if state.local_process_index == 0:
             result = func(*args, **kwargs)
             wait_for_everyone()
@@ -63,7 +63,7 @@ def local_process_zero_first(func):
     @wraps(func)
     def wrapper_func(*args, **kwargs):
         result = None
-        state = AcceleratorState(_from_accelerator=True)
+        state = PartialState()
         if state.local_process_index == 0:
             result = func(*args, **kwargs)
         wait_for_everyone()
@@ -85,7 +85,7 @@ def world_process_zero_only(func):
 
     @wraps(func)
     def wrapper_func(*args, **kwargs):
-        state = AcceleratorState(_from_accelerator=True)
+        state = PartialState()
         if state.process_index == 0:
             result = func(*args, **kwargs)
             wait_for_everyone()

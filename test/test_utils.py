@@ -1,9 +1,16 @@
 from unittest.mock import Mock
+import pytest
 
 import torch
 from pytorch_accelerated import Trainer
 from pytorch_accelerated.callbacks import LimitBatchesCallback
-from pytorch_accelerated.utils import LimitBatches, remove_padding
+from pytorch_accelerated.utils import (
+    LimitBatches,
+    local_process_zero_first,
+    local_process_zero_only,
+    remove_padding,
+    world_process_zero_only,
+)
 
 PAD_VALUE = -1
 
@@ -58,3 +65,17 @@ def test_can_remove_padding_3d():
     actual_t = remove_padding(t, PAD_VALUE)
 
     assert torch.eq(expected_t, actual_t).all()
+
+
+@pytest.mark.parametrize(
+    "process_decorator",
+    [world_process_zero_only, local_process_zero_only, local_process_zero_first],
+)
+def test_process_decorators_are_transparent_without_multi_gpu(process_decorator):
+    @process_decorator
+    def fun():
+        return 42
+
+    result = fun()
+
+    assert result == 42
