@@ -1,2 +1,2 @@
-accelerate==0.18.0
+accelerate==0.20.3
 tqdm~=4.64.0
