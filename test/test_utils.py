@@ -67,6 +67,20 @@ def test_can_remove_padding_3d():
     assert torch.eq(expected_t, actual_t).all()
 
 
+@pytest.mark.parametrize("shape", [(3, 4), (3, 4, 2), (3, 4, 2, 5)])
+def test_can_remove_padding(shape):
+    batch_size, *_ = shape
+
+    t = torch.ones(*shape)
+    t[-1, ...] = PAD_VALUE
+
+    expected_t = torch.ones(batch_size - 1, *shape[1:])
+
+    actual_t = remove_padding(t, PAD_VALUE)
+
+    assert torch.eq(expected_t, actual_t).all()
+
+
 @pytest.mark.parametrize(
     "process_decorator",
     [world_process_zero_only, local_process_zero_only, local_process_zero_first],
