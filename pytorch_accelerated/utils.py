@@ -173,9 +173,9 @@ def remove_padding(padded_tensor: Tensor, pad_value):
     """
     padding_mask = padded_tensor == pad_value
 
-    if padding_mask.ndim > 1:
+    while padding_mask.ndim > 1:
         padding_mask = torch.all(padding_mask, dim=-1)
 
-    result = padded_tensor[~padding_mask]
+    result = padded_tensor[~padding_mask, ...]
 
     return result
