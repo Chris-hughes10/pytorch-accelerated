@@ -694,15 +694,14 @@ class Trainer:
             + 1
         )
         if n_samples_last_batch < min_samples_last_batch:
-            raise ValueError(
+            warnings.warn(
                 f"The per device batch size {self.run_config.eval_per_device_batch_size} with the "
                 f"eval dataset size {len(self.eval_dataset)} and the number of processes "
                 f"{self.run_config.num_processes} will cause at least one process to have no "
                 "samples on the last batch, which would lead to a `Trainer.gather` to freeze "
                 "indefinitely. This can be resolved by setting a different batch size"
             )
-
-        if (
+        elif (
             min_samples_last_batch
             <= n_samples_last_batch
             < self.run_config.eval_total_batch_size

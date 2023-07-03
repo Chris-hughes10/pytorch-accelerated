@@ -200,7 +200,7 @@ def test_check_eval_batch_size_raises_empty_node_on_last_batch():
     trainer.eval_dataset = list(range(n_samples))
     trainer.run_config = FakeRunConfig()
 
-    with pytest.raises(ValueError):
+    with pytest.warns(UserWarning):
         trainer._check_eval_batch_size()
 
 
