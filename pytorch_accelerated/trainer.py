@@ -4,6 +4,7 @@ import os
 from enum import Enum
 from functools import partial
 from typing import Iterable
+import warnings
 
 import torch
 from accelerate import Accelerator, DistributedType
@@ -673,15 +674,45 @@ class Trainer:
         return TrainerRunConfig(**config)
 
     def _check_eval_batch_size(self):
-        if (
-            self.eval_dataset is not None
-            and self.run_config.eval_total_batch_size > len(self.eval_dataset)
-            and self.run_config.is_distributed
-        ):
+        if self.eval_dataset is None or not self.run_config.is_distributed:
+            return
+
+        if self.run_config.eval_total_batch_size > len(self.eval_dataset):
             raise ValueError(
                 f"The total batch size {self.run_config.eval_total_batch_size} \
                   across all processes is bigger than eval dataset size {len(self.eval_dataset)}. \
                   This can be resolved by lowering the batch size"
+            )
+
+        n_samples_last_batch = (
+            len(self.eval_dataset) % self.run_config.eval_total_batch_size
+        )
+        # Minimum number of samples to ensure all processes have at least one sample
+        min_samples_last_batch = (
+            self.run_config.eval_per_device_batch_size
+            * (self.run_config.num_processes - 1)
+            + 1
+        )
+        if n_samples_last_batch < min_samples_last_batch:
+            warnings.warn(
+                f"The per device batch size {self.run_config.eval_per_device_batch_size} with the "
+                f"eval dataset size {len(self.eval_dataset)} and the number of processes "
+                f"{self.run_config.num_processes} will cause at least one process to have no "
+                "samples on the last batch, which would lead to a `Trainer.gather` to freeze "
+                "indefinitely. This can be resolved by setting a different batch size"
+            )
+        elif (
+            min_samples_last_batch
+            <= n_samples_last_batch
+            < self.run_config.eval_total_batch_size
+        ):
+            warnings.warn(
+                f"The per device batch size {self.run_config.eval_per_device_batch_size} with the "
+                f"eval dataset size {len(self.eval_dataset)} and the number of processes "
+                f"{self.run_config.num_processes} will cause one process to have a smaller number "
+                "of samples on the last batch than the rest, which would lead to a "
+                "`Trainer.gather` to freeze indefinitely. This can be resolved by passing a "
+                "`padding_value` to the `Trainer.gather`."
             )
 
     def _run_training(self):

@@ -1,6 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryFile, TemporaryDirectory
 from unittest.mock import MagicMock, Mock, call
+import pytest
 
 import torch
 from pytest import fixture
@@ -147,3 +148,81 @@ def test_can_create_scheduler():
 
 def test_can_reset_run_history():
     pass
+
+
+def test_check_eval_batch_size_is_transparent_on_single_process():
+    batch_size = 8
+    n_samples = batch_size - 1
+
+    class FakeRunConfig:
+        eval_total_batch_size = batch_size
+        is_distributed = False
+
+    trainer = Trainer("irrelevant", "irrelevant", "irrelevant")
+    trainer.eval_dataset = list(range(n_samples))
+    trainer.run_config = FakeRunConfig()
+
+    trainer._check_eval_batch_size()
+
+
+def test_check_eval_batch_size_raises_batch_size_bigger_than_dataset():
+    batch_size = 8
+
+    class FakeRunConfig:
+        eval_total_batch_size = batch_size
+        is_distributed = True
+
+    trainer = Trainer("irrelevant", "irrelevant", "irrelevant")
+    trainer.eval_dataset = list(range(batch_size - 1))
+    trainer.run_config = FakeRunConfig()
+
+    with pytest.raises(ValueError):
+        trainer._check_eval_batch_size()
+
+
+def test_check_eval_batch_size_raises_empty_node_on_last_batch():
+    per_device_batch_size = 8
+    n_processes = 4
+    n_full_batches = 2
+
+    n_samples_full_batches = per_device_batch_size * n_processes * n_full_batches
+    # One process will have no samples, another one less samples than the batch size
+    n_samples_last_batch = per_device_batch_size * (n_processes - 1) - 1
+    n_samples = n_samples_full_batches + n_samples_last_batch
+
+    class FakeRunConfig:
+        eval_per_device_batch_size = per_device_batch_size
+        eval_total_batch_size = per_device_batch_size * n_processes
+        num_processes = n_processes
+        is_distributed = True
+
+    trainer = Trainer("irrelevant", "irrelevant", "irrelevant")
+    trainer.eval_dataset = list(range(n_samples))
+    trainer.run_config = FakeRunConfig()
+
+    with pytest.warns(UserWarning):
+        trainer._check_eval_batch_size()
+
+
+def test_check_eval_batch_size_warns_padding_is_needed():
+    per_device_batch_size = 8
+    n_processes = 4
+    n_full_batches = 2
+
+    n_samples_full_batches = per_device_batch_size * n_processes * n_full_batches
+    # One process will have just one sample
+    n_samples_last_batch = per_device_batch_size * (n_processes - 1) + 1
+    n_samples = n_samples_full_batches + n_samples_last_batch
+
+    class FakeRunConfig:
+        eval_per_device_batch_size = per_device_batch_size
+        eval_total_batch_size = per_device_batch_size * n_processes
+        num_processes = n_processes
+        is_distributed = True
+
+    trainer = Trainer("irrelevant", "irrelevant", "irrelevant")
+    trainer.eval_dataset = list(range(n_samples))
+    trainer.run_config = FakeRunConfig()
+
+    with pytest.warns(UserWarning):
+        trainer._check_eval_batch_size()
