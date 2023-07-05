@@ -693,7 +693,7 @@ class Trainer:
             * (self.run_config.num_processes - 1)
             + 1
         )
-        if n_samples_last_batch < min_samples_last_batch:
+        if 0 < n_samples_last_batch < min_samples_last_batch:
             warnings.warn(
                 f"The per device batch size {self.run_config.eval_per_device_batch_size} with the "
                 f"eval dataset size {len(self.eval_dataset)} and the number of processes "
