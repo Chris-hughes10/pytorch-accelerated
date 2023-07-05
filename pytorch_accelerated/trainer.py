@@ -499,14 +499,13 @@ class Trainer:
 
         self._prepare_model_optimizer_and_dataloaders()
 
-        if self.run_config is None:
-            self.run_config = self._create_run_config(
-                num_epochs=1,
-                gradient_accumulation_steps=0,
-                max_num_train_steps=None,
-                per_device_batch_size=per_device_batch_size,
-                gradient_clip_value=None,
-            )
+        self.run_config = self._create_run_config(
+            num_epochs=1,
+            gradient_accumulation_steps=1,
+            max_num_train_steps=None,
+            per_device_batch_size=per_device_batch_size,
+            gradient_clip_value=None,
+        )
 
         self._check_eval_batch_size()
 
