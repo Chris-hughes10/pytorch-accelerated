@@ -135,9 +135,11 @@ class CosineLrScheduler(StatefulSchedulerBase):
         else:
             # cooldown
             lrs = [
-                self.lr_min_ratio * base_lr
-                if self.lr_min_ratio is not None
-                else self.lr_min
+                (
+                    self.lr_min_ratio * base_lr
+                    if self.lr_min_ratio is not None
+                    else self.lr_min
+                )
                 for base_lr in self.base_lr_values
             ]
 
@@ -155,7 +157,7 @@ class CosineLrScheduler(StatefulSchedulerBase):
         warmup_starting_lr=1e-6,
         warmup_starting_lr_ratio=None,
         num_cooldown_epochs=0,
-    ) -> Callable:
+    ) -> Callable[[torch.optim.Optimizer], "CosineLrScheduler"]:
         """
         An alternative constructor which returns a function that accepts an optimizer and creates an instance of
         ``CosineLrScheduler``. This is primarily intended to be used with the :class:`~pytorch_accelerated.trainer.Trainer`

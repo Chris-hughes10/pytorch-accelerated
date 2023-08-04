@@ -1,7 +1,7 @@
 # Copyright © 2021 Chris Hughes
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Iterable
+from typing import Any, Iterable
 
 
 class RunHistory(ABC):
@@ -19,7 +19,7 @@ class RunHistory(ABC):
         pass
 
     @abstractmethod
-    def get_metric_values(self, metric_name) -> Iterable:
+    def get_metric_values(self, metric_name: str) -> Iterable:
         """
         Return all of the values that have been recorded for the given metric.
 
@@ -29,7 +29,7 @@ class RunHistory(ABC):
         pass
 
     @abstractmethod
-    def get_latest_metric(self, metric_name):
+    def get_latest_metric(self, metric_name: str) -> Any:
         """
         Return the most recent value that has been recorded for the given metric.
 
@@ -39,7 +39,7 @@ class RunHistory(ABC):
         pass
 
     @abstractmethod
-    def set_metric_name_prefix(self, prefix=""):
+    def set_metric_name_prefix(self, prefix: str = ""):
         """
         Set a prefix which will be prepended to any metric name which is tracked.
 
@@ -49,14 +49,14 @@ class RunHistory(ABC):
 
     @property
     @abstractmethod
-    def metric_name_prefix(self):
+    def metric_name_prefix(self) -> str:
         """
-        :return: the prefix which wil be prepended to any metric name
+        :return: the prefix which will be prepended to any metric name
         """
         pass
 
     @abstractmethod
-    def update_metric(self, metric_name, metric_value):
+    def update_metric(self, metric_name: str, metric_value: Any):
         """
         Record the value for the given metric.
 
@@ -103,10 +103,10 @@ class InMemoryRunHistory(RunHistory):
     def get_metric_names(self):
         return set(self._metrics.keys())
 
-    def get_metric_values(self, metric_name):
+    def get_metric_values(self, metric_name: str) -> list:
         return self._metrics[metric_name]
 
-    def get_latest_metric(self, metric_name):
+    def get_latest_metric(self, metric_name: str) -> Any:
         if len(self._metrics[metric_name]) > 0:
             return self._metrics[metric_name][-1]
         else:
@@ -114,18 +114,18 @@ class InMemoryRunHistory(RunHistory):
                 f"No values have been recorded for the metric {metric_name}"
             )
 
-    def update_metric(self, metric_name, metric_value):
+    def update_metric(self, metric_name: str, metric_value):
         self._metrics[f"{self._prefix}{metric_name}"].append(metric_value)
 
-    def set_metric_name_prefix(self, prefix=""):
+    def set_metric_name_prefix(self, prefix: str = ""):
         self._prefix = prefix
 
     @property
-    def metric_name_prefix(self):
+    def metric_name_prefix(self) -> str:
         return self._prefix
 
     @property
-    def current_epoch(self):
+    def current_epoch(self) -> str:
         return self._current_epoch
 
     def _increment_epoch(self):
@@ -149,7 +149,7 @@ class LossTracker:
         self.total_loss = 0
         self.running_count = 0
 
-    def update(self, loss_batch_value, batch_size=1):
+    def update(self, loss_batch_value: float, batch_size: int = 1):
         self.loss_value = loss_batch_value
         self.total_loss += loss_batch_value * batch_size
         self.running_count += batch_size

@@ -9,6 +9,10 @@ from abc import ABC
 import numpy as np
 import torch
 from pytorch_accelerated.utils import ModelEma
+from typing import TYPE_CHECKING, Optional, List, Any, Dict, Callable, Iterable, Type
+
+if TYPE_CHECKING:
+    from pytorch_accelerated import Trainer
 from torch import nn
 from tqdm import tqdm
 
@@ -58,25 +62,25 @@ class TrainerCallback(ABC):
         """
         pass
 
-    def on_training_run_start(self, trainer, **kwargs):
+    def on_training_run_start(self, trainer: "Trainer", **kwargs):
         """
         Event called at the start of training run.
         """
         pass
 
-    def on_train_epoch_start(self, trainer, **kwargs):
+    def on_train_epoch_start(self, trainer: "Trainer", **kwargs):
         """
         Event called at the beginning of a training epoch.
         """
         pass
 
-    def on_train_step_start(self, trainer, **kwargs):
+    def on_train_step_start(self, trainer: "Trainer", **kwargs):
         """
         Event called at the beginning of a training step.
         """
         pass
 
-    def on_train_step_end(self, trainer, batch, batch_output, **kwargs):
+    def on_train_step_end(self, trainer: "Trainer", batch, batch_output, **kwargs):
         """
         Event called at the end of a training step.
 
@@ -85,25 +89,25 @@ class TrainerCallback(ABC):
         """
         pass
 
-    def on_train_epoch_end(self, trainer, **kwargs):
+    def on_train_epoch_end(self, trainer: "Trainer", **kwargs):
         """
         Event called at the end of a training epoch.
         """
         pass
 
-    def on_eval_epoch_start(self, trainer, **kwargs):
+    def on_eval_epoch_start(self, trainer: "Trainer", **kwargs):
         """
         Event called at the beginning of an evaluation epoch.
         """
         pass
 
-    def on_eval_step_start(self, trainer, **kwargs):
+    def on_eval_step_start(self, trainer: "Trainer", **kwargs):
         """
         Event called at the beginning of a evaluation step.
         """
         pass
 
-    def on_eval_step_end(self, trainer, batch, batch_output, **kwargs):
+    def on_eval_step_end(self, trainer: "Trainer", batch, batch_output, **kwargs):
         """
         Event called at the end of an evaluation step.
 
@@ -112,43 +116,43 @@ class TrainerCallback(ABC):
         """
         pass
 
-    def on_eval_epoch_end(self, trainer, **kwargs):
+    def on_eval_epoch_end(self, trainer: "Trainer", **kwargs):
         """
         Event called at the end of evaluation.
         """
         pass
 
-    def on_training_run_epoch_end(self, trainer, **kwargs):
+    def on_training_run_epoch_end(self, trainer: "Trainer", **kwargs):
         """
         Event called during a training run after both training and evaluation epochs have been completed.
         """
         pass
 
-    def on_training_run_end(self, trainer, **kwargs):
+    def on_training_run_end(self, trainer: "Trainer", **kwargs):
         """
         Event called at the end of training run.
         """
         pass
 
-    def on_evaluation_run_start(self, trainer, **kwargs):
+    def on_evaluation_run_start(self, trainer: "Trainer", **kwargs):
         """
         Event called at the start of an evaluation run.
         """
         pass
 
-    def on_evaluation_run_end(self, trainer, **kwargs):
+    def on_evaluation_run_end(self, trainer: "Trainer", **kwargs):
         """
         Event called at the end of an evaluation run.
         """
         pass
 
-    def on_stop_training_error(self, trainer, **kwargs):
+    def on_stop_training_error(self, trainer: "Trainer", **kwargs):
         """
         Event called when a stop training error is raised
         """
         pass
 
-    def __getattr__(self, item):
+    def __getattr__(self, item) -> Callable[..., None]:
         try:
             return super().__getattr__(item)
         except AttributeError:
@@ -161,12 +165,12 @@ class CallbackHandler:
     This class calls the callbacks in the order that they are given.
     """
 
-    def __init__(self, callbacks):
-        self.callbacks = []
+    def __init__(self, callbacks: Iterable[TrainerCallback]):
+        self.callbacks: List[TrainerCallback] = []
         self.add_callbacks(callbacks)
         self._enabled = True
 
-    def add_callbacks(self, callbacks):
+    def add_callbacks(self, callbacks: Iterable[TrainerCallback]):
         """
         Add a list of callbacks to the callback handler
 
@@ -175,7 +179,7 @@ class CallbackHandler:
         for cb in callbacks:
             self.add_callback(cb)
 
-    def add_callback(self, callback):
+    def add_callback(self, callback: TrainerCallback):
         """
         Add a callbacks to the callback handler
 
@@ -187,22 +191,23 @@ class CallbackHandler:
             existing_callbacks = "\n".join(cb for cb in self.callback_list)
 
             raise ValueError(
-                f"You attempted to add multiple instances of the callback {cb_class} to a single Trainer"
-                f" The list of callbacks already present is\n: {existing_callbacks}"
+                f"You attempted to add multiple instances of the callback {cb_class} to"
+                " a single Trainer The list of callbacks already present is\n:"
+                f" {existing_callbacks}"
             )
         self.callbacks.append(cb)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterable[TrainerCallback]:
         return self.callbacks
 
-    def clear_callbacks(self):
+    def clear_callbacks(self) -> None:
         self.callbacks = []
 
     @property
-    def callback_list(self):
+    def callback_list(self) -> List[str]:
         return [cb.__class__.__name__ for cb in self.callbacks]
 
-    def call_event(self, event, *args, **kwargs):
+    def call_event(self, event: str, *args, **kwargs):
         """
         For each callback which has been registered, sequentially call the method corresponding to the
         given event.
@@ -214,7 +219,8 @@ class CallbackHandler:
         if self._enabled:
             for callback in self.callbacks:
                 try:
-                    getattr(callback, event)(
+                    event_function = callback.__getattr__(event)
+                    event_function(
                         *args,
                         **kwargs,
                     )
@@ -233,7 +239,7 @@ class LogMetricsCallback(TrainerCallback):
     This can be subclassed to create loggers for different platforms by overriding the :meth:`~LogMetricsCallback.log_metrics` method.
     """
 
-    def on_train_epoch_end(self, trainer, **kwargs):
+    def on_train_epoch_end(self, trainer: "Trainer", **kwargs):
         metric_names = [
             metric
             for metric in trainer.run_history.get_metric_names()
@@ -242,7 +248,7 @@ class LogMetricsCallback(TrainerCallback):
 
         self._log_latest_metrics(trainer, metric_names)
 
-    def on_eval_epoch_end(self, trainer, **kwargs):
+    def on_eval_epoch_end(self, trainer: "Trainer", **kwargs):
         metric_names = [
             metric
             for metric in trainer.run_history.get_metric_names()
@@ -250,17 +256,17 @@ class LogMetricsCallback(TrainerCallback):
         ]
         self._log_latest_metrics(trainer, metric_names)
 
-    def _log_latest_metrics(self, trainer, metric_names):
+    def _log_latest_metrics(self, trainer: "Trainer", metric_names: Iterable[str]):
         latest_metrics = self._get_latest_metrics(trainer, metric_names)
         self.log_metrics(trainer, latest_metrics)
 
-    def _get_latest_metrics(self, trainer, metric_names):
+    def _get_latest_metrics(self, trainer: "Trainer", metric_names: Iterable[str]):
         return {
             metric_name: trainer.run_history.get_latest_metric(metric_name)
             for metric_name in metric_names
         }
 
-    def log_metrics(self, trainer, metrics: dict):
+    def log_metrics(self, trainer: "Trainer", metrics: Dict[str, Any]):
         for metric_name, metric_value in metrics.items():
             trainer.print(f"\n{metric_name}: {metric_value}")
 
@@ -273,29 +279,29 @@ class ProgressBarCallback(TrainerCallback):
     def __init__(self):
         self.pbar = None
 
-    def on_train_epoch_start(self, trainer, **kwargs):
+    def on_train_epoch_start(self, trainer: "Trainer", **kwargs):
         self.pbar = tqdm(
             total=len(trainer._train_dataloader),
             disable=not trainer._accelerator.is_local_main_process,
         )
 
-    def on_train_step_end(self, trainer, **kwargs):
+    def on_train_step_end(self, trainer: "Trainer", **kwargs):
         self.pbar.update(1)
 
-    def on_train_epoch_end(self, trainer, **kwargs):
+    def on_train_epoch_end(self, trainer: "Trainer", **kwargs):
         self.pbar.close()
         time.sleep(0.01)
 
-    def on_eval_epoch_start(self, trainer, **kwargs):
+    def on_eval_epoch_start(self, trainer: "Trainer", **kwargs):
         self.pbar = tqdm(
             total=len(trainer._eval_dataloader),
             disable=not trainer._accelerator.is_local_main_process,
         )
 
-    def on_eval_step_end(self, trainer, **kwargs):
+    def on_eval_step_end(self, trainer: "Trainer", **kwargs):
         self.pbar.update(1)
 
-    def on_eval_epoch_end(self, trainer, **kwargs):
+    def on_eval_epoch_end(self, trainer: "Trainer", **kwargs):
         self.pbar.close()
         time.sleep(0.01)
 
@@ -306,20 +312,20 @@ class PrintProgressCallback(TrainerCallback):
     as well as at the start of each epoch.
     """
 
-    def on_training_run_start(self, trainer, **kwargs):
+    def on_training_run_start(self, trainer: "Trainer", **kwargs):
         trainer.print("\nStarting training run")
 
-    def on_train_epoch_start(self, trainer, **kwargs):
+    def on_train_epoch_start(self, trainer: "Trainer", **kwargs):
         trainer.print(f"\nStarting epoch {trainer.run_history.current_epoch}")
         time.sleep(0.01)
 
-    def on_training_run_end(self, trainer, **kwargs):
+    def on_training_run_end(self, trainer: "Trainer", **kwargs):
         trainer.print("Finishing training run")
 
-    def on_evaluation_run_start(self, trainer, **kwargs):
+    def on_evaluation_run_start(self, trainer: "Trainer", **kwargs):
         trainer.print("\nStarting evaluation run")
 
-    def on_evaluation_run_end(self, trainer, **kwargs):
+    def on_evaluation_run_end(self, trainer: "Trainer", **kwargs):
         trainer.print("Finishing evaluation run")
 
 
@@ -331,8 +337,8 @@ class SaveBestModelCallback(TrainerCallback):
 
     def __init__(
         self,
-        save_path="best_model.pt",
-        watch_metric="eval_loss_epoch",
+        save_path: str = "best_model.pt",
+        watch_metric: str = "eval_loss_epoch",
         greater_is_better: bool = False,
         reset_on_train: bool = True,
         save_optimizer: bool = True,
@@ -358,7 +364,7 @@ class SaveBestModelCallback(TrainerCallback):
         if self.reset_on_train:
             self.best_metric = None
 
-    def on_training_run_epoch_end(self, trainer, **kwargs):
+    def on_training_run_epoch_end(self, trainer: "Trainer", **kwargs):
         current_metric = trainer.run_history.get_latest_metric(self.watch_metric)
         if self.best_metric is None:
             self.best_metric = current_metric
@@ -380,9 +386,10 @@ class SaveBestModelCallback(TrainerCallback):
                     save_optimizer=self.save_optimizer,
                 )
 
-    def on_training_run_end(self, trainer, **kwargs):
+    def on_training_run_end(self, trainer: "Trainer", **kwargs):
         trainer.print(
-            f"Loading checkpoint with {self.watch_metric}: {self.best_metric} from epoch {self.best_metric_epoch}"
+            f"Loading checkpoint with {self.watch_metric}: {self.best_metric} from"
+            f" epoch {self.best_metric_epoch}"
         )
         trainer.load_checkpoint(self.save_path)
 
@@ -396,7 +403,7 @@ class EarlyStoppingCallback(TrainerCallback):
         self,
         early_stopping_patience: int = 1,
         early_stopping_threshold: float = 0.01,
-        watch_metric="eval_loss_epoch",
+        watch_metric: str = "eval_loss_epoch",
         greater_is_better: bool = False,
         reset_on_train: bool = True,
     ):
@@ -422,7 +429,7 @@ class EarlyStoppingCallback(TrainerCallback):
             self.best_metric = None
             self.early_stopping_patience_counter = 0
 
-    def on_training_run_epoch_end(self, trainer, **kwargs):
+    def on_training_run_epoch_end(self, trainer: "Trainer", **kwargs):
         current_metric = trainer.run_history.get_latest_metric(self.watch_metric)
         if self.best_metric is None:
             self.best_metric = current_metric
@@ -447,12 +454,14 @@ class EarlyStoppingCallback(TrainerCallback):
 
         if self.early_stopping_patience_counter >= self.early_stopping_patience:
             raise StopTrainingError(
-                f"Stopping training due to no improvement after {self.early_stopping_patience} epochs"
+                "Stopping training due to no improvement after"
+                f" {self.early_stopping_patience} epochs"
             )
 
-    def __print_counter_status(self, trainer):
+    def __print_counter_status(self, trainer: "Trainer"):
         trainer.print(
-            f"Early stopping counter: {self.early_stopping_patience_counter}/{self.early_stopping_patience}"
+            "Early stopping counter:"
+            f" {self.early_stopping_patience_counter}/{self.early_stopping_patience}"
         )
 
 
@@ -465,20 +474,20 @@ class TerminateOnNaNCallback(TrainerCallback):
     def __init__(self):
         self.triggered = False
 
-    def check_for_nan_after_batch(self, batch_output, step=None):
+    def check_for_nan_after_batch(self, batch_output, step: Optional[str] = None):
         """Test if loss is NaN and interrupts training."""
         loss = batch_output["loss"]
         if torch.isinf(loss).any() or torch.isnan(loss).any():
             self.triggered = True
             raise StopTrainingError(f"Stopping training due to NaN loss in {step} step")
 
-    def on_train_step_end(self, trainer, batch_output, **kwargs):
+    def on_train_step_end(self, trainer: "Trainer", batch_output, **kwargs):
         self.check_for_nan_after_batch(batch_output, step="training")
 
-    def on_eval_step_end(self, trainer, batch_output, **kwargs):
+    def on_eval_step_end(self, trainer: "Trainer", batch_output, **kwargs):
         self.check_for_nan_after_batch(batch_output, step="validation")
 
-    def on_training_run_end(self, trainer, **kwargs):
+    def on_training_run_end(self, trainer: "Trainer", **kwargs):
         if self.triggered:
             sys.exit("Exiting due to NaN loss")
 
@@ -494,25 +503,25 @@ class MoveModulesToDeviceCallback(TrainerCallback):
 
     """
 
-    def _get_modules(self, trainer):
+    def _get_modules(self, trainer: "Trainer"):
         return inspect.getmembers(trainer, lambda x: isinstance(x, nn.Module))
 
-    def _move_modules_to_device(self, trainer):
+    def _move_modules_to_device(self, trainer: "Trainer"):
         modules = self._get_modules(trainer)
 
         for module_name, module in modules:
             if module_name != "model":
                 module.to(trainer.device)
 
-    def on_training_run_start(self, trainer, **kwargs):
+    def on_training_run_start(self, trainer: "Trainer", **kwargs):
         self._move_modules_to_device(trainer)
 
-    def on_evaluation_run_start(self, trainer, **kwargs):
+    def on_evaluation_run_start(self, trainer: "Trainer", **kwargs):
         self._move_modules_to_device(trainer)
 
 
 class DataLoaderSlice:
-    def __init__(self, dl, slice_size):
+    def __init__(self, dl, slice_size: int):
         self.dl = dl
         self.slice_size = slice_size
 
@@ -528,10 +537,10 @@ class LimitBatchesCallback(TrainerCallback):
     A callback that that limits the number of batches used during training and evaluation
     """
 
-    def __init__(self, num_batches):
+    def __init__(self, num_batches: int):
         self.num_batches = num_batches
 
-    def on_training_run_start(self, trainer, **kwargs):
+    def on_training_run_start(self, trainer: "Trainer", **kwargs):
         trainer._train_dataloader = DataLoaderSlice(
             trainer._train_dataloader, self.num_batches
         )
@@ -539,7 +548,7 @@ class LimitBatchesCallback(TrainerCallback):
             trainer._eval_dataloader, self.num_batches
         )
 
-    def on_evaluation_run_start(self, trainer, **kwargs):
+    def on_evaluation_run_start(self, trainer: "Trainer", **kwargs):
         trainer._eval_dataloader = DataLoaderSlice(
             trainer._eval_dataloader, self.num_batches
         )
@@ -567,8 +576,8 @@ class ModelEmaCallback(SaveBestModelCallback):
         save_path: str = "ema_model.pt",
         watch_metric: str = "ema_model_eval_loss_epoch",
         greater_is_better: bool = False,
-        model_ema=ModelEma,
-        callbacks=(),
+        model_ema: Type[nn.Module] = ModelEma,
+        callbacks: Iterable[TrainerCallback] = (),
     ):
         """
         :param decay: the amount of decay to use, which determines how much of the previous state will be maintained.
@@ -593,19 +602,21 @@ class ModelEmaCallback(SaveBestModelCallback):
         self.model_ema_cls = model_ema
         self.callback_handler = CallbackHandler(callbacks)
 
-    def on_training_run_start(self, trainer, **kwargs):
+    def on_training_run_start(self, trainer: "Trainer", **kwargs):
         self.ema_model = self.model_ema_cls(
             trainer._accelerator.unwrap_model(trainer.model), decay=self.decay
         )
         if self.evaluate_during_training:
             self.ema_model.to(trainer.device)
 
-    def on_train_epoch_end(self, trainer, **kwargs):
+    def on_train_epoch_end(self, trainer: "Trainer", **kwargs):
+        assert self.ema_model is not None
         self.ema_model.update(trainer._accelerator.unwrap_model(trainer.model))
 
-    def on_eval_epoch_end(self, trainer, **kwargs):
+    def on_eval_epoch_end(self, trainer: "Trainer", **kwargs):
         if self.evaluate_during_training:
             model = trainer.model
+            assert self.ema_model is not None
             trainer.model = self.ema_model.module
             run_history_prefix = trainer.run_history.metric_name_prefix
             trainer_callback_handler = trainer.callback_handler
@@ -620,8 +631,9 @@ class ModelEmaCallback(SaveBestModelCallback):
             trainer.callback_handler = trainer_callback_handler
             trainer.run_history.set_metric_name_prefix(run_history_prefix)
 
-    def on_training_run_epoch_end(self, trainer, **kwargs):
+    def on_training_run_epoch_end(self, trainer: "Trainer", **kwargs):
         model = trainer.model
+        assert self.ema_model is not None
         trainer.model = self.ema_model.module
 
         if self.evaluate_during_training:
@@ -631,7 +643,7 @@ class ModelEmaCallback(SaveBestModelCallback):
 
         trainer.model = model
 
-    def on_training_run_end(self, trainer, **kwargs):
+    def on_training_run_end(self, trainer: "Trainer", **kwargs):
         # Overriding, as we do not want to load the EMA model
         pass
 
@@ -641,6 +653,6 @@ class ConvertSyncBatchNormCallback(TrainerCallback):
     A callback which converts all BatchNorm*D layers in the model to :class:`torch.nn.SyncBatchNorm` layers.
     """
 
-    def on_training_run_start(self, trainer, **kwargs):
+    def on_training_run_start(self, trainer: "Trainer", **kwargs):
         if trainer.run_config.is_distributed:
             trainer.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(trainer.model)
