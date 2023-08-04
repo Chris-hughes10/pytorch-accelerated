@@ -3,13 +3,14 @@ import math
 import os
 from enum import Enum
 from functools import partial
-from typing import Iterable
+from typing import Optional, Union, TypeVar, Any, List, Callable, TYPE_CHECKING
+from pathlib import Path
 import warnings
 
 import torch
 from accelerate import Accelerator, DistributedType
 from accelerate.utils import set_seed
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from pytorch_accelerated.callbacks import (
     CallbackHandler,
@@ -20,6 +21,7 @@ from pytorch_accelerated.callbacks import (
     ProgressBarCallback,
     StopTrainingError,
     TerminateOnNaNCallback,
+    TrainerCallback,
 )
 from pytorch_accelerated.run_config import TrainerRunConfig
 from pytorch_accelerated.tracking import InMemoryRunHistory, LossTracker, RunHistory
@@ -28,6 +30,9 @@ from pytorch_accelerated.utils import (
     remove_padding,
     worker_init_fn,
 )
+
+if TYPE_CHECKING:
+    from pytorch_accelerated.schedulers import StatefulSchedulerBase
 
 DEFAULT_CALLBACKS = (
     MoveModulesToDeviceCallback,
@@ -69,11 +74,15 @@ class TrainerPlaceholderValues(Enum):
         return {placeholder.name for placeholder in cls}
 
     @staticmethod
-    def __create_new_enum(original_enum, other, operation):
+    def __create_new_enum(
+        original_enum: "TrainerPlaceholderValues",
+        other,
+        operation: str,
+    ) -> Enum:
         enum_members = {k: v.value for k, v in original_enum._member_map_.items()}
-        enum_members[
-            original_enum.name
-        ] = f"{enum_members[original_enum.name]}{operation}{other}"
+        enum_members[original_enum.name] = (
+            f"{enum_members[original_enum.name]}{operation}{other}"
+        )
         new_enum = Enum("TrainerPlaceholderValues", enum_members)
         return new_enum._member_map_[original_enum.name]
 
@@ -85,11 +94,15 @@ class TrainerPlaceholderValues(Enum):
 
     def __sub__(self, other):
         raise NotImplemented(
-            "Subtraction is not supported, please re-write the expression in terms of addition"
+            "Subtraction is not supported, please re-write the expression in terms of"
+            " addition"
         )
 
 
-def replace_trainer_placeholder_values(trainer, instance):
+T = TypeVar("T")
+
+
+def replace_trainer_placeholder_values(trainer: "Trainer", instance: T) -> T:
     """If the instance is partial and contains keywords, will replace these, returning a new function."""
 
     if isinstance(instance, partial):
@@ -126,10 +139,10 @@ class Trainer:
 
     def __init__(
         self,
-        model,
-        loss_func,
-        optimizer,
-        callbacks=DEFAULT_CALLBACKS,
+        model: torch.nn.Module,
+        loss_func: Callable[[Any, Any], torch.Tensor],
+        optimizer: torch.optim.Optimizer,
+        callbacks: List[TrainerCallback] = DEFAULT_CALLBACKS,
         run_history=None,
     ):
         """
@@ -193,7 +206,7 @@ class Trainer:
             callbacks,
         )
 
-    def _create_accelerator(self):
+    def _create_accelerator(self) -> Accelerator:
         """
         Create an instance of :class:`accelerate.Accelerator` which will be used to manage training.
         """
@@ -201,8 +214,8 @@ class Trainer:
         return Accelerator()
 
     def create_train_dataloader(
-        self, batch_size: int, train_dl_kwargs: dict = None
-    ) -> Iterable:
+        self, batch_size: int, train_dl_kwargs: Optional[dict] = None
+    ) -> DataLoader:
         """
         Create a dataloader to be used during training. This is initialised with the train_dataset and collate function which have been passed to the Trainer.
 
@@ -233,8 +246,8 @@ class Trainer:
         )
 
     def create_eval_dataloader(
-        self, batch_size: int, eval_dl_kwargs: dict = None
-    ) -> Iterable:
+        self, batch_size: int, eval_dl_kwargs: Optional[dict] = None
+    ) -> DataLoader:
         """
         Create a dataloader to be used during evaluation. This is initialised with the eval_dataset and collate function which have been passed to the Trainer.
 
@@ -262,11 +275,12 @@ class Trainer:
             **self._eval_dl_kwargs,
         )
 
-    def create_scheduler(self):
+    def create_scheduler(self) -> "StatefulSchedulerBase":
         """
         Create a learning rate scheduler based on the ``create_scheduler_fn`` function which has been passed to the Trainer.
         :return: a learning rate scheduler instance
         """
+        assert self.create_scheduler_fn is not None
         scheduler_type = replace_trainer_placeholder_values(
             self, self.create_scheduler_fn
         )
@@ -306,7 +320,7 @@ class Trainer:
             "batch_size": yb.size(0),
         }
 
-    def backward_step(self, loss):
+    def backward_step(self, loss: torch.Tensor):
         """
         Use the accelerator to perform the backward pass on the calculated value of the loss returned by :meth:`~Trainer.calculate_train_batch_loss`.
         If gradient accumulation is enabled, this loss has been scaled by 1 / accumulation steps.
@@ -400,18 +414,20 @@ class Trainer:
 
     def train(
         self,
-        train_dataset,
-        num_epochs,
-        eval_dataset=None,
-        per_device_batch_size=8,
-        max_num_train_steps=None,
-        gradient_accumulation_steps=1,
-        gradient_clip_value=None,
-        create_scheduler_fn=None,
-        train_dataloader_kwargs: dict = None,
-        eval_dataloader_kwargs: dict = None,
-        reset_run_history=True,
-        collate_fn=None,
+        train_dataset: Dataset,
+        num_epochs: int,
+        eval_dataset: Optional[Dataset] = None,
+        per_device_batch_size: int = 8,
+        max_num_train_steps: Optional[int] = None,
+        gradient_accumulation_steps: int = 1,
+        gradient_clip_value: Optional[float] = None,
+        create_scheduler_fn: Optional[
+            Callable[[torch.optim.Optimizer], "StatefulSchedulerBase"]
+        ] = None,
+        train_dataloader_kwargs: Optional[dict] = None,
+        eval_dataloader_kwargs: Optional[dict] = None,
+        reset_run_history: bool = True,
+        collate_fn: Optional[callable] = None,
     ):
         """
         Start a training run. If an evaluation dataset is provided, this routine will include both training and evaluation epochs.
@@ -470,10 +486,10 @@ class Trainer:
 
     def evaluate(
         self,
-        dataset=None,
-        per_device_batch_size=8,
+        dataset: Optional[Dataset] = None,
+        per_device_batch_size: int = 8,
         dataloader_kwargs: dict = None,
-        collate_fn=None,
+        collate_fn: Optional[callable] = None,
     ):
         """
         Start an evaluation run.
@@ -511,7 +527,7 @@ class Trainer:
 
         self._run_evaluation()
 
-    def get_default_train_dl_kwargs(self, batch_size) -> dict:
+    def get_default_train_dl_kwargs(self, batch_size: int) -> dict:
         """
         Return the default arguments that will be used by the training dataloader.
 
@@ -523,15 +539,17 @@ class Trainer:
             "pin_memory": True if torch.cuda.is_available() else False,
             "batch_size": batch_size,
             "num_workers": max(
-                os.cpu_count() // torch.cuda.device_count()
-                if torch.cuda.is_available()
-                else os.cpu_count(),
+                (
+                    os.cpu_count() // torch.cuda.device_count()
+                    if torch.cuda.is_available()
+                    else os.cpu_count()
+                ),
                 1,
             ),
             "worker_init_fn": worker_init_fn,
         }
 
-    def get_default_eval_dl_kwargs(self, batch_size) -> dict:
+    def get_default_eval_dl_kwargs(self, batch_size: int) -> dict:
         """
         Return the default arguments that will be used by the evaluation dataloader.
 
@@ -543,9 +561,11 @@ class Trainer:
             "pin_memory": True if torch.cuda.is_available() else False,
             "batch_size": batch_size,
             "num_workers": max(
-                os.cpu_count() // torch.cuda.device_count()
-                if torch.cuda.is_available()
-                else os.cpu_count(),
+                (
+                    os.cpu_count() // torch.cuda.device_count()
+                    if torch.cuda.is_available()
+                    else os.cpu_count()
+                ),
                 1,
             ),
             "worker_init_fn": worker_init_fn,
@@ -582,33 +602,35 @@ class Trainer:
         if self._eval_dataloader is not None:
             components.append(self._eval_dataloader)
 
-        prepared_components = self._accelerator.prepare(*components)
-
-        self.model = prepared_components[0]
-        self.optimizer = prepared_components[1]
+        model: torch.nn.Module
+        optimizer: torch.optim.Optimizer
+        data_loaders: List[DataLoader]
+        model, optimizer, data_loaders = self._accelerator.prepare(*components)
+        self.model = model
+        self.optimizer = optimizer
 
         if self._train_dataloader is not None:
-            self._train_dataloader = prepared_components[2]
+            self._train_dataloader = data_loaders[0]
             self._train_dataloader.batch_sampler.even_batches = True
             if self._eval_dataloader is not None:
-                self._eval_dataloader = prepared_components[3]
+                self._eval_dataloader = data_loaders[1]
                 self._eval_dataloader.batch_sampler.even_batches = (
                     self._pad_uneven_eval_batches
                 )
 
         elif self._eval_dataloader is not None:
-            self._eval_dataloader = prepared_components[2]
+            self._eval_dataloader = data_loaders[0]
             self._eval_dataloader.batch_sampler.even_batches = (
                 self._pad_uneven_eval_batches
             )
 
     def _create_run_config(
         self,
-        per_device_batch_size,
-        num_epochs,
-        gradient_accumulation_steps,
-        max_num_train_steps,
-        gradient_clip_value,
+        per_device_batch_size: int,
+        num_epochs: int,
+        gradient_accumulation_steps: int,
+        max_num_train_steps: int,
+        gradient_clip_value: float,
     ) -> TrainerRunConfig:
         """
         Create an instance of :class:`~pytorch_accelerated.run_config.TrainerRunConfig` representing the current state of the trainer.
@@ -653,18 +675,23 @@ class Trainer:
             "eval_per_device_batch_size": eval_per_device_batch_size,
             "eval_dl_kwargs": self._eval_dl_kwargs,
             "gradient_accumulation_steps": gradient_accumulation_steps,
-            "train_total_batch_size": train_per_device_batch_size
-            * self._accelerator.num_processes
-            * gradient_accumulation_steps,
-            "eval_total_batch_size": eval_per_device_batch_size
-            * self._accelerator.num_processes,
+            "train_total_batch_size": (
+                train_per_device_batch_size
+                * self._accelerator.num_processes
+                * gradient_accumulation_steps
+            ),
+            "eval_total_batch_size": (
+                eval_per_device_batch_size * self._accelerator.num_processes
+            ),
             "num_update_steps_per_epoch": num_update_steps_per_epoch,
             "max_num_train_steps": max_num_train_steps,
             "is_local_process_zero": self._accelerator.is_local_main_process,
             "is_world_process_zero": self._accelerator.is_main_process,
-            "is_distributed": True
-            if self._accelerator.distributed_type != DistributedType.NO
-            else False,
+            "is_distributed": (
+                True
+                if self._accelerator.distributed_type != DistributedType.NO
+                else False
+            ),
             "mixed_precision": self._accelerator.mixed_precision,
             "gradient_clip_value": gradient_clip_value,
             "num_processes": self._accelerator.num_processes,
@@ -678,9 +705,10 @@ class Trainer:
 
         if self.run_config.eval_total_batch_size > len(self.eval_dataset):
             raise ValueError(
-                f"The total batch size {self.run_config.eval_total_batch_size} \
-                  across all processes is bigger than eval dataset size {len(self.eval_dataset)}. \
-                  This can be resolved by lowering the batch size"
+                f"The total batch size {self.run_config.eval_total_batch_size}         "
+                "          across all processes is bigger than eval dataset size"
+                f" {len(self.eval_dataset)}.                   This can be resolved by"
+                " lowering the batch size"
             )
 
         n_samples_last_batch = (
@@ -694,11 +722,13 @@ class Trainer:
         )
         if 0 < n_samples_last_batch < min_samples_last_batch:
             warnings.warn(
-                f"The per device batch size {self.run_config.eval_per_device_batch_size} with the "
-                f"eval dataset size {len(self.eval_dataset)} and the number of processes "
-                f"{self.run_config.num_processes} will cause at least one process to have no "
-                "samples on the last batch, which would lead to a `Trainer.gather` to freeze "
-                "indefinitely. This can be resolved by setting a different batch size"
+                "The per device batch size"
+                f" {self.run_config.eval_per_device_batch_size} with the eval dataset"
+                f" size {len(self.eval_dataset)} and the number of processes"
+                f" {self.run_config.num_processes} will cause at least one process to"
+                " have no samples on the last batch, which would lead to a"
+                " `Trainer.gather` to freeze indefinitely. This can be resolved by"
+                " setting a different batch size"
             )
         elif (
             min_samples_last_batch
@@ -706,12 +736,13 @@ class Trainer:
             < self.run_config.eval_total_batch_size
         ):
             warnings.warn(
-                f"The per device batch size {self.run_config.eval_per_device_batch_size} with the "
-                f"eval dataset size {len(self.eval_dataset)} and the number of processes "
-                f"{self.run_config.num_processes} will cause one process to have a smaller number "
-                "of samples on the last batch than the rest, which would lead to a "
-                "`Trainer.gather` to freeze indefinitely. This can be resolved by passing a "
-                "`padding_value` to the `Trainer.gather`."
+                "The per device batch size"
+                f" {self.run_config.eval_per_device_batch_size} with the eval dataset"
+                f" size {len(self.eval_dataset)} and the number of processes"
+                f" {self.run_config.num_processes} will cause one process to have a"
+                " smaller number of samples on the last batch than the rest, which"
+                " would lead to a `Trainer.gather` to freeze indefinitely. This can be"
+                " resolved by passing a `padding_value` to the `Trainer.gather`."
             )
 
     def _run_training(self):
@@ -770,7 +801,7 @@ class Trainer:
             self,
         )
 
-    def _run_train_epoch(self, train_dl):
+    def _run_train_epoch(self, train_dl: DataLoader):
         """
         The method responsible for the behaviour of each training epoch.
 
@@ -836,7 +867,7 @@ class Trainer:
         )
         self.backward_step(batch_output["loss"])
 
-    def _update_loss_tracker(self, batch_loss, batch_size):
+    def _update_loss_tracker(self, batch_loss: torch.Tensor, batch_size: int):
         """
         Update the loss calculated for each batch using the internal loss tracker.
         During each epoch, losses are tracked in individual processes.
@@ -846,7 +877,7 @@ class Trainer:
             batch_size,
         )
 
-    def _add_epoch_loss_to_run_history(self, metric_name):
+    def _add_epoch_loss_to_run_history(self, metric_name: str):
         """
         Update the run history with the average of all batch losses calculated during the epoch across all processes.
         """
@@ -873,7 +904,7 @@ class Trainer:
             self.model.parameters(), clip_value=self.run_config.gradient_clip_value
         )
 
-    def _run_eval_epoch(self, valid_dl, is_training: bool = True):
+    def _run_eval_epoch(self, valid_dl: DataLoader, is_training: bool = True):
         """
         The method responsible for the behaviour of each evaluation epoch.
 
@@ -917,7 +948,7 @@ class Trainer:
             self,
         )
 
-    def gather(self, tensor, padding_value=None):
+    def gather(self, tensor, padding_value: Optional[float] = None) -> torch.Tensor:
         """
         Gather the values in `tensor` across all processes and concatenate them on the first dimension. This can be
         useful to regroup the predictions from all processes when doing evaluation.
@@ -956,7 +987,11 @@ class Trainer:
             print(*args, **kwargs)
 
     def save_checkpoint(
-        self, save_path, checkpoint_kwargs=None, save_optimizer=True, save_per_node=True
+        self,
+        save_path: Union[str, Path],
+        checkpoint_kwargs=None,
+        save_optimizer=True,
+        save_per_node=True,
     ):
         """
         Save the model, optimizer and specified args as a checkpoint file.
@@ -992,7 +1027,7 @@ class Trainer:
                     save_path,
                 )
 
-    def load_checkpoint(self, checkpoint_path, load_optimizer=True):
+    def load_checkpoint(self, checkpoint_path: Union[str, Path], load_optimizer=True):
         """
         Load the model and optimizer from a checkpoint file.
 
@@ -1005,9 +1040,10 @@ class Trainer:
         if load_optimizer and "optimizer_state_dict" in checkpoint:
             if self.optimizer is None:
                 raise ValueError(
-                    "You are trying to load an optimizer from a checkpoint, but no optimizer"
-                    "has been set in the Trainer. Either pass the correct optimizer instance when"
-                    "creating the trainer, or specify load_optimizer=False when loading the checkpoint."
+                    "You are trying to load an optimizer from a checkpoint, but no"
+                    " optimizerhas been set in the Trainer. Either pass the correct"
+                    " optimizer instance whencreating the trainer, or specify"
+                    " load_optimizer=False when loading the checkpoint."
                 )
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
