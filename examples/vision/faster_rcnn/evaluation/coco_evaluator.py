@@ -61,7 +61,7 @@ class COCOMeanAveragePrecision:
         self.verbose = verbose
         self.silencer = Silencer()
 
-    def compute(self, targets_json: dict, predictions_json: List[dict]):
+    def compute(self, targets_json: dict, predictions_json: List[Dict]):
         """
         Calculate mAP from COCO-formatted dictionaries containing predictions and targets.
 
@@ -150,7 +150,7 @@ class COCOMeanAveragePrecision:
     @classmethod
     def create_predictions_coco_json_from_df(
         cls, predictions_df: pd.DataFrame
-    ) -> List[dict]:
+    ) -> List[Dict]:
         """
         Create a COCO-formatted predictions list of dictionaries that can be used for evaluation.
 

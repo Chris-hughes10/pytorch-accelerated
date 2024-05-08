@@ -1,5 +1,5 @@
 from collections import namedtuple, defaultdict
-from typing import List
+from typing import List, Tuple, TYPE_CHECKING, Dict, Iterable
 
 import torch
 
@@ -51,7 +51,7 @@ class ModelFreezer:
     of Linear, BatchNorm and ReLU modules.
     """
 
-    def __init__(self, model, freeze_batch_norms=False):
+    def __init__(self, model: torch.nn.Module, freeze_batch_norms=False):
         """
         Create a new ModelFreezer instance, which can be used to freeze and unfreeze all, or parts, or a model. When a model is passed
         to a ModelFreezer instance, all parameters will be unfrozen regardless of their previous state. Subsequent freezing/unfreezing should be
@@ -122,7 +122,7 @@ class ModelFreezer:
 
         return layers
 
-    def get_trainable_parameters(self):
+    def get_trainable_parameters(self) -> List[torch.nn.Parameter]:
         """
         Return a list of all unfrozen model parameters, which will be updated during training.
 
@@ -130,7 +130,9 @@ class ModelFreezer:
         """
         return [param for param in self.model.parameters() if param.requires_grad]
 
-    def freeze(self, from_index=0, to_index=-2, set_modules_as_eval=False):
+    def freeze(
+        self, from_index: int = 0, to_index: int = -2, set_modules_as_eval: bool = False
+    ):
         """
         Freeze layer groups corresponding to the specified indexes, which are inclusive. By default, this freezes all layer groups
         except the final one.
@@ -143,7 +145,12 @@ class ModelFreezer:
             from_index, to_index, freeze=True, toggle_train_eval=set_modules_as_eval
         )
 
-    def unfreeze(self, from_index=-1, to_index=0, set_modules_as_training=True):
+    def unfreeze(
+        self,
+        from_index: int = -1,
+        to_index: int = 0,
+        set_modules_as_training: bool = True,
+    ):
         """
         Unfreeze layer groups corresponding to the specified indexes, which are inclusive. By default, this unfreezes all layer groups.
         For each layer group, any parameters which have been unfrozen are returned, so that they can be added to an optimizer if needed.
@@ -163,10 +170,10 @@ class ModelFreezer:
 
     def __freeze_unfreeze(
         self,
-        from_layer_group_index,
-        to_layer_group_index,
-        freeze=True,
-        toggle_train_eval=True,
+        from_layer_group_index: int,
+        to_layer_group_index: int,
+        freeze: bool = True,
+        toggle_train_eval: bool = True,
     ):
         modified_parameters = defaultdict(list)
         set_grad_value = not freeze
@@ -201,7 +208,7 @@ class ModelFreezer:
             for layer_group_idx, params in modified_parameters.items()
         }
 
-    def _convert_idxs(self, from_idx, to_idx):
+    def _convert_idxs(self, from_idx: int, to_idx: int) -> Tuple[int, int]:
         from_idx = _convert_idx(from_idx, self.num_groups)
         to_idx = _convert_idx(to_idx, self.num_groups)
 
@@ -211,7 +218,9 @@ class ModelFreezer:
         return from_idx, to_idx
 
 
-def _change_layer_state(layer: Layer, set_grad_value: bool, toggle_train_eval: bool):
+def _change_layer_state(
+    layer: Layer, set_grad_value: bool, toggle_train_eval: bool
+) -> List[torch.nn.Parameter]:
     params = list(layer.module.parameters())
     if params:
         _set_requires_grad(params, value=set_grad_value)
@@ -220,22 +229,24 @@ def _change_layer_state(layer: Layer, set_grad_value: bool, toggle_train_eval: b
     return params
 
 
-def _module_is_batch_norm(module):
+def _module_is_batch_norm(module: torch.nn.Module) -> bool:
     return isinstance(module, BN_MODULES)
 
 
-def _convert_idx(idx, num_groups):
+def _convert_idx(idx: int, num_groups: int) -> int:
     if idx < 0:
         idx = idx + num_groups
     return idx
 
 
-def _set_requires_grad(parameters, value=True):
+def _set_requires_grad(parameters: Iterable[torch.nn.Parameter], value: bool = True):
     for param in parameters:
         param.requires_grad = value
 
 
-def _get_layer_groups_for_module(module):
+def _get_layer_groups_for_module(
+    module: torch.nn.Module,
+) -> Tuple[Dict[int, torch.nn.Module], List[Tuple[int, torch.nn.Module]]]:
     layers = []
     layer_groups = dict()
     for layer_group, group in enumerate(module.children()):
@@ -245,7 +256,11 @@ def _get_layer_groups_for_module(module):
     return layer_groups, layers
 
 
-def _recursive_get_layers(module, result, layer_group=0):
+def _recursive_get_layers(
+    module: torch.nn.Module,
+    result: List[Tuple[int, torch.nn.Module]],
+    layer_group: int = 0,
+):
     children = list(module.children())
     if not children:
         # is leaf
