@@ -167,3 +167,11 @@ class StatefulSchedulerBase(SchedulerBase, ABC):
         """
         self._num_updates += 1
         self.step_update(self._num_updates)
+
+    @abstractmethod
+    def state_dict(self):
+        raise NotImplementedError
+
+    @abstractmethod
+    def load_state_dict(self, scheduler_state_dict: dict):
+        raise NotImplementedError

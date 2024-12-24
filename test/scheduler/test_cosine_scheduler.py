@@ -190,6 +190,7 @@ def test_warmup_and_cooldown():
     num_epochs = 10
     num_warmup_epochs = 2
     num_cooldown_epochs = 2
+
     num_steps_per_epoch = 10
     num_warmup_steps = num_warmup_epochs * num_steps_per_epoch
     num_cooldown_steps = num_cooldown_epochs * num_steps_per_epoch
@@ -218,3 +219,52 @@ def test_warmup_and_cooldown():
     assert group_2_lrs[num_warmup_steps] == max(group_2_lrs)
     assert group_1_lrs[-num_cooldown_steps:] == expected_cooldown_steps
     assert group_2_lrs[-num_cooldown_steps:] == expected_cooldown_steps
+
+
+def test_can_restore_scheduler_state():
+    num_epochs = 10
+    num_warmup_epochs = 2
+    num_cooldown_epochs = 2
+    num_steps_per_epoch = 10
+    num_warmup_steps = num_warmup_epochs * num_steps_per_epoch
+    num_cooldown_steps = num_cooldown_epochs * num_steps_per_epoch
+    lr_1_max = 0.01
+    lr_2_max = 0.002
+    lr_min = 1e-6
+    expected_cooldown_steps = [lr_min] * num_cooldown_steps
+    model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
+
+    scheduler = CosineLrScheduler(
+        optimizer,
+        total_num_epochs=num_epochs,
+        num_update_steps_per_epoch=num_steps_per_epoch,
+        num_warmup_epochs=num_warmup_epochs,
+        warmup_starting_lr=lr_min,
+        lr_min=lr_min,
+        num_cooldown_epochs=2,
+    )
+    scheduler.step()
+    scheduler_state_dict = scheduler.state_dict()
+    optimizer_state_dict = optimizer.state_dict()
+    scheduler.step()
+    expected_next_lr_1 = scheduler.optimizer.param_groups[0]["lr"]
+    expected_next_lr_2 = scheduler.optimizer.param_groups[1]["lr"]
+
+    # Restore optimizer and create new scheduler
+    optimizer.load_state_dict(optimizer_state_dict)
+    new_scheduler = CosineLrScheduler(
+        optimizer,
+        total_num_epochs=num_epochs,
+        num_update_steps_per_epoch=num_steps_per_epoch,
+        num_warmup_epochs=num_warmup_epochs,
+        warmup_starting_lr=lr_min,
+        lr_min=lr_min,
+        num_cooldown_epochs=2,
+    )
+    new_scheduler.load_state_dict(scheduler_state_dict)
+    new_scheduler.step()
+    actual_next_lr_1 = new_scheduler.optimizer.param_groups[0]["lr"]
+    actual_next_lr_2 = new_scheduler.optimizer.param_groups[1]["lr"]
+
+    assert expected_next_lr_1 == actual_next_lr_1
+    assert expected_next_lr_2 == actual_next_lr_2

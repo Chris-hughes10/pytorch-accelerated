@@ -135,9 +135,11 @@ class CosineLrScheduler(StatefulSchedulerBase):
         else:
             # cooldown
             lrs = [
-                self.lr_min_ratio * base_lr
-                if self.lr_min_ratio is not None
-                else self.lr_min
+                (
+                    self.lr_min_ratio * base_lr
+                    if self.lr_min_ratio is not None
+                    else self.lr_min
+                )
                 for base_lr in self.base_lr_values
             ]
 
@@ -194,3 +196,29 @@ class CosineLrScheduler(StatefulSchedulerBase):
             warmup_starting_lr_ratio=warmup_starting_lr_ratio,
             num_cooldown_epochs=num_cooldown_epochs,
         )
+
+    def state_dict(self):
+        current_state = {
+            "total_iterations": self.total_iterations,
+            "lr_min_ratio": self.lr_min_ratio,
+            "lr_min": self.lr_min,
+            "warmup_iterations": self.warmup_iterations,
+            "warmup_lr_init": self.warmup_lr_init,
+            "warmup_lr_ratio": self.warmup_lr_ratio,
+            "k_decay": self.k_decay,
+            "num_cooldown_iterations": self.num_cooldown_iterations,
+            "num_updates": self._num_updates,
+        }
+
+        return current_state
+
+    def load_state_dict(self, state_dict: dict):
+        self.total_iterations = state_dict["total_iterations"]
+        self.lr_min_ratio = state_dict["lr_min_ratio"]
+        self.lr_min = state_dict["lr_min"]
+        self.warmup_iterations = state_dict["warmup_iterations"]
+        self.warmup_lr_init = state_dict["warmup_lr_init"]
+        self.warmup_lr_ratio = state_dict["warmup_lr_ratio"]
+        self.k_decay = state_dict["k_decay"]
+        self.num_cooldown_iterations = state_dict["num_cooldown_iterations"]
+        self._num_updates = state_dict["num_updates"]

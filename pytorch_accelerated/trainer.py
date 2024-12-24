@@ -71,9 +71,9 @@ class TrainerPlaceholderValues(Enum):
     @staticmethod
     def __create_new_enum(original_enum, other, operation):
         enum_members = {k: v.value for k, v in original_enum._member_map_.items()}
-        enum_members[
-            original_enum.name
-        ] = f"{enum_members[original_enum.name]}{operation}{other}"
+        enum_members[original_enum.name] = (
+            f"{enum_members[original_enum.name]}{operation}{other}"
+        )
         new_enum = Enum("TrainerPlaceholderValues", enum_members)
         return new_enum._member_map_[original_enum.name]
 
@@ -523,9 +523,11 @@ class Trainer:
             "pin_memory": True if torch.cuda.is_available() else False,
             "batch_size": batch_size,
             "num_workers": max(
-                os.cpu_count() // torch.cuda.device_count()
-                if torch.cuda.is_available()
-                else os.cpu_count(),
+                (
+                    os.cpu_count() // torch.cuda.device_count()
+                    if torch.cuda.is_available()
+                    else os.cpu_count()
+                ),
                 1,
             ),
             "worker_init_fn": worker_init_fn,
@@ -543,9 +545,11 @@ class Trainer:
             "pin_memory": True if torch.cuda.is_available() else False,
             "batch_size": batch_size,
             "num_workers": max(
-                os.cpu_count() // torch.cuda.device_count()
-                if torch.cuda.is_available()
-                else os.cpu_count(),
+                (
+                    os.cpu_count() // torch.cuda.device_count()
+                    if torch.cuda.is_available()
+                    else os.cpu_count()
+                ),
                 1,
             ),
             "worker_init_fn": worker_init_fn,
@@ -662,9 +666,11 @@ class Trainer:
             "max_num_train_steps": max_num_train_steps,
             "is_local_process_zero": self._accelerator.is_local_main_process,
             "is_world_process_zero": self._accelerator.is_main_process,
-            "is_distributed": True
-            if self._accelerator.distributed_type != DistributedType.NO
-            else False,
+            "is_distributed": (
+                True
+                if self._accelerator.distributed_type != DistributedType.NO
+                else False
+            ),
             "mixed_precision": self._accelerator.mixed_precision,
             "gradient_clip_value": gradient_clip_value,
             "num_processes": self._accelerator.num_processes,
@@ -956,7 +962,12 @@ class Trainer:
             print(*args, **kwargs)
 
     def save_checkpoint(
-        self, save_path, checkpoint_kwargs=None, save_optimizer=True, save_per_node=True
+        self,
+        save_path,
+        checkpoint_kwargs=None,
+        save_optimizer=True,
+        save_scheduler=True,
+        save_per_node=True,
     ):
         """
         Save the model, optimizer and specified args as a checkpoint file.
@@ -964,6 +975,7 @@ class Trainer:
         :param save_path: the path where to save the checkpoint, this should end in '.pt'
         :param checkpoint_kwargs: additional objects to include in the checkpoint
         :param save_optimizer: flag to indicate whether to include the optimizer in the checkpoint
+        :param save_scheduler: flag to indicate whether to include the scheduler in the checkpoint
         :param save_per_node: flag to indicate whether to save the checkpoint once per machine, if False, the checkpoint will only be saved from the world process zero. This is True by default.
         """
         # TODO: add save method for run history?
@@ -974,6 +986,14 @@ class Trainer:
 
         if save_optimizer:
             checkpoint["optimizer_state_dict"] = self.optimizer.state_dict()
+
+        if save_scheduler and self.scheduler is not None:
+            try:
+                checkpoint["scheduler_state_dict"] = self.scheduler.state_dict()
+            except Exception:
+                self.print(
+                    "Warning: Could not save the scheduler state dict. Please ensure the scheduler has a state_dict method."
+                )
 
         if checkpoint_kwargs is not None:
             checkpoint.update(checkpoint_kwargs)
@@ -992,12 +1012,15 @@ class Trainer:
                     save_path,
                 )
 
-    def load_checkpoint(self, checkpoint_path, load_optimizer=True):
+    def load_checkpoint(
+        self, checkpoint_path, load_optimizer=True, load_scheduler=True
+    ):
         """
         Load the model and optimizer from a checkpoint file.
 
         :param checkpoint_path: the path of the checkpoint file to load
         :param load_optimizer: flag to indicate whether to load the optimizer if it is included in the checkpoint
+        :param load_optimizer: flag to indicate whether to load the scheduler if it is included in the checkpoint
         """
         self._accelerator.wait_for_everyone()
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
@@ -1010,6 +1033,15 @@ class Trainer:
                     "creating the trainer, or specify load_optimizer=False when loading the checkpoint."
                 )
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        if load_scheduler and "scheduler_state_dict" in checkpoint:
+            if self.scheduler is None:
+                raise ValueError(
+                    "You are trying to load a scheduler from a checkpoint, but no scheduler"
+                    "has been set in the Trainer. Either pass the correct scheduler instance when"
+                    "creating the trainer, or specify load_scheduler=False when loading the checkpoint."
+                )
+            self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
     def get_model(self):
         """
