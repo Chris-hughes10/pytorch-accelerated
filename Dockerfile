@@ -2,7 +2,7 @@
 # Uses multi-staged approach to reduce size
 FROM condaforge/mambaforge:latest AS compile-image
 
-ENV PYTHON_VERSION=3.10.6
+ENV PYTHON_VERSION=3.12.0
 
 # Create our conda env
 RUN conda create --name core python=${PYTHON_VERSION}
@@ -12,7 +12,7 @@ RUN chsh -s /bin/bash
 SHELL ["/bin/bash", "-c"]
 
 # Stage 2
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04 AS build-image
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 AS build-image
 COPY --from=compile-image /opt/conda /opt/conda
 ENV PATH /opt/conda/bin:$PATH
 
