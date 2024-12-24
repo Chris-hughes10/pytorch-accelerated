@@ -15,6 +15,12 @@ class StatefulEqualIterationScheduler(StatefulSchedulerBase):
     def get_updated_values(self, num_updates: int):
         return num_updates
 
+    def state_dict(self):
+        pass
+
+    def load_state_dict(self, scheduler_state_dict):
+        pass
+
 
 def create_model_and_optimizer(lr_1, lr_2):
     model = torch.nn.Linear(2, 1)
