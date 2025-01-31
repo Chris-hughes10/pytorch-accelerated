@@ -272,6 +272,7 @@ class ProgressBarCallback(TrainerCallback):
 
     def __init__(self):
         self.pbar = None
+        self.eval_pbar = None
 
     def on_train_epoch_start(self, trainer, **kwargs):
         self.pbar = tqdm(
@@ -287,16 +288,16 @@ class ProgressBarCallback(TrainerCallback):
         time.sleep(0.01)
 
     def on_eval_epoch_start(self, trainer, **kwargs):
-        self.pbar = tqdm(
+        self.eval_pbar = tqdm(
             total=len(trainer._eval_dataloader),
             disable=not trainer._accelerator.is_local_main_process,
         )
 
     def on_eval_step_end(self, trainer, **kwargs):
-        self.pbar.update(1)
+        self.eval_pbar.update(1)
 
     def on_eval_epoch_end(self, trainer, **kwargs):
-        self.pbar.close()
+        self.eval_pbar.close()
         time.sleep(0.01)
 
 
