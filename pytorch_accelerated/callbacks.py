@@ -674,9 +674,10 @@ class LimitEvalStepsCallback(TrainerCallback):
     :param num_eval_steps: the total number of evaluation steps to run across all processes
     :param limit_intermediate_only: whether to limit the number of intermediate evaluations only
 
-    .. Note:
-        When used together this callback should be placed before :class:`StepBasedEvaluationCallback` and
-        :class`ProgressBarCallback` in the list of callbacks.
+    .. Note::
+        When used together this callback should be placed before :class:`StepBasedEvaluationCallback` and 
+        :class:`ProgressBarCallback` in the list of callbacks.
+        
     """
 
     def __init__(self, num_eval_steps: int, limit_intermediate_only=True):
