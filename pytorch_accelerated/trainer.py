@@ -789,7 +789,10 @@ class Trainer:
             self,
         )
 
-        for step, batch in enumerate(train_dl):
+        total_steps_this_epoch = self.run_config.num_update_steps_per_epoch
+        completed_update_steps = self.run_history.current_epoch * update_steps_per_epoch
+
+        for batch_idx, batch in enumerate(train_dl):
             self.callback_handler.call_event(
                 "on_train_step_start",
                 self,
@@ -817,6 +820,8 @@ class Trainer:
                 ):
                     self.scheduler_step()
                 self.optimizer_zero_grad()
+
+                current_update_step = completed_update_steps + (batch_idx + 1) // self.run_config.gradient_accumulation_steps
 
         self.train_epoch_end()
         self._add_epoch_loss_to_run_history("train_loss_epoch")
