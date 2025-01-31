@@ -65,6 +65,15 @@ class RunHistory(ABC):
         """
         pass
 
+    @abstractmethod
+    def delete_metric(self, metric_name):
+        """
+        Delete the metric from the run history.
+
+        :param metric_name: the name of the metric to delete
+        """
+        pass
+
     @property
     @abstractmethod
     def current_epoch(self) -> int:
@@ -119,6 +128,9 @@ class InMemoryRunHistory(RunHistory):
 
     def set_metric_name_prefix(self, prefix=""):
         self._prefix = prefix
+
+    def delete_metric(self, metric_name):
+        del self._metrics[metric_name]
 
     @property
     def metric_name_prefix(self):
