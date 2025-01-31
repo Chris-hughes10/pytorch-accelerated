@@ -6,8 +6,9 @@ sphinx:
 python:
   # Install our python package before building the docs
   install:
-    - method: pip
     - requirements: docs/requirements_docs.txt
+    - method: pip
+    
 
 build:
   os: "ubuntu-20.04"
