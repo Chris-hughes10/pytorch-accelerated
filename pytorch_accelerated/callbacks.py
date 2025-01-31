@@ -317,6 +317,9 @@ class PrintProgressCallback(TrainerCallback):
     def on_training_run_end(self, trainer, **kwargs):
         trainer.print("Finishing training run")
 
+    def on_eval_epoch_start(self, trainer, **kwargs):
+        trainer.print(f"\nStarting eval epoch")
+
     def on_evaluation_run_start(self, trainer, **kwargs):
         trainer.print("\nStarting evaluation run")
 
