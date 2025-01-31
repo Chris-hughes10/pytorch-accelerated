@@ -8,6 +8,7 @@ from abc import ABC
 
 import numpy as np
 import torch
+from pytorch_accelerated.tracking import LossTracker
 from pytorch_accelerated.utils import ModelEma
 from torch import nn
 from tqdm import tqdm
@@ -272,6 +273,7 @@ class ProgressBarCallback(TrainerCallback):
 
     def __init__(self):
         self.pbar = None
+        self.eval_pbar = None
 
     def on_train_epoch_start(self, trainer, **kwargs):
         self.pbar = tqdm(
@@ -287,16 +289,16 @@ class ProgressBarCallback(TrainerCallback):
         time.sleep(0.01)
 
     def on_eval_epoch_start(self, trainer, **kwargs):
-        self.pbar = tqdm(
+        self.eval_pbar = tqdm(
             total=len(trainer._eval_dataloader),
             disable=not trainer._accelerator.is_local_main_process,
         )
 
     def on_eval_step_end(self, trainer, **kwargs):
-        self.pbar.update(1)
+        self.eval_pbar.update(1)
 
     def on_eval_epoch_end(self, trainer, **kwargs):
-        self.pbar.close()
+        self.eval_pbar.close()
         time.sleep(0.01)
 
 
@@ -315,6 +317,9 @@ class PrintProgressCallback(TrainerCallback):
 
     def on_training_run_end(self, trainer, **kwargs):
         trainer.print("Finishing training run")
+
+    def on_eval_epoch_start(self, trainer, **kwargs):
+        trainer.print(f"\nStarting eval epoch")
 
     def on_evaluation_run_start(self, trainer, **kwargs):
         trainer.print("\nStarting evaluation run")
@@ -648,3 +653,62 @@ class ConvertSyncBatchNormCallback(TrainerCallback):
     def on_training_run_start(self, trainer, **kwargs):
         if trainer.run_config.is_distributed:
             trainer.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(trainer.model)
+
+
+class StepBasedEvaluationCallback(TrainerCallback):
+    """
+    A callback which enables running an evaluation epoch every N steps during a training epoch.
+
+    :param eval_every_n_steps: the number of steps after which to run an evaluation epoch
+    """
+
+    def __init__(self, eval_every_n_steps: int):
+        self.eval_every_n_steps = eval_every_n_steps
+
+    def on_train_step_end(self, trainer, step, **kwargs):
+        if step != 0 and step % self.eval_every_n_steps == 0:
+            trainer.print(f"\nRunning evaluation after {step} training steps")
+            original_loss_tracker = trainer._loss_tracker
+            trainer._loss_tracker = LossTracker()
+            trainer._run_eval_epoch(
+                trainer._eval_dataloader,
+                is_intermediate=True,
+            )
+            trainer._loss_tracker = original_loss_tracker
+            trainer.run_history.delete_metric("intermediate_eval_loss")
+            trainer.print(f"\nResuming training...")
+
+
+class LimitEvalStepsCallback(TrainerCallback):
+    """
+    A callback that limits the number of eval steps during an evaluation epoch
+
+    :param num_eval_steps: the total number of evaluation steps to run across all processes
+    :param limit_intermediate_only: whether to limit the number of intermediate evaluations only
+
+    .. Note:
+        When used together this callback should be placed before :class:`StepBasedEvaluationCallback` and
+        :class`ProgressBarCallback` in the list of callbacks.
+    """
+
+    def __init__(self, num_eval_steps: int, limit_intermediate_only=True):
+        self.num_eval_steps = num_eval_steps
+        self.limit_intermediate_only = limit_intermediate_only
+        self._original_eval_dataloader = None
+
+    def on_eval_epoch_start(self, trainer, is_intermediate=False, **kwargs):
+        if is_intermediate or not self.limit_intermediate_only:
+            self._original_eval_dataloader = trainer._eval_dataloader
+
+            steps_per_process = self.num_eval_steps // trainer.run_config.num_processes
+
+            trainer._eval_dataloader = DataLoaderSlice(
+                self._original_eval_dataloader, steps_per_process
+            )
+            trainer.print(
+                f"Limiting evaluation to {steps_per_process} steps per process"
+            )
+
+    def on_eval_epoch_end(self, trainer, is_intermediate=False, **kwargs):
+        if is_intermediate or not self.limit_intermediate_only:
+            trainer._eval_dataloader = self._original_eval_dataloader

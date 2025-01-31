@@ -819,7 +819,7 @@ class Trainer:
                 with self._accelerator.no_sync(self.model):
                     self._perform_forward_and_backward_passes(batch)
             else:
-                self._perform_forward_and_backward_passes(batch)
+                self._perform_forward_and_backward_passes(batch, step)
 
             if self.run_config.gradient_clip_value is not None:
                 self._clip_gradients()
@@ -852,13 +852,12 @@ class Trainer:
             self,
         )
 
-        return reached_max_steps
-
-    def _perform_forward_and_backward_passes(self, batch):
+    def _perform_forward_and_backward_passes(self, batch, step):
         """
         Perform the forward and backward passes of the training loop
 
         :param batch: the current batch of data
+        :param step: the current step in the training loop
         """
         batch_output = self.calculate_train_batch_loss(batch)
         if self.run_config.gradient_accumulation_steps > 1:
@@ -867,7 +866,7 @@ class Trainer:
         self._update_loss_tracker(batch_output["loss"], batch_output["batch_size"])
 
         self.callback_handler.call_event(
-            "on_train_step_end", self, batch_output=batch_output, batch=batch
+            "on_train_step_end", self, batch_output=batch_output, batch=batch, step=step
         )
         self.backward_step(batch_output["loss"])
 
@@ -908,18 +907,25 @@ class Trainer:
             self.model.parameters(), clip_value=self.run_config.gradient_clip_value
         )
 
-    def _run_eval_epoch(self, valid_dl, is_training: bool = True):
+    def _run_eval_epoch(
+        self,
+        valid_dl,
+        is_training: bool = True,
+        is_intermediate: bool = False,
+    ):
         """
         The method responsible for the behaviour of each evaluation epoch.
 
         :param valid_dl: the dataloader to be used during evaluation
         :param is_training: signals whether the evaluation is being run as part of a training run
+        :param is_intermediate: signals whether the evaluation is being run as part of an intermediate evaluation during a training epoch
         """
         self.eval_epoch_start()
         self._loss_tracker.reset()
         self.callback_handler.call_event(
             "on_eval_epoch_start",
             self,
+            is_intermediate=is_intermediate,
         )
 
         # as no gradients are calculated, we do not need to sync model parameters during evaluation
@@ -940,16 +946,27 @@ class Trainer:
                     )
 
                     self.callback_handler.call_event(
-                        "on_eval_step_end", self, batch_output=batch_output, batch=batch
+                        "on_eval_step_end",
+                        self,
+                        batch_output=batch_output,
+                        batch=batch,
                     )
 
         self.eval_epoch_end()
-        metric_name = "eval_loss_epoch" if is_training else "evaluation_loss"
+
+        if is_intermediate:
+            metric_name = "intermediate_eval_loss"
+        elif is_training:
+            metric_name = "eval_loss_epoch"
+        else:
+            metric_name = "evaluation_loss"
+
         self._add_epoch_loss_to_run_history(metric_name)
 
         self.callback_handler.call_event(
             "on_eval_epoch_end",
             self,
+            is_intermediate=is_intermediate,
         )
 
     def gather(self, tensor, padding_value=None):
