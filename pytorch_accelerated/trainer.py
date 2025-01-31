@@ -731,7 +731,7 @@ class Trainer:
         )
         for epoch in range(self.run_config.num_epochs):
             try:
-                self._run_train_epoch(self._train_dataloader)
+                reached_max_steps = self._run_train_epoch(self._train_dataloader)
                 if self.eval_dataset is not None:
                     self._run_eval_epoch(self._eval_dataloader)
                 self.training_run_epoch_end()
@@ -747,6 +747,13 @@ class Trainer:
                     self,
                 )
                 break
+
+            if reached_max_steps:
+                self.print(
+                    f"Reached max number of training steps {self.run_config.max_num_train_steps} in epoch {epoch + 1}"
+                )
+                break
+
         self.training_run_end()
         self.callback_handler.call_event(
             "on_training_run_end",
@@ -789,10 +796,15 @@ class Trainer:
             self,
         )
 
-        total_steps_this_epoch = self.run_config.num_update_steps_per_epoch
-        completed_update_steps = self.run_history.current_epoch * update_steps_per_epoch
+        updates_per_process = (
+            self.run_config.max_num_train_steps // self.run_config.num_processes
+        )
+        updates_completed = (
+            self.run_history.current_epoch - 1
+        ) * self.run_config.num_update_steps_per_epoch
+        reached_max_steps = False
 
-        for batch_idx, batch in enumerate(train_dl):
+        for step, batch in enumerate(train_dl):
             self.callback_handler.call_event(
                 "on_train_step_start",
                 self,
@@ -821,7 +833,17 @@ class Trainer:
                     self.scheduler_step()
                 self.optimizer_zero_grad()
 
-                current_update_step = completed_update_steps + (batch_idx + 1) // self.run_config.gradient_accumulation_steps
+                process_updates = (
+                    updates_completed
+                    + (step + 1) // self.run_config.gradient_accumulation_steps
+                )
+
+                if (
+                    self.run_config.max_num_train_steps is not None
+                    and process_updates >= updates_per_process
+                ):
+                    reached_max_steps = True
+                    break
 
         self.train_epoch_end()
         self._add_epoch_loss_to_run_history("train_loss_epoch")
@@ -829,6 +851,8 @@ class Trainer:
             "on_train_epoch_end",
             self,
         )
+
+        return reached_max_steps
 
     def _perform_forward_and_backward_passes(self, batch):
         """
