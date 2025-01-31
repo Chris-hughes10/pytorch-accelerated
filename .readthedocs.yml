@@ -6,7 +6,7 @@ sphinx:
 python:
   # Install our python package before building the docs
   install:
-    - requirements: docs/requirements_docs.txt
+    requirements: docs/requirements_docs.txt
     - method: pip
     
 
