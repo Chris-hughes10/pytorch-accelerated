@@ -58,6 +58,12 @@ Implemented Callbacks
 .. autoclass:: ConvertSyncBatchNormCallback
     :show-inheritance:
 
+.. autoclass:: StepBasedEvaluationCallback
+    :show-inheritance:
+
+.. autoclass:: LimitEvalStepsCallback
+    :show-inheritance:
+
 
 Creating New Callbacks
 ========================
