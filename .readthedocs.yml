@@ -4,11 +4,8 @@ sphinx:
   fail_on_warning: true
 
 python:
-  # Install our python package before building the docs
   install:
-    requirements: docs/requirements_docs.txt
-    method: pip
-    
+    - requirements: docs/requirements_docs.txt
 
 build:
   os: "ubuntu-20.04"
