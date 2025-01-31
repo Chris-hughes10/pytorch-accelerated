@@ -1,6 +1,7 @@
 # Modifications Copyright (C) 2021 Chris Hughes
 # Model EMA code adapted from https://github.com/rwightman/pytorch-image-models/blob/master/timm/utils/model_ema.py
 
+import itertools
 import os
 from copy import deepcopy
 from functools import wraps
@@ -18,6 +19,8 @@ class LimitBatches:
     A context manager which can be used to limit the batches used within a :class:`~pytorch_accelerated.trainer.Trainer`.
     Any Trainer initialised within this context manager will contain the :class:`~pytorch_accelerated.callbacks.LimitBatchesCallback`
     callback. To remove this behaviour, a new trainer must be created or this callback must be explicitly removed.
+
+    This will be automatically applied by the trainer if the environment variable ``PT_ACC_LIMIT_BATCHES`` is set.
     """
 
     def __init__(self, num_batches: int):
@@ -29,6 +32,22 @@ class LimitBatches:
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         del os.environ[LIMIT_BATCHES_ENV_VAR]
+
+
+class DataLoaderSlice:
+    """
+    A class which can be used to slice a :class:`~torch.utils.data.DataLoader` to only return a certain number of batches.
+    
+    """
+    def __init__(self, dl, slice_size):
+        self.dl = dl
+        self.slice_size = slice_size
+
+    def __iter__(self):
+        return itertools.islice(self.dl, self.slice_size)
+
+    def __len__(self):
+        return self.slice_size
 
 
 def local_process_zero_only(func):

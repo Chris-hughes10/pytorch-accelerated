@@ -1,6 +1,5 @@
 # Copyright © 2021 Chris Hughes
 import inspect
-import itertools
 import logging
 import sys
 import time
@@ -9,7 +8,7 @@ from abc import ABC
 import numpy as np
 import torch
 from pytorch_accelerated.tracking import LossTracker
-from pytorch_accelerated.utils import ModelEma
+from pytorch_accelerated.utils import DataLoaderSlice, ModelEma
 from torch import nn
 from tqdm import tqdm
 
@@ -519,22 +518,11 @@ class MoveModulesToDeviceCallback(TrainerCallback):
     def on_evaluation_run_start(self, trainer, **kwargs):
         self._move_modules_to_device(trainer)
 
-
-class DataLoaderSlice:
-    def __init__(self, dl, slice_size):
-        self.dl = dl
-        self.slice_size = slice_size
-
-    def __iter__(self):
-        return itertools.islice(self.dl, self.slice_size)
-
-    def __len__(self):
-        return self.slice_size
-
-
 class LimitBatchesCallback(TrainerCallback):
     """
-    A callback that that limits the number of batches used during training and evaluation
+    A callback that that limits the number of batches used during training and evaluation.
+
+    This callback will be automatically added to the trainer if the environment variable ``PT_ACC_LIMIT_BATCHES`` is set.
     """
 
     def __init__(self, num_batches):
