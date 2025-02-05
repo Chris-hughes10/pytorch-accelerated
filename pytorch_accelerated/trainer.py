@@ -425,7 +425,7 @@ class Trainer:
         :param num_epochs: the number of epochs to train for
         :param eval_dataset: the dataset to use during evaluation epochs, if this is not provided, evaluation is skipped.
         :param per_device_batch_size: the batch size to use per device
-        :param max_num_train_steps: the maximum number of steps to train for. If provided, this will override num_epochs
+        :param max_num_train_steps: the maximum number of steps, across all processes, to train for. If provided, this will override num_epochs
         :param gradient_accumulation_steps: accumulate gradients to the specified number of steps to simulate a bigger batch size. By default, this is set to ``1``
         :param gradient_clip_value: if specified, the gradients of the model's parameters will be clipped to the range ``[-gradient_clip_value, gradient_clip_value]``
         :param create_scheduler_fn: a function which accepts an optimizer as an argument and returns a learning rate scheduler
