@@ -1069,7 +1069,7 @@ class Trainer:
         :param load_optimizer: flag to indicate whether to load the scheduler if it is included in the checkpoint
         """
         self._accelerator.wait_for_everyone()
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         self.get_model().load_state_dict(checkpoint["model_state_dict"])
         if load_optimizer and "optimizer_state_dict" in checkpoint:
             if self.optimizer is None:
