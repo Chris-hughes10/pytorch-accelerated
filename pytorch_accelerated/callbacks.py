@@ -341,6 +341,7 @@ class SaveBestModelCallback(TrainerCallback):
         reset_on_train: bool = True,
         save_optimizer: bool = True,
         save_scheduler: bool = True,
+        load_saved_checkpoint: bool = True
     ):
         """
 
@@ -350,6 +351,7 @@ class SaveBestModelCallback(TrainerCallback):
         :param reset_on_train: whether to reset the best metric on subsequent training runs. If ``True``, only the metrics observed during the current training run will be compared.
         :param save_optimizer: whether to also save the optimizer as part of the model checkpoint
         :param save_scheduler: whether to also save the scheduler as part of the model checkpoint
+        :param load_saved_checkpoint: whether to load the saved checkpoint at the end of the training run
         """
         self.watch_metric = watch_metric
         self.greater_is_better = greater_is_better
@@ -360,6 +362,7 @@ class SaveBestModelCallback(TrainerCallback):
         self.reset_on_train = reset_on_train
         self.save_optimizer = save_optimizer
         self.save_scheduler = save_scheduler
+        self.load_saved_checkpoint = load_saved_checkpoint
 
     def on_training_run_start(self, args, **kwargs):
         if self.reset_on_train:
@@ -389,10 +392,11 @@ class SaveBestModelCallback(TrainerCallback):
                 )
 
     def on_training_run_end(self, trainer, **kwargs):
-        trainer.print(
-            f"Loading checkpoint with {self.watch_metric}: {self.best_metric} from epoch {self.best_metric_epoch}"
-        )
-        trainer.load_checkpoint(self.save_path)
+        if self.load_saved_checkpoint:
+            trainer.print(
+                f"Loading checkpoint with {self.watch_metric}: {self.best_metric} from epoch {self.best_metric_epoch}"
+            )
+            trainer.load_checkpoint(self.save_path)
 
 
 class EarlyStoppingCallback(TrainerCallback):
