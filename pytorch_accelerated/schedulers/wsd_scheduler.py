@@ -120,7 +120,8 @@ class WSDLrScheduler(StatefulSchedulerBase):
 
         # Check if in decay phase
         if steps_into_period >= decay_start:
-            relative_decay_step = (steps_into_period - decay_start) / decay_steps
+            # relative_decay_step = (steps_into_period - decay_start) / decay_steps
+            relative_decay_step = min((steps_into_period - decay_start) / decay_steps, 1.0)
             
             if self.use_inverse_sqrt_decay:
                 lr_scale = self.lr_min + (1 - self.lr_min) * (1 - math.sqrt(relative_decay_step))

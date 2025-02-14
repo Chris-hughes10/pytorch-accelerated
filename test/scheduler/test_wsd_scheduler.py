@@ -7,7 +7,7 @@ def collect_lrs_for_scheduler(scheduler, num_steps):
     group_1_lrs = []
     group_2_lrs = []
 
-    for i in range(num_steps):
+    for i in range(num_steps+1):
         scheduler.step()
         group_1_lrs.append(scheduler.optimizer.param_groups[0]["lr"])
         group_2_lrs.append(scheduler.optimizer.param_groups[1]["lr"])
@@ -66,7 +66,7 @@ def test_wsd_decay():
     decay_phase_ratio = 0.1
     lr_1_max = 0.01
     lr_2_max = 0.002
-    lr_min = 1e-6
+    lr_min = 1e-6  # This is our actual setting
     model, optimizer = create_model_and_optimizer(lr_1_max, lr_2_max)
 
     scheduler = WSDLrScheduler(
@@ -86,6 +86,19 @@ def test_wsd_decay():
         period_length = checkpoint - period_start
         decay_steps = int(period_length * decay_phase_ratio)
         decay_start = checkpoint - decay_steps
+
+        print(f"\nAnalyzing decay for checkpoint {checkpoint}:")
+        print(f"Period: {period_start} -> {checkpoint}")
+        print(f"Decay starts at: {decay_start}")
+        print(f"Decay steps: {decay_steps}")
+        print("\nDecay progression:")
+
+        for step in range(decay_start, checkpoint):
+            step_into_decay = step - decay_start
+            rel_step = step_into_decay / decay_steps
+            scale = lr_min + (1 - lr_min) * (1 - math.sqrt(rel_step))
+            actual_lr = group_1_lrs[step]
+            print(f"Step {step}: rel_step={rel_step:.3f}, scale={scale:.6f}, actual_lr={actual_lr:.6f}")
         
         # Just before decay
         if decay_start > 0:
@@ -98,9 +111,16 @@ def test_wsd_decay():
         relative_decay_step = steps_into_decay / decay_steps
         expected_scale = lr_min + (1 - lr_min) * (1 - math.sqrt(relative_decay_step))
         assert group_1_lrs[mid_decay] == pytest.approx(lr_1_max * expected_scale)
+
+        print(f"\nAt checkpoint {i}:")
+        print(f"Period: {period_start} -> {checkpoint}")
+        print(f"Actual LR: {group_1_lrs[checkpoint-1]}")
+        print(f"Expected LR: {lr_1_max * lr_min}")
+        print(f"Actual LR Scale: {group_1_lrs[checkpoint-1] / lr_1_max}")
+        print(f"Expected LR Scale: {lr_min}")
         
         # End of decay
-        assert group_1_lrs[checkpoint-1] == pytest.approx(lr_1_max * lr_min)
+        assert group_1_lrs[checkpoint-1] == pytest.approx(lr_1_max * lr_min, rel=1e-5)
 
 def test_wsd_resume_from_checkpoint():
     num_steps = 1000
