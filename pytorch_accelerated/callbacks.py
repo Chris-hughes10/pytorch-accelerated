@@ -705,3 +705,69 @@ class LimitEvalStepsCallback(TrainerCallback):
     def on_eval_epoch_end(self, trainer, is_intermediate=False, **kwargs):
         if is_intermediate or not self.limit_intermediate_only:
             trainer._eval_dataloader = self._original_eval_dataloader
+
+
+class WSDCheckpointCallback(TrainerCallback):
+    """
+    Handles checkpointing for WSD-S schedule.
+    Saves checkpoints after each decay phase and manages resumption.
+    """
+    def __init__(
+        self,
+        checkpoint_steps: list,
+        decay_fraction: float = 0.1,
+        save_dir: str = "checkpoints",
+        save_optimizer: bool = True,
+        save_scheduler: bool = True,
+    ):
+        self.checkpoint_steps = sorted(checkpoint_steps)
+        self.decay_fraction = decay_fraction
+        self.save_dir = save_dir
+        self.save_optimizer = save_optimizer
+        self.save_scheduler = save_scheduler
+        self.last_checkpoint_step = None
+        
+        # Create save directory if it doesn't exist
+        os.makedirs(save_dir, exist_ok=True)
+
+    def _get_checkpoint_path(self, step: int) -> str:
+        return os.path.join(self.save_dir, f"checkpoint_{step}.pt")
+
+    def _find_latest_checkpoint(self) -> tuple[int, str]:
+        """Returns (step, path) of latest checkpoint if exists, else (None, None)"""
+        for step in reversed(self.checkpoint_steps):
+            path = self._get_checkpoint_path(step)
+            if os.path.exists(path):
+                return step, path
+        return None, None
+
+    def on_training_run_start(self, trainer, **kwargs):
+        # Find and load latest checkpoint if exists
+        last_step, checkpoint_path = self._find_latest_checkpoint()
+        if checkpoint_path is not None:
+            trainer.print(f"Resuming from checkpoint at step {last_step}")
+            trainer.load_checkpoint(
+                checkpoint_path,
+                load_optimizer=self.save_optimizer,
+                load_scheduler=self.save_scheduler
+            )
+            self.last_checkpoint_step = last_step
+
+    def on_train_step_end(self, trainer, step: int, **kwargs):
+        # Check if we're at a checkpoint step
+        if step in self.checkpoint_steps and step != self.last_checkpoint_step:
+            # Calculate decay end position
+            decay_steps = int(step * self.decay_fraction)
+            if step - trainer.run_history.current_step < decay_steps:
+                # Still in decay phase, don't checkpoint yet
+                return
+                
+            checkpoint_path = self._get_checkpoint_path(step)
+            trainer.save_checkpoint(
+                checkpoint_path,
+                save_optimizer=self.save_optimizer,
+                save_scheduler=self.save_scheduler,
+                checkpoint_kwargs={"step": step}
+            )
+            self.last_checkpoint_step = step
+            trainer.print(f"Saved checkpoint at step {step}")
