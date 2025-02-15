@@ -1,9 +1,13 @@
 # Copyright © 2021 Chris Hughes
+import datetime
 import inspect
 import logging
 import sys
 import time
 from abc import ABC
+from pathlib import Path
+from typing import Optional, Union
+
 
 import numpy as np
 import torch
@@ -708,68 +712,117 @@ class LimitEvalStepsCallback(TrainerCallback):
             trainer._eval_dataloader = self._original_eval_dataloader
 
 
+
 class WSDCheckpointCallback(TrainerCallback):
     """
     Handles checkpointing for WSD-S schedule.
     Saves checkpoints after each decay phase and manages resumption.
+    Automatically syncs with WSDLrScheduler if present.
     """
 
     def __init__(
         self,
-        checkpoint_steps: list,
-        decay_fraction: float = 0.1,
         save_dir: str = "checkpoints",
         save_optimizer: bool = True,
         save_scheduler: bool = True,
+        initial_checkpoint: Optional[Union[str, Path]] = None,
     ):
-        self.checkpoint_steps = sorted(checkpoint_steps)
-        self.decay_fraction = decay_fraction
-        self.save_dir = save_dir
+        """
+        :param save_dir: Directory to save checkpoints
+        :param save_optimizer: Whether to save optimizer state
+        :param save_scheduler: Whether to save scheduler state
+        :param initial_checkpoint: Optional path to checkpoint to load at start of training
+        """
+        self.save_dir = Path(save_dir)
         self.save_optimizer = save_optimizer
         self.save_scheduler = save_scheduler
+        self.initial_checkpoint = Path(initial_checkpoint) if initial_checkpoint else None
         self.last_checkpoint_step = None
-
+        self.checkpoint_steps = None
+        self.decay_fraction = None
+        
         # Create save directory if it doesn't exist
-        os.makedirs(save_dir, exist_ok=True)
+        self.save_dir.mkdir(parents=True, exist_ok=True)
 
-    def _get_checkpoint_path(self, step: int) -> str:
-        return os.path.join(self.save_dir, f"checkpoint_{step}.pt")
-
-    def _find_latest_checkpoint(self) -> tuple[int, str]:
-        """Returns (step, path) of latest checkpoint if exists, else (None, None)"""
-        for step in reversed(self.checkpoint_steps):
-            path = self._get_checkpoint_path(step)
-            if os.path.exists(path):
-                return step, path
-        return None, None
+    def _get_checkpoint_path(self, step: int) -> Path:
+        return self.save_dir / f"checkpoint_{step}.pt"
+    
+    def _save_checkpoint(self, trainer, step: int, checkpoint_type: str):
+        checkpoint_path = self._get_checkpoint_path(step)
+        trainer.save_checkpoint(
+            checkpoint_path,
+            save_optimizer=self.save_optimizer,
+            save_scheduler=self.save_scheduler,
+            checkpoint_kwargs={
+                "step": step,
+                "checkpoint_type": checkpoint_type,
+                "original_total_steps": trainer.run_config.max_num_train_steps,
+                "original_decay_fraction": self.decay_fraction,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
 
     def on_training_run_start(self, trainer, **kwargs):
-        # Find and load latest checkpoint if exists
-        last_step, checkpoint_path = self._find_latest_checkpoint()
-        if checkpoint_path is not None:
-            trainer.print(f"Resuming from checkpoint at step {last_step}")
-            trainer.load_checkpoint(
-                checkpoint_path,
-                load_optimizer=self.save_optimizer,
-                load_scheduler=self.save_scheduler,
+        """Initialize checkpoint steps and decay fraction from scheduler"""
+        if not hasattr(trainer.scheduler, 'get_checkpoint_steps'):
+            raise ValueError(
+                "Scheduler must implement get_checkpoint_steps(). "
+                "Are you using WSDLrScheduler?"
             )
-            self.last_checkpoint_step = last_step
+            
+        self.checkpoint_steps = trainer.scheduler.get_checkpoint_steps()
+        self.decay_fraction = trainer.scheduler.decay_phase_ratio
+        
+        # Load initial checkpoint if specified
+        if self.initial_checkpoint and self.initial_checkpoint.exists():
+            trainer.print(f"\nLoading checkpoint from {self.initial_checkpoint}")
+            checkpoint = trainer.load_checkpoint(self.initial_checkpoint)
+            self.last_checkpoint_step = checkpoint.get("step")
+            trainer.print(f"Loaded {checkpoint['checkpoint_type']} checkpoint from step {self.last_checkpoint_step}")
 
     def on_train_step_end(self, trainer, step: int, **kwargs):
-        # Check if we're at a checkpoint step
-        if step in self.checkpoint_steps and step != self.last_checkpoint_step:
-            # Calculate decay end position
-            decay_steps = int(step * self.decay_fraction)
-            if step - trainer.run_history.current_step < decay_steps:
-                # Still in decay phase, don't checkpoint yet
-                return
+        """Handle checkpoint saving and progress logging"""
+        # Calculate global step accounting for distributed training and gradient accumulation
+        total_steps = (
+            (trainer.run_history.current_epoch - 1) * 
+            trainer.run_config.num_update_steps_per_epoch + 
+            step // trainer.run_config.gradient_accumulation_steps
+        )
+        
+        # Check if this is a checkpoint step
+        if total_steps not in self.checkpoint_steps:
+            return
+            
+        if total_steps == self.last_checkpoint_step:
+            return
 
-            checkpoint_path = self._get_checkpoint_path(step)
-            trainer.save_checkpoint(
-                checkpoint_path,
-                save_optimizer=self.save_optimizer,
-                save_scheduler=self.save_scheduler,
-                checkpoint_kwargs={"step": step},
-            )
-            self.last_checkpoint_step = step
-            trainer.print(f"Saved checkpoint at step {step}")
+        # Calculate decay phase boundaries
+        decay_steps = int(total_steps * self.decay_fraction)
+        steps_into_decay = total_steps % decay_steps
+        steps_remaining = decay_steps - steps_into_decay
+
+        # If we're at the last step before decay phase starts
+        if steps_remaining == decay_steps:
+            trainer.print(f"\nEntering decay phase at step {total_steps}")
+            self._save_checkpoint(trainer, total_steps, "wsd_pre_decay")
+            self.last_checkpoint_step = total_steps
+            trainer.print(f"\nSaved pre-decay checkpoint at step {total_steps}")
+            return
+        
+        # If we've completed the decay phase
+        if steps_remaining == 0:
+            self._save_checkpoint(trainer, total_steps, "wsd_post_decay")
+            self.last_checkpoint_step = total_steps
+            trainer.print(f"\nSaved post-decay checkpoint at step {total_steps}")
+
+    def state_dict(self):
+        """Save callback state for checkpointing"""
+        return {
+            "last_checkpoint_step": self.last_checkpoint_step,
+            "checkpoint_steps": self.checkpoint_steps,
+            "decay_fraction": self.decay_fraction
+        }
+
+    def load_state_dict(self, state_dict: dict):
+        """Restore callback state from checkpoint"""
+        self.__dict__.update(state_dict)

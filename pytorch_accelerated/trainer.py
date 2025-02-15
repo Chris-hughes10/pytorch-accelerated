@@ -817,7 +817,7 @@ class Trainer:
             if not perform_gradient_update:
                 # accumulate gradients locally
                 with self._accelerator.no_sync(self.model):
-                    self._perform_forward_and_backward_passes(batch)
+                    self._perform_forward_and_backward_passes(batch, step)
             else:
                 self._perform_forward_and_backward_passes(batch, step)
 
@@ -851,6 +851,7 @@ class Trainer:
             "on_train_epoch_end",
             self,
         )
+        return reached_max_steps
 
     def _perform_forward_and_backward_passes(self, batch, step):
         """
