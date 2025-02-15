@@ -37,8 +37,9 @@ class LimitBatches:
 class DataLoaderSlice:
     """
     A class which can be used to slice a :class:`~torch.utils.data.DataLoader` to only return a certain number of batches.
-    
+
     """
+
     def __init__(self, dl, slice_size):
         self.dl = dl
         self.slice_size = slice_size

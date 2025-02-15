@@ -341,7 +341,7 @@ class SaveBestModelCallback(TrainerCallback):
         reset_on_train: bool = True,
         save_optimizer: bool = True,
         save_scheduler: bool = True,
-        load_saved_checkpoint: bool = True
+        load_saved_checkpoint: bool = True,
     ):
         """
 
@@ -522,6 +522,7 @@ class MoveModulesToDeviceCallback(TrainerCallback):
     def on_evaluation_run_start(self, trainer, **kwargs):
         self._move_modules_to_device(trainer)
 
+
 class LimitBatchesCallback(TrainerCallback):
     """
     A callback that that limits the number of batches used during training and evaluation.
@@ -679,9 +680,9 @@ class LimitEvalStepsCallback(TrainerCallback):
     :param limit_intermediate_only: whether to limit the number of intermediate evaluations only
 
     .. Note::
-        When used together this callback should be placed before :class:`StepBasedEvaluationCallback` and 
+        When used together this callback should be placed before :class:`StepBasedEvaluationCallback` and
         :class:`ProgressBarCallback` in the list of callbacks.
-        
+
     """
 
     def __init__(self, num_eval_steps: int, limit_intermediate_only=True):
@@ -712,6 +713,7 @@ class WSDCheckpointCallback(TrainerCallback):
     Handles checkpointing for WSD-S schedule.
     Saves checkpoints after each decay phase and manages resumption.
     """
+
     def __init__(
         self,
         checkpoint_steps: list,
@@ -726,7 +728,7 @@ class WSDCheckpointCallback(TrainerCallback):
         self.save_optimizer = save_optimizer
         self.save_scheduler = save_scheduler
         self.last_checkpoint_step = None
-        
+
         # Create save directory if it doesn't exist
         os.makedirs(save_dir, exist_ok=True)
 
@@ -749,7 +751,7 @@ class WSDCheckpointCallback(TrainerCallback):
             trainer.load_checkpoint(
                 checkpoint_path,
                 load_optimizer=self.save_optimizer,
-                load_scheduler=self.save_scheduler
+                load_scheduler=self.save_scheduler,
             )
             self.last_checkpoint_step = last_step
 
@@ -761,13 +763,13 @@ class WSDCheckpointCallback(TrainerCallback):
             if step - trainer.run_history.current_step < decay_steps:
                 # Still in decay phase, don't checkpoint yet
                 return
-                
+
             checkpoint_path = self._get_checkpoint_path(step)
             trainer.save_checkpoint(
                 checkpoint_path,
                 save_optimizer=self.save_optimizer,
                 save_scheduler=self.save_scheduler,
-                checkpoint_kwargs={"step": step}
+                checkpoint_kwargs={"step": step},
             )
             self.last_checkpoint_step = step
             trainer.print(f"Saved checkpoint at step {step}")
