@@ -37,7 +37,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
         - May be more robust across different architectures
 
     Continuation Behavior:
-    - Training can be continued from a pre-decay checkpoint 
+    - Training can be continued from a pre-decay checkpoint
     - When continuing, scheduler starts a fresh stable phase with new total_steps
     - Decay phase ratio applies to new training length
     - No warmup is applied during continuation
@@ -97,7 +97,6 @@ class WSDLrScheduler(StatefulSchedulerBase):
         assert (
             num_warmup_steps <= total_steps
         ), "num_warmup_steps cannot exceed total_steps"
-        
 
         self.total_steps = total_steps
         self.num_warmup_steps = num_warmup_steps
@@ -134,7 +133,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
                     f"overlapping decay phases. Maximum safe ratio is {max_safe_ratio:.2f} "
                     f"with {num_checkpoints} checkpoints using geometric progression"
                 )
-            
+
         # Calculate and store decay information for each checkpoint period
         self.checkpoint_decay_info = self._calculate_decay_info()
 
@@ -142,28 +141,42 @@ class WSDLrScheduler(StatefulSchedulerBase):
         """Return the list of steps at which checkpoints occur.
         Useful for training loop coordination."""
         return self.checkpoint_steps
-    
+
+    def get_current_phase(self, num_updates: int) -> str:
+        if (
+            not self.is_continuation_from_pre_decay
+            and num_updates < self.num_warmup_steps
+        ):
+            return "warmup"
+        for info in self.checkpoint_decay_info:
+            if info["period_end"] >= num_updates:
+                if num_updates >= info["pre_decay_step"]:
+                    return "decay"
+                return "stable"
+        return "stable"
+
     def _calculate_decay_info(self) -> List[dict]:
         """Calculate decay information for each checkpoint period"""
         decay_info = []
-        
+
         for i, checkpoint in enumerate(self.checkpoint_steps):
             period_start = 0 if i == 0 else self.checkpoint_steps[i - 1]
             period_length = checkpoint - period_start
-            
+
             period_info = {
                 "period_start": period_start,
                 "period_end": checkpoint,
                 "decay_steps": int(period_length * self.decay_phase_ratio),
-                "pre_decay_step": checkpoint - int(period_length * self.decay_phase_ratio)
+                "pre_decay_step": checkpoint
+                - int(period_length * self.decay_phase_ratio),
             }
             decay_info.append(period_info)
-            
+
         return decay_info
-        
+
     def get_decay_info(self) -> List[dict]:
         """Get information about decay phases for all checkpoint periods.
-        
+
         Returns:
             List[dict]: List of dicts containing for each period:
                 - period_start: Start of period
@@ -175,18 +188,31 @@ class WSDLrScheduler(StatefulSchedulerBase):
 
     @lru_cache(maxsize=1)
     def _get_checkpoint_info(self, num_updates):
+        """Get information about the current checkpoint period."""
         if self.is_continuation_from_pre_decay:
-            if self.previous_checkpoint_step is None:
-                raise ValueError(
-                    "Continuation from pre-decay requested but no previous checkpoint step found. "
-                    "Did you load the scheduler state?"
-                )
-            # In continuation mode, treat as fresh start
-            total_period_steps = self.total_steps
-            steps_into_period = num_updates
-            return total_period_steps, steps_into_period
+            # Calculate new checkpoint steps based on continuation length
+            checkpoints = estimate_checkpoint_steps(
+                self.total_steps, self.num_checkpoints
+            )
 
-        # Original multi-checkpoint logic
+            # Find current checkpoint period
+            current_checkpoint = 0
+            for i, checkpoint in enumerate(checkpoints):
+                if num_updates <= checkpoint:
+                    current_checkpoint = i
+                    break
+
+            # Calculate period information
+            period_start = (
+                0 if current_checkpoint == 0 else checkpoints[current_checkpoint - 1]
+            )
+            period_end = checkpoints[current_checkpoint]
+            period_length = period_end - period_start
+            steps_into_period = num_updates - period_start
+
+            return period_length, steps_into_period
+
+        # Original non-continuation logic
         current_checkpoint = 0
         for i, checkpoint in enumerate(self.checkpoint_steps):
             if num_updates <= checkpoint:
@@ -194,15 +220,29 @@ class WSDLrScheduler(StatefulSchedulerBase):
                 break
 
         period_start = (
-            0 if current_checkpoint == 0 
+            0
+            if current_checkpoint == 0
             else self.checkpoint_steps[current_checkpoint - 1]
         )
         period_end = self.checkpoint_steps[current_checkpoint]
-        return period_end - period_start, num_updates - period_start
+        period_length = period_end - period_start
+        steps_into_period = num_updates - period_start
+        return period_length, steps_into_period
 
     def get_updated_values(self, num_updates: int):
+        if (
+            self.is_continuation_from_pre_decay
+            and self.previous_checkpoint_step is None
+        ):
+            raise ValueError(
+                "no previous checkpoint step found - state must be loaded before continuing training"
+            )
+
         # Handle warmup phase - but skip warmup in continuation
-        if not self.is_continuation_from_pre_decay and num_updates < self.num_warmup_steps:
+        if (
+            not self.is_continuation_from_pre_decay
+            and num_updates < self.num_warmup_steps
+        ):
             return [
                 self.warmup_starting_lr
                 + (num_updates / self.num_warmup_steps)
@@ -210,14 +250,24 @@ class WSDLrScheduler(StatefulSchedulerBase):
                 for base_lr in self.base_lr_values
             ]
 
+        # Get period information
         total_period_steps, steps_into_period = self._get_checkpoint_info(num_updates)
 
-        # Calculate decay phase 
+        # Calculate decay phase
         decay_steps = int(total_period_steps * self.decay_phase_ratio)
         decay_start = total_period_steps - decay_steps
 
-        # Track pre-decay step when we reach it
-        if steps_into_period == decay_start - 1:  # One step before decay
+        # In continuation mode, we should maintain stable phase until new decay point
+        if self.is_continuation_from_pre_decay:
+            # During stable phase, return base learning rates
+            if steps_into_period < decay_start:
+                return self.base_lr_values
+            # Track pre-decay step
+            elif steps_into_period == decay_start - 1:
+                self.previous_checkpoint_step = num_updates
+
+        # For regular mode, track pre-decay step
+        elif steps_into_period == decay_start - 1:
             self.previous_checkpoint_step = num_updates
 
         # Check if in decay phase
@@ -267,13 +317,14 @@ class WSDLrScheduler(StatefulSchedulerBase):
             self._get_checkpoint_info.cache_clear()
             self.__dict__.update(state_dict)
             self.total_steps = new_total_steps  # Restore new training length
-             # Reset internal counters for fresh start
+
+            # Reset internal counters for fresh start
             self._step_count = 0  # Start counting from 0 for new training run
             self.checkpoint_steps = estimate_checkpoint_steps(
-            self.total_steps, self.num_checkpoints
-        )  # Recalculate checkpoints for new length
+                self.total_steps, self.num_checkpoints
+            )  # Recalculate checkpoints for new length
+            self.checkpoint_decay_info = self._calculate_decay_info()
 
-            
         else:
             # Standard state loading
             self._get_checkpoint_info.cache_clear()
@@ -326,7 +377,7 @@ def estimate_checkpoint_steps(total_steps: int, num_checkpoints: int = 3) -> Lis
     if num_checkpoints == 1:
         # Single checkpoint case - put checkpoint at end
         return [total_steps]
-    
+
     # Multiple checkpoint case - use geometric progression
     # First checkpoint at ~25% of total steps
     first_checkpoint = total_steps // 4
