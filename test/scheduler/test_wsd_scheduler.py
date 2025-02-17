@@ -15,6 +15,66 @@ def collect_lrs_for_scheduler(scheduler, num_steps):
 
     return group_1_lrs, group_2_lrs
 
+def test_wsd_decay_info_single_checkpoint():
+    """Test that get_decay_info returns correct decay information for single checkpoint case"""
+    num_steps = 100
+    lr_max = 0.01
+    model, optimizer = create_model_and_optimizer(lr_max, lr_max)
+
+    scheduler = WSDLrScheduler(
+        optimizer,
+        total_steps=num_steps,
+        num_checkpoints=1,
+        decay_phase_ratio=0.1
+    )
+    
+    decay_info = scheduler.get_decay_info()
+    assert len(decay_info) == 1, "Should have one period for single checkpoint"
+    
+    period = decay_info[0]
+    assert period["period_start"] == 0, "Period should start at beginning"
+    assert period["period_end"] == num_steps, "Period should end at total steps"
+    assert period["decay_steps"] == 10, "Should have 10% decay steps"
+    assert period["pre_decay_step"] == 90, "Decay should start at 90% through training"
+
+def test_wsd_decay_info_multiple_checkpoints():
+    """Test that get_decay_info returns correct decay information for multiple checkpoints"""
+    num_steps = 100
+    lr_max = 0.01
+    model, optimizer = create_model_and_optimizer(lr_max, lr_max)
+
+    scheduler = WSDLrScheduler(
+        optimizer,
+        total_steps=num_steps,
+        num_checkpoints=3,
+        decay_phase_ratio=0.1
+    )
+    
+    decay_info = scheduler.get_decay_info()
+    checkpoints = scheduler.get_checkpoint_steps()
+    
+    assert len(decay_info) == len(checkpoints), "Should have info for each checkpoint period"
+    
+    # Verify each period's information
+    for i, period in enumerate(decay_info):
+        period_start = 0 if i == 0 else checkpoints[i-1]
+        period_end = checkpoints[i]
+        period_length = period_end - period_start
+        expected_decay_steps = int(period_length * 0.1)
+        
+        assert period["period_start"] == period_start, f"Period {i} should start at checkpoint {i-1}"
+        assert period["period_end"] == period_end, f"Period {i} should end at checkpoint {i}"
+        assert period["decay_steps"] == expected_decay_steps, f"Period {i} should have correct decay steps"
+        assert period["pre_decay_step"] == period_end - expected_decay_steps, f"Period {i} should have correct pre-decay step"
+        
+        # Verify decay points are properly spaced
+        if i > 0:
+            prev_period = decay_info[i-1]
+            assert prev_period["period_end"] == period["period_start"], \
+                f"Period {i} should start where period {i-1} ends"
+            assert prev_period["period_end"] < period["pre_decay_step"], \
+                f"Decay phases should not overlap between periods {i-1} and {i}"
+
 
 def test_wsd_stable_phase():
     """
@@ -342,3 +402,172 @@ def test_wsd_warmup_edge_cases():
     quarter_step = num_steps // 4
     assert group_1_lrs[quarter_step] > group_1_lrs[0]  # Should increase during warmup
     assert group_1_lrs[quarter_step] < lr_max  # But not reach max yet
+
+def test_wsd_pre_decay_continuation():
+    """Test continuation from pre-decay behaves correctly with new training length"""
+    num_steps = 100
+    lr_max = 0.01
+    model, optimizer = create_model_and_optimizer(lr_max, lr_max)
+
+    # Initial training 
+    initial_scheduler = WSDLrScheduler(
+        optimizer,
+        total_steps=num_steps,
+        num_checkpoints=1,
+        decay_phase_ratio=0.1  # 10% decay phase
+    )
+    
+    # With 1 checkpoint, decay happens at end of training
+    decay_steps = int(num_steps * initial_scheduler.decay_phase_ratio)
+    pre_decay_step = num_steps - decay_steps
+
+    print(f"\nInitial training setup:")
+    print(f"Total steps: {num_steps}")
+    print(f"Decay steps: {decay_steps}")
+    print(f"Pre-decay step: {pre_decay_step}")
+    # Print initial training info
+    
+    initial_lrs, _ = collect_lrs_for_scheduler(initial_scheduler, pre_decay_step)
+    print(f"Final initial lr: {initial_lrs[-1]}")
+    
+    # Save state at pre-decay point
+    scheduler_state = initial_scheduler.state_dict()
+    print(f"\nScheduler state at save:")
+    print(f"Previous checkpoint step: {scheduler_state.get('previous_checkpoint_step')}")
+    print(f"Decay phase ratio: {scheduler_state.get('decay_phase_ratio')}")
+    
+    # Continue with new shorter training run
+    continue_steps = 50  # New total steps
+    continued_scheduler = WSDLrScheduler(
+        optimizer,
+        total_steps=continue_steps,
+        is_continuation_from_pre_decay=True
+    )
+    continued_scheduler.load_state_dict(scheduler_state)
+    
+    continued_lrs, _ = collect_lrs_for_scheduler(continued_scheduler, continue_steps)
+    
+    # Calculate when decay should start in new training
+    new_decay_start = int(continue_steps * (1 - continued_scheduler.decay_phase_ratio))
+    print(f"\nContinuation setup:")
+    print(f"Total steps: {continue_steps}")
+    print(f"New decay start: {new_decay_start}")
+    print(f"Continuation first 5 lrs: {continued_lrs[:5]}")
+    print(f"Expected lr: {lr_max}")
+
+     # Find first deviation from lr_max
+    for i, lr in enumerate(continued_lrs[:new_decay_start]):
+        if abs(lr - lr_max) > 1e-10:  # Use small epsilon for float comparison
+            print(f"\nFirst lr deviation at step {i}:")
+            print(f"Expected: {lr_max}")
+            print(f"Got: {lr}")
+            break
+    
+    # Verify behavior
+    # 1. Stable phase should maintain max lr
+    assert all(lr == lr_max for lr in continued_lrs[:new_decay_start]), \
+        "Should maintain stable lr until new decay point"
+        
+    # 2. Should start decay at correct point
+    assert continued_lrs[new_decay_start + 1] < lr_max, \
+        "Should start decay at calculated point"
+        
+    # 3. Should reach minimum by end
+    min_lr = lr_max * continued_scheduler.lr_min
+    assert continued_lrs[-1] <= min_lr * 1.1, \
+        "Should decay to specified minimum"
+    
+
+def test_wsd_continuation_validation():
+    """Test validation when attempting continuation without proper state"""
+    num_steps = 1000
+    lr_max = 0.01
+    model, optimizer = create_model_and_optimizer(lr_max, lr_max)
+
+    # Create scheduler in continuation mode without state
+    scheduler = WSDLrScheduler(
+        optimizer,
+        total_steps=num_steps,
+        is_continuation_from_pre_decay=True
+    )
+    
+    # Should raise when trying to get lr values without state
+    with pytest.raises(ValueError, match="no previous checkpoint step found"):
+        scheduler.get_updated_values(0)
+    
+    # Should work after loading valid state
+    valid_state = {
+        'previous_checkpoint_step': 500,
+        'total_steps': 1000,
+        'num_warmup_steps': 0,
+        'decay_phase_ratio': 0.1,
+        'lr_min': 1e-6,
+        'warmup_starting_lr': 1e-6,
+        'use_inverse_sqrt_decay': True,
+        'num_checkpoints': 2,
+        'is_continuation_from_pre_decay': True,
+        'checkpoint_steps': [250, 500, 750, 1000]
+    }
+    
+    scheduler.load_state_dict(valid_state)
+    # Should now work without error
+    scheduler.get_updated_values(0)
+
+def test_wsd_continuation_validation():
+    """Test proper validation when attempting continuation without state"""
+    num_steps = 1000
+    lr_max = 0.01
+    model, optimizer = create_model_and_optimizer(lr_max, lr_max)
+
+    # Create scheduler in continuation mode
+    scheduler = WSDLrScheduler(
+        optimizer,
+        total_steps=num_steps,
+        is_continuation_from_pre_decay=True
+    )
+    
+    # Should raise error when getting lr values without state loaded
+    with pytest.raises(ValueError, match="no previous checkpoint step found"):
+        scheduler.get_updated_values(0)
+        
+    # Should work after loading valid state
+    scheduler.previous_checkpoint_step = 500  # Simulate loaded state
+    # Should not raise error
+    scheduler.get_updated_values(0)
+
+
+def test_wsd_continuation_state():
+    """Test state handling during continuation"""
+    num_steps = 1000
+    lr_max = 0.01
+    model, optimizer = create_model_and_optimizer(lr_max, lr_max)
+    
+    # Create initial scheduler and train to pre-decay
+    initial_scheduler = WSDLrScheduler(
+        optimizer,
+        total_steps=num_steps,
+        decay_phase_ratio=0.1
+    )
+    
+    checkpoints = initial_scheduler.get_checkpoint_steps()
+    first_checkpoint = checkpoints[0]
+    decay_steps = int(first_checkpoint * initial_scheduler.decay_phase_ratio)
+    pre_decay_step = first_checkpoint - decay_steps - 1
+    
+    # Train to pre-decay point
+    _, _ = collect_lrs_for_scheduler(initial_scheduler, pre_decay_step)
+    state = initial_scheduler.state_dict()
+    
+    # Create new scheduler with different initial settings
+    continued_scheduler = WSDLrScheduler(
+        optimizer,
+        total_steps=500,  # Different steps
+        decay_phase_ratio=0.2,  # Different ratio
+        is_continuation_from_pre_decay=True
+    )
+    
+    # Load state and verify it preserves original values
+    continued_scheduler.load_state_dict(state)
+    assert continued_scheduler.previous_checkpoint_step == pre_decay_step
+    assert continued_scheduler.total_steps == 500  # Should keep new training length
+    assert continued_scheduler.decay_phase_ratio == state['decay_phase_ratio']  # Should restore original ratio
