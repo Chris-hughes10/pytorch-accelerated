@@ -425,7 +425,7 @@ class Trainer:
         :param num_epochs: the number of epochs to train for
         :param eval_dataset: the dataset to use during evaluation epochs, if this is not provided, evaluation is skipped.
         :param per_device_batch_size: the batch size to use per device
-        :param max_num_train_steps: the maximum number of steps, across all processes, to train for. If provided, this will override num_epochs
+        :param max_num_train_steps: the maximum number of steps, per process, to train for. If provided, this will override num_epochs
         :param gradient_accumulation_steps: accumulate gradients to the specified number of steps to simulate a bigger batch size. By default, this is set to ``1``
         :param gradient_clip_value: if specified, the gradients of the model's parameters will be clipped to the range ``[-gradient_clip_value, gradient_clip_value]``
         :param create_scheduler_fn: a function which accepts an optimizer as an argument and returns a learning rate scheduler
@@ -639,18 +639,9 @@ class Trainer:
             eval_per_device_batch_size = train_per_device_batch_size
 
         if self._train_dataloader is not None:
-            # Get local number of batches
             local_batches = len(self._train_dataloader)
-
-            # Gather number of batches from all processes
-            batches_tensor = torch.tensor(local_batches, device=self.device)
-            all_batches = self.gather(batches_tensor)
-
-            # Use maximum number of batches across processes
-            max_batches = max(all_batches.tolist())
-
             num_update_steps_per_epoch = math.ceil(
-                max_batches / gradient_accumulation_steps
+                local_batches / gradient_accumulation_steps
             )
         else:
             num_update_steps_per_epoch = 0
