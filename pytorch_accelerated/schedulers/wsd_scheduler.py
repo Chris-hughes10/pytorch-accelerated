@@ -369,6 +369,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
         warmup_starting_lr: float = 1e-6,
         use_inverse_sqrt_decay: bool = True,
         num_checkpoints: int = 1,
+        is_continuation_from_checkpoint: bool = False,
     ) -> Callable:
         """Creates a scheduler function that the trainer can use.
 
@@ -386,6 +387,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
             warmup_starting_lr=warmup_starting_lr,
             use_inverse_sqrt_decay=use_inverse_sqrt_decay,
             num_checkpoints=num_checkpoints,
+            is_continuation_from_checkpoint=is_continuation_from_checkpoint,
         )
 
 

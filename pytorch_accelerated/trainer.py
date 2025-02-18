@@ -1090,6 +1090,8 @@ class Trainer:
                 )
             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
+        return checkpoint
+
     def get_model(self):
         """
         Extract the model in :class:`Trainer` from its distributed containers.
