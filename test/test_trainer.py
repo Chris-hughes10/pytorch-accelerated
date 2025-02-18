@@ -68,7 +68,9 @@ def optimizer(model):
 
 def test_skip_eval_if_not_present(mocker):
     trainer = DummyTrainer(model=Mock(), optimizer=Mock(), loss_func=Mock())
-    mocked_train_epoch: MagicMock = mocker.patch.object(trainer, "_run_train_epoch")
+    mocked_train_epoch: MagicMock = mocker.patch.object(
+        trainer, "_run_train_epoch", return_value=False
+    )
     mocked_eval_epoch = mocker.patch.object(trainer, "_run_eval_epoch")
 
     trainer.train(train_dataset=Mock(), num_epochs=2)
