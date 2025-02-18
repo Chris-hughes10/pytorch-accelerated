@@ -9,7 +9,7 @@ from pytorch_accelerated.trainer import TrainerPlaceholderValues
 
 class WSDLrScheduler(StatefulSchedulerBase):
     """
-    Implements the Warmup-Stable-Decay (WSD) Simplified learning rate schedule as described in
+    Implements the Warmup-Stable-Decay (WSD) Simplified learning rate schedule as described in 
     'Understanding Warmup-Stable-Decay Learning Rates: A River Valley Loss Landscape Perspective'.
 
     The schedule has three phases:
@@ -20,22 +20,16 @@ class WSDLrScheduler(StatefulSchedulerBase):
     This scheduler is designed to create intermediate model checkpoints during training. Each checkpoint
     involves decaying the learning rate to get better model performance.
 
-    Selecting num_checkpoints:
-    - Use 1 checkpoint if you only want the final trained model
-    - Use multiple checkpoints (typically 2-3) if:
-        * Training on large datasets (>100B tokens) where intermediate models
-        are useful for development/testing
-        * You want to evaluate model performance vs training data size
-        (e.g., does your model need full training?)
-        * You might need to continue training later but want flexibility
-        about when to stop
-
-
+    Use multiple checkpoints (typically 2-3) if:
+    - Training on large datasets (>100B tokens) where intermediate models are useful for development/testing
+    - You want to evaluate model performance vs training data size (e.g., does your model need full training?)
+    - You might need to continue training later but want flexibility about when to stop training
+        
     The scheduler uses geometric progression to space checkpoints evenly on a log scale:
     - First checkpoint is placed at 25% of total steps
-    - Each subsequent checkpoint is ~2x steps from previous
+    - Each subsequent checkpoint is ~2x steps from previous checkpoint
 
-        Examples:
+    Examples:
           - 2 checkpoints for 100K steps: [50K, 100K]
           - 3 checkpoints for 200K steps: [50K, 100K, 200K]
           - 4 checkpoints for 200K steps: [25K, 50K, 100K, 200K]
@@ -51,7 +45,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
         - Derived from theoretical analysis on quadratic functions
         - Steeper initial decay, more gradual approach to lr_min
         - Optimal for quadratic loss landscapes
-
+    
     2. Sqrt Decay:
         lr = lr_min + (1 - lr_min) * (1 - sqrt(t))
         - Similar to traditional cosine decay patterns
@@ -59,7 +53,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
         - May be more robust across different architectures
 
     Continuation Behavior:
-    - Training can be continued from a pre-decay checkpoint
+    - Training can be continued from a pre-decay (WSD) or post-decay (WSD-S) checkpoint
     - When continuing, scheduler starts a fresh stable phase with new total_steps
     - Decay phase ratio applies to new training length
     - No warmup is applied during continuation
@@ -69,14 +63,15 @@ class WSDLrScheduler(StatefulSchedulerBase):
         Initial run (1000 steps, 0.1 decay ratio):
         - Steps 0-50: Optional warmup
         - Steps 50-900: Stable high learning rate
-        - Steps 900-1000: Decay
+        - Steps 900-1000: Decay to lr_min
 
         Continuation (500 new steps, 0.1 decay ratio):
         - Steps 0-450: Stable high learning rate
-        - Steps 450-500: Decay
+        - Steps 450-500: Decay to lr_min
 
     .. Note:: This scheduler is designed to be used with the :class:`~pytorch_accelerated.callbacks.WSDCheckpointCallback` class,
-    which handles saving and loading checkpoints.
+        which handles saving and loading checkpoints.
+
     """
 
     def __init__(
@@ -371,10 +366,30 @@ class WSDLrScheduler(StatefulSchedulerBase):
         num_checkpoints: int = 1,
         is_continuation_from_checkpoint: bool = False,
     ) -> Callable:
-        """Creates a scheduler function that the trainer can use.
+        """
+        An alternative constructor which returns a function that accepts an optimizer and creates an instance of
+        ``WSDLrScheduler``. This is primarily intended to be used with the :class:`~pytorch_accelerated.trainer.Trainer`
+        as illustrated below::
 
-        Returns a function that accepts an optimizer and creates an instance of WSDScheduler.
-        The trainer will replace TrainerPlaceholderValues with actual values at runtime.
+
+            trainer = Trainer(
+            ...,
+            callbacks=[
+                WSDCheckpointCallback(
+                    save_dir="checkpoints",
+                    initial_checkpoint="checkpoint_45000_pre_decay.pt",
+                    )
+                ],)
+
+            trainer.train(
+            train_dataset=train_dataset,
+            num_epochs=num_epochs,
+            per_device_batch_size=batch_size,
+            create_scheduler_fn=CosineLrScheduler.WSDLrScheduler(is_continuation_from_checkpoint=True),
+            )
+
+        By default, the ``total_num_epochs`` and ``num_iterations_per_epoch`` arguments will be set by the
+        :class:`~pytorch_accelerated.trainer.Trainer` with the correct values at runtime.
         """
 
         return partial(
