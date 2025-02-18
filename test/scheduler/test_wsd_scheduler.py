@@ -247,7 +247,7 @@ def test_wsd_warmup():
     - Group 2: 0.002
     """
     num_steps = 1000
-    num_warmup_steps = int(num_steps * 0.1)
+    num_warmup_steps = int(num_steps * 0.01)
     lr_1_max = 0.01
     lr_2_max = 0.002
     warmup_lr = 1e-6
@@ -256,7 +256,7 @@ def test_wsd_warmup():
     scheduler = WSDLrScheduler(
         optimizer,
         total_steps=num_steps,
-        num_warmup_steps=None
+        num_warmup_steps=None,
         num_checkpoints=2,
         warmup_starting_lr=warmup_lr,
     )

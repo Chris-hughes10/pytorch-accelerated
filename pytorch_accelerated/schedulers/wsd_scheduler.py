@@ -101,7 +101,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
         :param total_steps: Total number of training steps
         :param num_warmup_steps: Number of warmup steps. If None is passed, this will be set to 10% of the total steps
         :param decay_phase_ratio: Fraction of steps to use for decay before each checkpoint
-        :param lr_min: The minimum learning rate as a fraction of the base learning rate. For example, 0.1 means decay to 10% of the base learning rate.
+        :param lr_min: The minimum learning rate as a fraction of the base learning rate. For example, 0.1 means decay to 1% of the base learning rate.
         :param warmup_starting_lr: Starting learning rate for warmup
         :param use_inverse_sqrt_decay: Whether to use a more gradual sqrt decay
         :param num_checkpoints: Number of checkpoints to use
@@ -399,7 +399,7 @@ def estimate_checkpoint_steps(total_steps: int, num_checkpoints: int = 3) -> Lis
     """
     if num_checkpoints == 1:
         # Single checkpoint case - put checkpoint at end
-        return set(total_steps)
+        return [total_steps]
 
     # Multiple checkpoint case - use geometric progression
     # First checkpoint at ~25% of total steps
@@ -412,4 +412,4 @@ def estimate_checkpoint_steps(total_steps: int, num_checkpoints: int = 3) -> Lis
         if checkpoint == total_steps:
             break
 
-    return set(checkpoints)
+    return checkpoints
