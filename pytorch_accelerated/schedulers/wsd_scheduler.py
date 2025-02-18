@@ -9,7 +9,7 @@ from pytorch_accelerated.trainer import TrainerPlaceholderValues
 
 class WSDLrScheduler(StatefulSchedulerBase):
     """
-    Implements the Warmup-Stable-Decay (WSD) Simplified learning rate schedule as described in 
+    Implements the Warmup-Stable-Decay (WSD) Simplified learning rate schedule as described in
     `Understanding Warmup-Stable-Decay Learning Rates: A River Valley Loss Landscape Perspective <https://arxiv.org/abs/2410.05192>`_.
 
     The schedule has three phases:
@@ -24,7 +24,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
         - Training on large datasets (>100B tokens) where intermediate models are useful for development/testing
         - You want to evaluate model performance vs training data size (e.g., does your model need full training?)
         - You might need to continue training later but want flexibility about when to stop training
-        
+
     The scheduler uses geometric progression to space checkpoints evenly on a log scale:
         - First checkpoint is placed at 25% of total steps
         - Each subsequent checkpoint is ~2x steps from previous checkpoint
@@ -45,7 +45,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
             - Derived from theoretical analysis on quadratic functions
             - Steeper initial decay, more gradual approach to lr_min
             - Optimal for quadratic loss landscapes
-    
+
     2. Sqrt Decay:
         lr = lr_min + (1 - lr_min) * (1 - sqrt(t))
             - Similar to traditional cosine decay patterns

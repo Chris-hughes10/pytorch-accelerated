@@ -639,8 +639,18 @@ class Trainer:
             eval_per_device_batch_size = train_per_device_batch_size
 
         if self._train_dataloader is not None:
+            # Get local number of batches
+            local_batches = len(self._train_dataloader)
+
+            # Gather number of batches from all processes
+            batches_tensor = torch.tensor(local_batches, device=self.device)
+            all_batches = self.gather(batches_tensor)
+
+            # Use maximum number of batches across processes
+            max_batches = max(all_batches.tolist())
+
             num_update_steps_per_epoch = math.ceil(
-                len(self._train_dataloader) / gradient_accumulation_steps
+                max_batches / gradient_accumulation_steps
             )
         else:
             num_update_steps_per_epoch = 0
@@ -796,9 +806,8 @@ class Trainer:
             self,
         )
 
-        updates_per_process = (
-            self.run_config.max_num_train_steps // self.run_config.num_processes
-        )
+        updates_per_process = self.run_config.max_num_train_steps
+
         updates_completed = (
             self.run_history.current_epoch - 1
         ) * self.run_config.num_update_steps_per_epoch
@@ -843,6 +852,14 @@ class Trainer:
                     and process_updates >= updates_per_process
                 ):
                     reached_max_steps = True
+                    # Synchronize reached_max_steps across processes
+                    if self.run_config.is_distributed:
+                        reached_max_steps_tensor = torch.tensor(
+                            [reached_max_steps], device=self.device
+                        )
+                        reached_max_steps = (
+                            self.gather(reached_max_steps_tensor).all().item()
+                        )
                     break
 
         self.train_epoch_end()
