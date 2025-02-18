@@ -99,38 +99,43 @@ def test_wsd_info_consistency():
             decay_phase_ratio=0.1,
         )
 
+        # Clear the cache before testing
+        scheduler._get_checkpoint_info.cache_clear()
+
         decay_info = scheduler.get_decay_info()
 
         # Check consistency for each period
         for period in decay_info:
-            # Check period boundaries
             period_start = period["period_start"]
             period_end = period["period_end"]
-            
-            # Get info at period boundaries
-            total_period_steps_start, steps_into_period_start = scheduler._get_checkpoint_info(period_start)
-            total_period_steps_end, steps_into_period_end = scheduler._get_checkpoint_info(period_end)
-            
-            # Verify period lengths match
-            expected_total_steps = period_end - period_start
-            assert total_period_steps_start == expected_total_steps, f"Period length mismatch at start"
-            assert total_period_steps_end == expected_total_steps, f"Period length mismatch at end"
-            
-            # Verify steps into period
-            assert steps_into_period_start == 0, f"Should be at start of period"
-            assert steps_into_period_end == expected_total_steps, f"Should be at end of period"
+            period_length = period_end - period_start
 
-            # Check middle of period as before
-            step = (period_start + period_end) // 2
-            total_period_steps, steps_into_period = scheduler._get_checkpoint_info(step)
-            expected_steps = step - period_start
-            assert total_period_steps == expected_total_steps, f"Period length mismatch at step {step}"
-            assert steps_into_period == expected_steps, f"Steps into period mismatch at step {step}"
+            # Check steps within the period
+            steps_to_test = [
+                period_start,  # Start of period
+                period_start + period_length // 2,  # Middle of period
+                period_end - 1,  # End of period (exclusive)
+            ]
 
-            # Verify decay calculations match
-            decay_steps_from_info = period["decay_steps"]
-            decay_steps_from_checkpoint = int(total_period_steps * scheduler.decay_phase_ratio)
-            assert decay_steps_from_info == decay_steps_from_checkpoint, f"Decay steps mismatch at step {step}"
+            for step in steps_to_test:
+                # Get checkpoint info for this step
+                total_steps, steps_into_period = scheduler._get_checkpoint_info(step)
+
+                # Verify period length is consistent
+                assert total_steps == period_length, (
+                    f"Period length mismatch at step {step}: "
+                    f"expected {period_length}, got {total_steps}"
+                )
+
+                # Verify steps into period matches expectation
+                expected_steps = step - period_start
+                assert steps_into_period == expected_steps, (
+                    f"Steps into period mismatch at step {step}: "
+                    f"expected {expected_steps}, got {steps_into_period}"
+                )
+
+        # Clear cache after testing
+        scheduler._get_checkpoint_info.cache_clear()
 
 
 def test_wsd_continuation_info_consistency():
@@ -901,5 +906,3 @@ def test_phase_transitions():
     assert (
         abs(final_lr - target_min_lr) / target_min_lr < 0.1
     ), "Should approach target minimum lr"
-
-

@@ -198,7 +198,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
             # Find current checkpoint period
             current_checkpoint = 0
             for i, checkpoint in enumerate(checkpoints):
-                if num_updates <= checkpoint:
+                if num_updates < checkpoint:
                     current_checkpoint = i
                     break
 
@@ -215,7 +215,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
         # Original non-continuation logic
         current_checkpoint = 0
         for i, checkpoint in enumerate(self.checkpoint_steps):
-            if num_updates <= checkpoint:
+            if num_updates < checkpoint:
                 current_checkpoint = i
                 break
 
