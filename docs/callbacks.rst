@@ -64,6 +64,9 @@ Implemented Callbacks
 .. autoclass:: LimitEvalStepsCallback
     :show-inheritance:
 
+.. autoclass:: WSDCheckpointCallback
+    :show-inheritance:
+
 
 Creating New Callbacks
 ========================

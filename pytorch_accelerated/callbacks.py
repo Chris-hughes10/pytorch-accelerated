@@ -719,12 +719,12 @@ class WSDCheckpointCallback(TrainerCallback):
     schedules and automatically syncs with :class:`~pytorch_accelerated.schedulers.wsd_scheduler.WSDLrScheduler` for checkpoint timing.
 
     For single checkpoint configurations:
-    - Pre-decay checkpoint is saved just before learning rate decay starts
-    - Post-decay checkpoint is saved at the end of training
+        - Pre-decay checkpoint is saved just before learning rate decay starts
+        - Post-decay checkpoint is saved at the end of training
 
     For multiple checkpoints:
-    - Pre-decay checkpoint saved before each decay phase
-    - Post-decay checkpoint saved after each decay phase
+        - Pre-decay checkpoint saved before each decay phase
+        - Post-decay checkpoint saved after each decay phase
 
     For WSD vs WSD-S:
         - WSD resumes from pre-decay checkpoints (discarding decay progress)
@@ -743,6 +743,11 @@ class WSDCheckpointCallback(TrainerCallback):
     :raises ValueError: If trainer's scheduler doesn't implement get_checkpoint_steps()
 
     Example:
+        No Checkpoint:
+            >>> callback = WSDCheckpointCallback(
+            ...     save_dir="checkpoints",
+            ... )
+
         WSD-S usage:
             >>> callback = WSDCheckpointCallback(
             ...     save_dir="checkpoints",

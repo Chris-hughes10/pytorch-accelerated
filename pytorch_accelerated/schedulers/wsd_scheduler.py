@@ -10,24 +10,24 @@ from pytorch_accelerated.trainer import TrainerPlaceholderValues
 class WSDLrScheduler(StatefulSchedulerBase):
     """
     Implements the Warmup-Stable-Decay (WSD) Simplified learning rate schedule as described in 
-    'Understanding Warmup-Stable-Decay Learning Rates: A River Valley Loss Landscape Perspective'.
+    `Understanding Warmup-Stable-Decay Learning Rates: A River Valley Loss Landscape Perspective <https://arxiv.org/abs/2410.05192>`_.
 
     The schedule has three phases:
-    1. Warmup: Linear warmup from warmup_starting_lr to base learning rate
-    2. Stable: Maintains constant high learning rate
-    3. Decay: Rapidly decays learning rate before each checkpoint
+        1. Warmup: Linear warmup from warmup_starting_lr to base learning rate
+        2. Stable: Maintains constant high learning rate
+        3. Decay: Rapidly decays learning rate before each checkpoint
 
     This scheduler is designed to create intermediate model checkpoints during training. Each checkpoint
     involves decaying the learning rate to get better model performance.
 
     Use multiple checkpoints (typically 2-3) if:
-    - Training on large datasets (>100B tokens) where intermediate models are useful for development/testing
-    - You want to evaluate model performance vs training data size (e.g., does your model need full training?)
-    - You might need to continue training later but want flexibility about when to stop training
+        - Training on large datasets (>100B tokens) where intermediate models are useful for development/testing
+        - You want to evaluate model performance vs training data size (e.g., does your model need full training?)
+        - You might need to continue training later but want flexibility about when to stop training
         
     The scheduler uses geometric progression to space checkpoints evenly on a log scale:
-    - First checkpoint is placed at 25% of total steps
-    - Each subsequent checkpoint is ~2x steps from previous checkpoint
+        - First checkpoint is placed at 25% of total steps
+        - Each subsequent checkpoint is ~2x steps from previous checkpoint
 
     Examples:
           - 2 checkpoints for 100K steps: [50K, 100K]
@@ -35,39 +35,39 @@ class WSDLrScheduler(StatefulSchedulerBase):
           - 4 checkpoints for 200K steps: [25K, 50K, 100K, 200K]
 
     For each checkpoint:
-    - The stable phase continues until decay_phase_ratio portion of steps remain
-    - Then learning rate decays to lr_min * base_lr using selected decay formula
+        - The stable phase continues until decay_phase_ratio portion of steps remain
+        - Then learning rate decays to lr_min * base_lr using selected decay formula
 
     Two decay formulas are provided:
 
     1. Inverse Proportional Decay (paper's formula):
         lr = 1 / (t * (1/lr_min - 1) + 1)
-        - Derived from theoretical analysis on quadratic functions
-        - Steeper initial decay, more gradual approach to lr_min
-        - Optimal for quadratic loss landscapes
+            - Derived from theoretical analysis on quadratic functions
+            - Steeper initial decay, more gradual approach to lr_min
+            - Optimal for quadratic loss landscapes
     
     2. Sqrt Decay:
         lr = lr_min + (1 - lr_min) * (1 - sqrt(t))
-        - Similar to traditional cosine decay patterns
-        - More gradual initial decay, consistent decay rate
-        - May be more robust across different architectures
+            - Similar to traditional cosine decay patterns
+            - More gradual initial decay, consistent decay rate
+            - May be more robust across different architectures
 
     Continuation Behavior:
-    - Training can be continued from a pre-decay (WSD) or post-decay (WSD-S) checkpoint
-    - When continuing, scheduler starts a fresh stable phase with new total_steps
-    - Decay phase ratio applies to new training length
-    - No warmup is applied during continuation
-    - State must be loaded via load_state_dict for continuation to work
+        - Training can be continued from a pre-decay (WSD) or post-decay (WSD-S) checkpoint
+        - When continuing, scheduler starts a fresh stable phase with new total_steps
+        - Decay phase ratio applies to new training length
+        - No warmup is applied during continuation
+        - State must be loaded via load_state_dict for continuation to work
 
     Example:
         Initial run (1000 steps, 0.1 decay ratio):
-        - Steps 0-50: Optional warmup
-        - Steps 50-900: Stable high learning rate
-        - Steps 900-1000: Decay to lr_min
+            - Steps 0-50: Optional warmup
+            - Steps 50-900: Stable high learning rate
+            - Steps 900-1000: Decay to lr_min
 
         Continuation (500 new steps, 0.1 decay ratio):
-        - Steps 0-450: Stable high learning rate
-        - Steps 450-500: Decay to lr_min
+            - Steps 0-450: Stable high learning rate
+            - Steps 450-500: Decay to lr_min
 
     .. Note:: This scheduler is designed to be used with the :class:`~pytorch_accelerated.callbacks.WSDCheckpointCallback` class,
         which handles saving and loading checkpoints.
