@@ -47,6 +47,14 @@ class DummyTrainer(Trainer):
         pass
 
 
+class DummyDataloader:
+    def __init__(self, length):
+        self._length = length
+
+    def __len__(self):
+        return self._length
+
+
 class SimpleModel(nn.Module):
     def __init__(self, input_size, output_size):
         super().__init__()
@@ -254,3 +262,38 @@ def test_check_eval_batch_size_warns_padding_is_needed():
 
     with pytest.warns(UserWarning):
         trainer._check_eval_batch_size()
+
+def test_run_config_per_process():
+    # Simulate a scenario where each GPU gets 1250 samples,
+    # resulting in 20 batches per epoch when using a per-device batch size of 64.
+    # With 300 epochs, max_num_train_steps should be 300 * 20 = 6000.
+    dummy_train_dl = DummyDataloader(20)
+    trainer = Trainer(model=Mock(), optimizer=Mock(), loss_func=Mock())
+    
+    # Replace the accelerator with a dummy that has the necessary attributes.
+    dummy_accelerator = Mock()
+    dummy_accelerator.num_processes = 4
+    dummy_accelerator.is_main_process = True
+    dummy_accelerator.is_local_main_process = True
+    dummy_accelerator.optimizer_step_was_skipped = False
+    trainer._accelerator = dummy_accelerator
+    
+    # Manually assign the dummy dataloader.
+    trainer._train_dataloader = dummy_train_dl
+    trainer._train_dl_kwargs = {"batch_size": 64}
+    
+    # Create a run config without passing max_num_train_steps explicitly.
+    run_config = trainer._create_run_config(
+        per_device_batch_size=64,
+        num_epochs=300,
+        gradient_accumulation_steps=1,
+        max_num_train_steps=None,
+        gradient_clip_value=None,
+    )
+    
+    # There are 20 update steps per epoch per process.
+    assert run_config.num_update_steps_per_epoch == 20, f"Expected 20 update steps, got {run_config.num_update_steps_per_epoch}"
+    # Total max updates per process should be 300 epochs * 20 = 6000.
+    assert run_config.max_num_train_steps == 6000, f"Expected 6000 max steps, got {run_config.max_num_train_steps}"
+    # The number of epochs should remain 300.
+    assert run_config.num_epochs == 300, f"Expected 300 epochs, got {run_config.num_epochs}"
