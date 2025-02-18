@@ -160,7 +160,7 @@ def test_wsd_continuation_info_consistency():
         optimizer,
         total_steps=continue_steps,
         num_checkpoints=3,
-        is_continuation_from_pre_decay=True,
+        is_continuation_from_checkpoint=True,
         decay_phase_ratio=0.1,
     )
     continued_scheduler.load_state_dict(scheduler_state)
@@ -566,7 +566,7 @@ def test_wsd_pre_decay_continuation():
     # Continue with new shorter training run
     continue_steps = 50  # New total steps
     continued_scheduler = WSDLrScheduler(
-        optimizer, total_steps=continue_steps, is_continuation_from_pre_decay=True
+        optimizer, total_steps=continue_steps, is_continuation_from_checkpoint=True
     )
     continued_scheduler.load_state_dict(scheduler_state)
 
@@ -631,7 +631,7 @@ def test_wsd_pre_decay_continuation_multiple_checkpoints():
         optimizer,
         total_steps=continue_steps,
         num_checkpoints=3,
-        is_continuation_from_pre_decay=True,
+        is_continuation_from_checkpoint=True,
         decay_phase_ratio=0.1,
     )
     continued_scheduler.load_state_dict(scheduler_state)
@@ -708,7 +708,7 @@ def test_wsd_continuation_validation():
 
     # Create scheduler in continuation mode without state
     scheduler = WSDLrScheduler(
-        optimizer, total_steps=num_steps, is_continuation_from_pre_decay=True
+        optimizer, total_steps=num_steps, is_continuation_from_checkpoint=True
     )
 
     # Should raise when trying to get lr values without state
@@ -742,7 +742,7 @@ def test_wsd_continuation_validation():
 
     # Create scheduler in continuation mode
     scheduler = WSDLrScheduler(
-        optimizer, total_steps=num_steps, is_continuation_from_pre_decay=True
+        optimizer, total_steps=num_steps, is_continuation_from_checkpoint=True
     )
 
     # Should raise error when getting lr values without state loaded
@@ -809,7 +809,7 @@ def test_wsd_continuation_state():
         optimizer,
         total_steps=500,  # Different steps
         decay_phase_ratio=0.2,  # Different ratio
-        is_continuation_from_pre_decay=True,
+        is_continuation_from_checkpoint=True,
     )
 
     # Load state and verify it preserves original values

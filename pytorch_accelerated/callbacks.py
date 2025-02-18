@@ -799,33 +799,20 @@ class WSDCheckpointCallback(TrainerCallback):
         if total_steps == self.last_checkpoint_step:
             return
 
-        # Calculate decay phase boundaries
-        decay_steps = int(total_steps * self.decay_fraction)
-        steps_into_decay = total_steps % decay_steps
-        steps_remaining = decay_steps - steps_into_decay
+        phase_info = trainer.scheduler.get_phase_info(total_steps)
+        pre_decay_step = phase_info["pre_decay_step"]
+        period_end = phase_info["period_end"]
 
-        # If we're at the last step before decay phase starts
-        if steps_remaining == decay_steps:
+        # If we're at the pre-decay ("last stable") step
+        if total_steps == pre_decay_step:
             trainer.print(f"\nEntering decay phase at step {total_steps}")
             self._save_checkpoint(trainer, total_steps, "wsd_pre_decay")
             self.last_checkpoint_step = total_steps
             trainer.print(f"\nSaved pre-decay checkpoint at step {total_steps}")
             return
 
-        # If we've completed the decay phase
-        if steps_remaining == 0:
+        # If we've completed the decay phase (i.e. at the checkpoint)
+        if total_steps == period_end:
             self._save_checkpoint(trainer, total_steps, "wsd_post_decay")
             self.last_checkpoint_step = total_steps
             trainer.print(f"\nSaved post-decay checkpoint at step {total_steps}")
-
-    def state_dict(self):
-        """Save callback state for checkpointing"""
-        return {
-            "last_checkpoint_step": self.last_checkpoint_step,
-            "checkpoint_steps": self.checkpoint_steps,
-            "decay_fraction": self.decay_fraction,
-        }
-
-    def load_state_dict(self, state_dict: dict):
-        """Restore callback state from checkpoint"""
-        self.__dict__.update(state_dict)
