@@ -713,10 +713,39 @@ class LimitEvalStepsCallback(TrainerCallback):
 
 
 class WSDCheckpointCallback(TrainerCallback):
-    """
-    Handles checkpointing for WSD-S schedule.
-    Saves checkpoints after each decay phase and manages resumption.
-    Automatically syncs with WSDLrScheduler if present.
+    """Manages checkpointing for WSD and WSD-S learning rate schedules.
+
+    This callback saves checkpoints at key points during training with WSD-style
+    schedules and automatically syncs with :class:`~pytorch_accelerated.schedulers.wsd_scheduler.WSDLrScheduler` for checkpoint timing.
+
+    For WSD vs WSD-S:
+        - WSD resumes from pre-decay checkpoints (discarding decay progress)
+        - WSD-S resumes from post-decay checkpoints (preserving decay progress)
+
+    :param save_dir: Directory to save checkpoints
+    :type save_dir: str
+    :param save_optimizer: Whether to save optimizer state
+    :type save_optimizer: bool
+    :param save_scheduler: Whether to save scheduler state
+    :type save_scheduler: bool
+    :param initial_checkpoint: Path to checkpoint to load at start of training. For WSD-S,
+        use post-decay checkpoint. For WSD, use pre-decay checkpoint.
+    :type initial_checkpoint: Union[str, Path], optional
+
+    :raises ValueError: If trainer's scheduler doesn't implement get_checkpoint_steps()
+
+    Example:
+        WSD-S usage:
+            >>> callback = WSDCheckpointCallback(
+            ...     save_dir="checkpoints",
+            ...     initial_checkpoint="checkpoint_50000_post_decay.pt"
+            ... )
+
+        WSD usage:
+            >>> callback = WSDCheckpointCallback(
+            ...     save_dir="checkpoints",
+            ...     initial_checkpoint="checkpoint_45000_pre_decay.pt"
+            ... )
     """
 
     def __init__(

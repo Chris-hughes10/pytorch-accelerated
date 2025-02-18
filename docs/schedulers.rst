@@ -16,6 +16,12 @@ Implemented Schedulers
 
     .. automethod:: __init__
 
+.. autoclass:: pytorch_accelerated.schedulers.wsd_scheduler.WSDLrScheduler
+    :show-inheritance:
+    :members:
+
+    .. automethod:: __init__
+
 
 Base Schedulers
 =======================

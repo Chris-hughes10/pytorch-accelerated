@@ -247,7 +247,7 @@ def test_wsd_warmup():
     - Group 2: 0.002
     """
     num_steps = 1000
-    num_warmup_steps = 100
+    num_warmup_steps = int(num_steps * 0.1)
     lr_1_max = 0.01
     lr_2_max = 0.002
     warmup_lr = 1e-6
@@ -256,13 +256,14 @@ def test_wsd_warmup():
     scheduler = WSDLrScheduler(
         optimizer,
         total_steps=num_steps,
+        num_warmup_steps=None
         num_checkpoints=2,
-        num_warmup_steps=num_warmup_steps,
         warmup_starting_lr=warmup_lr,
     )
     group_1_lrs, group_2_lrs = collect_lrs_for_scheduler(scheduler, num_steps)
 
     # Check warmup start and end
+    assert scheduler.num_warmup_steps == num_warmup_steps
     assert group_1_lrs[0] == warmup_lr
     assert group_2_lrs[0] == warmup_lr
     assert group_1_lrs[num_warmup_steps] == lr_1_max
@@ -735,21 +736,21 @@ def test_wsd_continuation_validation():
 
 
 def test_wsd_continuation_validation():
-    """Test proper validation when attempting continuation without state"""
+    """Test that continuation from a checkpoint always starts in a stable phase."""
     num_steps = 1000
     lr_max = 0.01
     model, optimizer = create_model_and_optimizer(lr_max, lr_max)
 
-    # Create scheduler in continuation mode
+    # Create scheduler in continuation mode without state.
     scheduler = WSDLrScheduler(
         optimizer, total_steps=num_steps, is_continuation_from_checkpoint=True
     )
 
-    # Should raise error when getting lr values without state loaded
-    with pytest.raises(ValueError, match="no previous checkpoint step found"):
-        scheduler.get_updated_values(0)
+    # With the new behavior, calling get_updated_values now returns the base lr instead of raising an error.
+    updated_lrs = scheduler.get_updated_values(0)
+    assert updated_lrs == scheduler.base_lr_values
 
-    # Create valid state dictionary with all required fields
+    # Create a valid state dictionary (even if it has a previous_checkpoint_step, we ignore it).
     valid_state = {
         "total_steps": num_steps,
         "num_warmup_steps": 0,
@@ -758,7 +759,7 @@ def test_wsd_continuation_validation():
         "warmup_starting_lr": 1e-6,
         "use_inverse_sqrt_decay": True,
         "num_checkpoints": 2,
-        "is_continuation_from_pre_decay": True,
+        "is_continuation_from_checkpoint": True,
         "previous_checkpoint_step": 500,
         "checkpoint_steps": [250, 500, 750, 1000],
         "checkpoint_decay_info": [
@@ -776,12 +777,10 @@ def test_wsd_continuation_validation():
             },
         ],
     }
-
-    # Load the complete state
     scheduler.load_state_dict(valid_state)
-
-    # Should now work without error
-    scheduler.get_updated_values(0)
+    # Should now return base lr (stable phase) at step 0.
+    updated_lrs = scheduler.get_updated_values(0)
+    assert updated_lrs == scheduler.base_lr_values
 
 
 def test_wsd_continuation_state():
@@ -814,7 +813,7 @@ def test_wsd_continuation_state():
 
     # Load state and verify it preserves original values
     continued_scheduler.load_state_dict(state)
-    assert continued_scheduler.previous_checkpoint_step == pre_decay_step
+    assert continued_scheduler.previous_checkpoint_step is None  # Should not restore
     assert continued_scheduler.total_steps == 500  # Should keep new training length
     assert (
         continued_scheduler.decay_phase_ratio == state["decay_phase_ratio"]

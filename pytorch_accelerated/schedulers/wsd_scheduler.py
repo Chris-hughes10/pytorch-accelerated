@@ -1,4 +1,4 @@
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Callable, List
 from pytorch_accelerated.schedulers.scheduler_base import StatefulSchedulerBase
 import torch
@@ -17,12 +17,34 @@ class WSDLrScheduler(StatefulSchedulerBase):
     2. Stable: Maintains constant high learning rate
     3. Decay: Rapidly decays learning rate before each checkpoint
 
-    Checkpoints are spaced using geometric progression (e.g., 50B, 100B, 200B tokens).
+    This scheduler is designed to create intermediate model checkpoints during training. Each checkpoint
+    involves decaying the learning rate to get better model performance.
+
+    Selecting num_checkpoints:
+    - Use 1 checkpoint if you only want the final trained model
+    - Use multiple checkpoints (typically 2-3) if:
+        * Training on large datasets (>100B tokens) where intermediate models
+        are useful for development/testing
+        * You want to evaluate model performance vs training data size
+        (e.g., does your model need full training?)
+        * You might need to continue training later but want flexibility
+        about when to stop
+
+
+    The scheduler uses geometric progression to space checkpoints evenly on a log scale:
+    - First checkpoint is placed at 25% of total steps
+    - Each subsequent checkpoint is ~2x steps from previous
+
+        Examples:
+          - 2 checkpoints for 100K steps: [50K, 100K]
+          - 3 checkpoints for 200K steps: [50K, 100K, 200K]
+          - 4 checkpoints for 200K steps: [25K, 50K, 100K, 200K]
+
     For each checkpoint:
     - The stable phase continues until decay_phase_ratio portion of steps remain
     - Then learning rate decays to lr_min * base_lr using selected decay formula
 
-      Two decay formulas are provided:
+    Two decay formulas are provided:
 
     1. Inverse Proportional Decay (paper's formula):
         lr = 1 / (t * (1/lr_min - 1) + 1)
@@ -52,18 +74,23 @@ class WSDLrScheduler(StatefulSchedulerBase):
         Continuation (500 new steps, 0.1 decay ratio):
         - Steps 0-450: Stable high learning rate
         - Steps 450-500: Decay
+
+    .. Note:: This scheduler is designed to be used with the :class:`~pytorch_accelerated.callbacks.WSDCheckpointCallback` class,
+    which handles saving and loading checkpoints.
     """
 
     def __init__(
         self,
         optimizer: torch.optim.Optimizer,
-        total_steps: int,
+        num_epochs: int = None,
+        num_update_steps_per_epoch: int = None,
+        total_steps: int = None,
         num_warmup_steps: int = 0,
         decay_phase_ratio: float = 0.1,
         lr_min: float = 1e-6,
         warmup_starting_lr: float = 1e-6,
         use_inverse_sqrt_decay: bool = True,
-        num_checkpoints: int = 3,
+        num_checkpoints: int = 1,
         is_continuation_from_checkpoint: bool = False,
     ):
         """
@@ -72,7 +99,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
 
         :param optimizer: PyTorch optimizer
         :param total_steps: Total number of training steps
-        :param num_warmup_steps: Number of warmup steps
+        :param num_warmup_steps: Number of warmup steps. If None is passed, this will be set to 10% of the total steps
         :param decay_phase_ratio: Fraction of steps to use for decay before each checkpoint
         :param lr_min: The minimum learning rate as a fraction of the base learning rate. For example, 0.1 means decay to 10% of the base learning rate.
         :param warmup_starting_lr: Starting learning rate for warmup
@@ -81,7 +108,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
         :param is_continuation_from_checkpoint: If True, indicates this is a continuation run from a previous checkpoint. The scheduler will start a fresh stable phase with new total_steps.
 
         .. Note::
-         For continuation training:
+         For continuation of training:
             - State must be loaded via load_state_dict before training
             - New training segment starts fresh stable phase
             - Decay ratio applies to new total_steps
@@ -89,14 +116,25 @@ class WSDLrScheduler(StatefulSchedulerBase):
         """
         super().__init__(optimizer)
 
+        if (
+            num_epochs is not None
+            and num_update_steps_per_epoch is not None
+            and total_steps is not None
+        ):
+            raise ValueError(
+                "Only num_epochs and num_update_steps_per_epoch, or total_steps should be provided"
+            )
+
+        if num_epochs is not None and num_update_steps_per_epoch is not None:
+            total_steps = num_epochs * num_update_steps_per_epoch
+
         assert total_steps > 0, "total_steps must be positive"
         assert 0 <= decay_phase_ratio <= 1, "decay_fraction must be between 0 and 1"
         assert lr_min >= 0, "lr_min must be non-negative"
         assert num_checkpoints > 0, "num_checkpoints must be positive"
-        assert num_warmup_steps >= 0, "num_warmup_steps must be non-negative"
-        assert (
-            num_warmup_steps <= total_steps
-        ), "num_warmup_steps cannot exceed total_steps"
+
+        if num_warmup_steps is None:
+            num_warmup_steps = int(0.01 * total_steps)
 
         self.total_steps = total_steps
         self.num_warmup_steps = num_warmup_steps
@@ -226,14 +264,6 @@ class WSDLrScheduler(StatefulSchedulerBase):
         return period_length, steps_into_period
 
     def get_updated_values(self, num_updates: int):
-        if (
-            self.is_continuation_from_checkpoint
-            and self.previous_checkpoint_step is None
-        ):
-            raise ValueError(
-                "no previous checkpoint step found - state must be loaded before continuing training"
-            )
-
         # Handle warmup phase - but skip warmup in continuation
         if (
             not self.is_continuation_from_checkpoint
@@ -314,8 +344,9 @@ class WSDLrScheduler(StatefulSchedulerBase):
             self.__dict__.update(state_dict)
             self.total_steps = new_total_steps  # Restore new training length
 
-            # Reset internal counters for fresh start
+            # Reset internal counters for a fresh stable phase
             self._step_count = 0  # Start counting from 0 for new training run
+            # Clear any previous checkpoint state so we start in stable phase
             self.previous_checkpoint_step = None
             self.checkpoint_steps = estimate_checkpoint_steps(
                 self.total_steps, self.num_checkpoints
@@ -332,11 +363,12 @@ class WSDLrScheduler(StatefulSchedulerBase):
         cls,
         total_num_epochs: int = TrainerPlaceholderValues.NUM_EPOCHS,
         num_update_steps_per_epoch: int = TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
+        num_warmup_steps: int = None,
         decay_phase_ratio: float = 0.1,
         lr_min: float = 1e-6,
         warmup_starting_lr: float = 1e-6,
         use_inverse_sqrt_decay: bool = True,
-        num_checkpoints: int = 3,
+        num_checkpoints: int = 1,
     ) -> Callable:
         """Creates a scheduler function that the trainer can use.
 
@@ -344,22 +376,17 @@ class WSDLrScheduler(StatefulSchedulerBase):
         The trainer will replace TrainerPlaceholderValues with actual values at runtime.
         """
 
-        def create_scheduler(optimizer):
-            total_steps = total_num_epochs * num_update_steps_per_epoch
-            num_warmup_steps = int(0.01 * total_steps)
-
-            return cls(
-                optimizer=optimizer,
-                total_steps=total_steps,
-                num_warmup_steps=num_warmup_steps,
-                decay_phase_ratio=decay_phase_ratio,
-                lr_min=lr_min,
-                warmup_starting_lr=warmup_starting_lr,
-                use_inverse_sqrt_decay=use_inverse_sqrt_decay,
-                num_checkpoints=num_checkpoints,
-            )
-
-        return create_scheduler
+        return partial(
+            cls,
+            num_epochs=total_num_epochs,
+            num_update_steps_per_epoch=num_update_steps_per_epoch,
+            num_warmup_steps=num_warmup_steps,
+            decay_phase_ratio=decay_phase_ratio,
+            lr_min=lr_min,
+            warmup_starting_lr=warmup_starting_lr,
+            use_inverse_sqrt_decay=use_inverse_sqrt_decay,
+            num_checkpoints=num_checkpoints,
+        )
 
 
 def estimate_checkpoint_steps(total_steps: int, num_checkpoints: int = 3) -> List[int]:
@@ -367,13 +394,12 @@ def estimate_checkpoint_steps(total_steps: int, num_checkpoints: int = 3) -> Lis
     Estimates reasonable checkpoint steps given total training steps.
     Uses a geometric progression similar to paper's 50B->100B->200B pattern.
 
-    Args:
-        total_steps: Total number of training steps
-        num_checkpoints: Number of checkpoints desired
+    :param total_steps: Total number of training steps
+    :param num_checkpoints: Number of checkpoints desired
     """
     if num_checkpoints == 1:
         # Single checkpoint case - put checkpoint at end
-        return [total_steps]
+        return set(total_steps)
 
     # Multiple checkpoint case - use geometric progression
     # First checkpoint at ~25% of total steps
@@ -386,4 +412,4 @@ def estimate_checkpoint_steps(total_steps: int, num_checkpoints: int = 3) -> Lis
         if checkpoint == total_steps:
             break
 
-    return checkpoints
+    return set(checkpoints)
