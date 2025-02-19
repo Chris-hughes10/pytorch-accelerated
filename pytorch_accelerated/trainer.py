@@ -640,14 +640,17 @@ class Trainer:
 
         if self._train_dataloader is not None:
             local_batches = len(self._train_dataloader)
+            total_batches = local_batches * self._accelerator.num_processes
             num_update_steps_per_epoch = math.ceil(
-                local_batches / gradient_accumulation_steps
+                total_batches / gradient_accumulation_steps
             )
+
         else:
             num_update_steps_per_epoch = 0
 
         if max_num_train_steps is None:
-            max_num_train_steps = num_epochs * num_update_steps_per_epoch
+            # Add 1 to ensure we don't stop early due to rounding
+            max_num_train_steps = (num_epochs * num_update_steps_per_epoch) + 1
         else:
             num_epochs = math.ceil(max_num_train_steps / num_update_steps_per_epoch)
 
@@ -749,11 +752,11 @@ class Trainer:
                 )
                 break
 
-            # if reached_max_steps:
-            #     self.print(
-            #         f"Reached max number of training steps {self.run_config.max_num_train_steps} in epoch {epoch + 1}"
-            #     )
-            #     break
+            if reached_max_steps:
+                self.print(
+                    f"Reached max number of training steps {self.run_config.max_num_train_steps} in epoch {epoch + 1}"
+                )
+                break
 
         self.training_run_end()
         self.callback_handler.call_event(
