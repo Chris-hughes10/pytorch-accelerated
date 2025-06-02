@@ -397,7 +397,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
 
         if num_warmup_epochs is not None:
             num_warmup_steps = (
-                TrainerPlaceholderValues.NUM_LOCAL_UPDATE_STEPS_PER_EPOCH
+                TrainerPlaceholderValues.PER_PROCESS_NUM_UPDATE_STEPS_PER_EPOCH
                 * num_warmup_epochs
             )
         else:
