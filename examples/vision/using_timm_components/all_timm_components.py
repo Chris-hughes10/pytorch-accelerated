@@ -36,7 +36,7 @@ class TimmTrainer(Trainer):
             dataset=self.train_dataset,
             collate_fn=self.collate_fn,
             batch_size=batch_size,
-            **train_dl_kwargs
+            **train_dl_kwargs,
         )
 
     def create_eval_dataloader(self, batch_size: int, eval_dl_kwargs: dict = None):
@@ -44,7 +44,7 @@ class TimmTrainer(Trainer):
             dataset=self.eval_dataset,
             collate_fn=self.collate_fn,
             batch_size=batch_size,
-            **eval_dl_kwargs
+            **eval_dl_kwargs,
         )
 
     def train_epoch_start(self):

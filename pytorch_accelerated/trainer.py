@@ -61,6 +61,9 @@ class TrainerPlaceholderValues(Enum):
 
     NUM_EPOCHS = "trainer.run_config.num_epochs"
     NUM_UPDATE_STEPS_PER_EPOCH = "trainer.run_config.num_update_steps_per_epoch"
+    PER_PROCESS_NUM_UPDATE_STEPS_PER_EPOCH = (
+        "trainer.run_config.num_local_update_steps_per_epoch"
+    )
     TRAIN_DATALOADER_LEN = "len(trainer._train_dataloader)"
     EVAL_DATALOADER_LEN = "len(trainer._eval_dataloader)"
 
@@ -425,7 +428,7 @@ class Trainer:
         :param num_epochs: the number of epochs to train for
         :param eval_dataset: the dataset to use during evaluation epochs, if this is not provided, evaluation is skipped.
         :param per_device_batch_size: the batch size to use per device
-        :param max_num_train_steps: the maximum number of steps, per process, to train for. If provided, this will override num_epochs
+        :param max_num_train_steps: the maximum number of steps across all processes to train for. If provided, this will override num_epochs
         :param gradient_accumulation_steps: accumulate gradients to the specified number of steps to simulate a bigger batch size. By default, this is set to ``1``
         :param gradient_clip_value: if specified, the gradients of the model's parameters will be clipped to the range ``[-gradient_clip_value, gradient_clip_value]``
         :param create_scheduler_fn: a function which accepts an optimizer as an argument and returns a learning rate scheduler
@@ -644,9 +647,13 @@ class Trainer:
             num_update_steps_per_epoch = math.ceil(
                 total_batches / gradient_accumulation_steps
             )
+            num_local_update_steps_per_epoch = math.ceil(
+                local_batches / gradient_accumulation_steps
+            )
 
         else:
             num_update_steps_per_epoch = 0
+            num_local_update_steps_per_epoch = 0
 
         if max_num_train_steps is None:
             # Add 1 to ensure we don't stop early due to rounding
@@ -667,6 +674,7 @@ class Trainer:
             "eval_total_batch_size": eval_per_device_batch_size
             * self._accelerator.num_processes,
             "num_update_steps_per_epoch": num_update_steps_per_epoch,
+            "num_local_update_steps_per_epoch": num_local_update_steps_per_epoch,
             "max_num_train_steps": max_num_train_steps,
             "is_local_process_zero": self._accelerator.is_local_main_process,
             "is_world_process_zero": self._accelerator.is_main_process,
@@ -800,7 +808,7 @@ class Trainer:
             self,
         )
 
-        updates_per_process = self.run_config.max_num_train_steps
+        max_total_update_steps = self.run_config.max_num_train_steps
 
         updates_completed = (
             self.run_history.current_epoch - 1
@@ -843,7 +851,7 @@ class Trainer:
 
                 if (
                     self.run_config.max_num_train_steps is not None
-                    and process_updates >= updates_per_process
+                    and process_updates >= max_total_update_steps
                 ):
                     reached_max_steps = True
                     # Synchronize reached_max_steps across processes

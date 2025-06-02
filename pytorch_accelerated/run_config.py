@@ -19,7 +19,8 @@ class TrainerRunConfig:
     :param train_total_batch_size: the total batch size used during training
     :param eval_total_batch_size: the total batch size used during evaluation
     :param num_update_steps_per_epoch: the number of steps per training epoch where the model's parameters will be updated
-    :param max_num_train_steps: the maximum number of steps to train for, if present, this will take precedence over ``num_epochs``
+    :param num_local_update_steps_per_epoch: the number of steps per training epoch where the model's parameters will be updated on each process
+    :param max_num_train_steps: the maximum number of steps across all update steps to train for, if present, this will take precedence over ``num_epochs``
     :param is_local_process_zero: ``True`` if the current process is the main process on the current node, ``False`` otherwise
     :param is_world_process_zero: ``True`` if the current process is the main process across all nodes, ``False`` otherwise
     :param is_distributed: ``True`` if the trainer is set up to perform distributed training, ``False`` otherwise
@@ -39,6 +40,7 @@ class TrainerRunConfig:
     train_total_batch_size: int
     eval_total_batch_size: int
     num_update_steps_per_epoch: int
+    num_local_update_steps_per_epoch: int
     max_num_train_steps: Union[int, None]
     is_local_process_zero: bool
     is_world_process_zero: bool

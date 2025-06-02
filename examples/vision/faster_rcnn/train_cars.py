@@ -20,7 +20,7 @@ from pytorch_accelerated.schedulers import CosineLrScheduler
 def load_cars_df(annotations_file_path, images_path):
     all_images = sorted(set([p.parts[-1] for p in images_path.iterdir()]))
     image_id_to_image = {i: im for i, im in enumerate(all_images)}
-    image_to_image_id = {v: k for k, v, in image_id_to_image.items()}
+    image_to_image_id = {v: k for k, v in image_id_to_image.items()}
 
     annotations_df = pd.read_csv(annotations_file_path)
     annotations_df.loc[:, "class_name"] = "car"
@@ -75,7 +75,7 @@ class DatasetAdaptor(Dataset):
             for idx, image_id in enumerate(self.annotations_df.image_id.unique())
         }
         self.image_id_to_image_idx = {
-            v: k for k, v, in self.image_idx_to_image_id.items()
+            v: k for k, v in self.image_idx_to_image_id.items()
         }
 
     def __len__(self) -> int:

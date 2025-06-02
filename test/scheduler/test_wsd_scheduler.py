@@ -49,9 +49,9 @@ def test_wsd_decay_info_multiple_checkpoints():
     decay_info = scheduler.get_decay_info()
     checkpoints = scheduler.get_checkpoint_steps()
 
-    assert len(decay_info) == len(
-        checkpoints
-    ), "Should have info for each checkpoint period"
+    assert len(decay_info) == len(checkpoints), (
+        "Should have info for each checkpoint period"
+    )
 
     # Verify each period's information
     for i, period in enumerate(decay_info):
@@ -60,28 +60,28 @@ def test_wsd_decay_info_multiple_checkpoints():
         period_length = period_end - period_start
         expected_decay_steps = int(period_length * 0.1)
 
-        assert (
-            period["period_start"] == period_start
-        ), f"Period {i} should start at checkpoint {i-1}"
-        assert (
-            period["period_end"] == period_end
-        ), f"Period {i} should end at checkpoint {i}"
-        assert (
-            period["decay_steps"] == expected_decay_steps
-        ), f"Period {i} should have correct decay steps"
-        assert (
-            period["pre_decay_step"] == period_end - expected_decay_steps
-        ), f"Period {i} should have correct pre-decay step"
+        assert period["period_start"] == period_start, (
+            f"Period {i} should start at checkpoint {i - 1}"
+        )
+        assert period["period_end"] == period_end, (
+            f"Period {i} should end at checkpoint {i}"
+        )
+        assert period["decay_steps"] == expected_decay_steps, (
+            f"Period {i} should have correct decay steps"
+        )
+        assert period["pre_decay_step"] == period_end - expected_decay_steps, (
+            f"Period {i} should have correct pre-decay step"
+        )
 
         # Verify decay points are properly spaced
         if i > 0:
             prev_period = decay_info[i - 1]
-            assert (
-                prev_period["period_end"] == period["period_start"]
-            ), f"Period {i} should start where period {i-1} ends"
-            assert (
-                prev_period["period_end"] < period["pre_decay_step"]
-            ), f"Decay phases should not overlap between periods {i-1} and {i}"
+            assert prev_period["period_end"] == period["period_start"], (
+                f"Period {i} should start where period {i - 1} ends"
+            )
+            assert prev_period["period_end"] < period["pre_decay_step"], (
+                f"Decay phases should not overlap between periods {i - 1} and {i}"
+            )
 
 
 def test_wsd_info_consistency():
@@ -182,12 +182,12 @@ def test_wsd_continuation_info_consistency():
         expected_total_steps = period["period_end"] - period["period_start"]
         expected_steps = step - period["period_start"]
 
-        assert (
-            total_period_steps == expected_total_steps
-        ), f"Period length mismatch at step {step}"
-        assert (
-            steps_into_period == expected_steps
-        ), f"Steps into period mismatch at step {step}"
+        assert total_period_steps == expected_total_steps, (
+            f"Period length mismatch at step {step}"
+        )
+        assert steps_into_period == expected_steps, (
+            f"Steps into period mismatch at step {step}"
+        )
 
         # Verify decay calculations match
         decay_steps_from_info = period["decay_steps"]
@@ -195,9 +195,9 @@ def test_wsd_continuation_info_consistency():
             total_period_steps * continued_scheduler.decay_phase_ratio
         )
 
-        assert (
-            decay_steps_from_info == decay_steps_from_checkpoint
-        ), f"Decay steps mismatch at step {step}"
+        assert decay_steps_from_info == decay_steps_from_checkpoint, (
+            f"Decay steps mismatch at step {step}"
+        )
 
 
 def test_wsd_stable_phase():
@@ -362,9 +362,9 @@ def test_wsd_decay():
 
         # Verify decay phase learning rates are monotonically decreasing
         decay_phase_lrs = group_1_lrs[decay_start : min(checkpoint, num_steps)]
-        assert all(
-            x >= y for x, y in zip(decay_phase_lrs, decay_phase_lrs[1:])
-        ), "Learning rates should be monotonically decreasing during decay"
+        assert all(x >= y for x, y in zip(decay_phase_lrs, decay_phase_lrs[1:])), (
+            "Learning rates should be monotonically decreasing during decay"
+        )
 
 
 def test_wsd_resume_from_checkpoint():
@@ -439,15 +439,15 @@ def test_wsd_decay_formulas(lr_max, lr_min_ratio):
     # Check minimum learning rate - multiply by base lr to get actual min
     expected_min_lr = lr_max * lr_min_ratio
     min_lr = min(lrs)
-    assert (
-        min_lr >= expected_min_lr
-    ), f"Learning rate {min_lr} went below minimum {expected_min_lr}"
+    assert min_lr >= expected_min_lr, (
+        f"Learning rate {min_lr} went below minimum {expected_min_lr}"
+    )
 
     # Verify monotonic decrease during decay
     decay_lrs = lrs[decay_start:first_checkpoint]
-    assert all(
-        x >= y for x, y in zip(decay_lrs, decay_lrs[1:])
-    ), "Learning rate should decrease monotonically during decay phase"
+    assert all(x >= y for x, y in zip(decay_lrs, decay_lrs[1:])), (
+        "Learning rate should decrease monotonically during decay phase"
+    )
 
 
 def test_wsd_invalid_configurations():
@@ -485,9 +485,9 @@ def test_wsd_checkpoint_spacing():
 
     # Verify geometric progression (approximately)
     ratios = [c2 / c1 for c1, c2 in zip(checkpoints[:-1], checkpoints[1:])]
-    assert all(
-        abs(r1 - r2) < 0.1 for r1, r2 in zip(ratios[:-1], ratios[1:])
-    ), "Checkpoint spacing should follow geometric progression"
+    assert all(abs(r1 - r2) < 0.1 for r1, r2 in zip(ratios[:-1], ratios[1:])), (
+        "Checkpoint spacing should follow geometric progression"
+    )
 
 
 def test_wsd_warmup_edge_cases():
@@ -591,14 +591,14 @@ def test_wsd_pre_decay_continuation():
 
     # Verify behavior
     # 1. Stable phase should maintain max lr
-    assert all(
-        lr == lr_max for lr in continued_lrs[:new_decay_start]
-    ), "Should maintain stable lr until new decay point"
+    assert all(lr == lr_max for lr in continued_lrs[:new_decay_start]), (
+        "Should maintain stable lr until new decay point"
+    )
 
     # 2. Should start decay at correct point
-    assert (
-        continued_lrs[new_decay_start + 1] < lr_max
-    ), "Should start decay at calculated point"
+    assert continued_lrs[new_decay_start + 1] < lr_max, (
+        "Should start decay at calculated point"
+    )
 
     # 3. Should reach minimum by end
     min_lr = lr_max * continued_scheduler.lr_min
@@ -663,15 +663,15 @@ def test_wsd_pre_decay_continuation_multiple_checkpoints():
             assert continued_lrs[0] == lr_max, "First period should start at max lr"
         else:
             # Later periods should transition smoothly from previous period
-            assert (
-                continued_lrs[period_start] == lr_max
-            ), f"Period {period_idx + 1} should start at max lr"
+            assert continued_lrs[period_start] == lr_max, (
+                f"Period {period_idx + 1} should start at max lr"
+            )
 
         # Verify stable phase
         stable_phase = continued_lrs[period_start:period_decay_start]
-        assert all(
-            abs(lr - lr_max) < 1e-10 for lr in stable_phase
-        ), f"Period {period_idx + 1} should maintain stable lr until decay. Found: {stable_phase}"
+        assert all(abs(lr - lr_max) < 1e-10 for lr in stable_phase), (
+            f"Period {period_idx + 1} should maintain stable lr until decay. Found: {stable_phase}"
+        )
 
         # 2. Verify decay phase
         if period_decay_start < len(continued_lrs):
@@ -683,22 +683,24 @@ def test_wsd_pre_decay_continuation_multiple_checkpoints():
                 assert all(
                     decay_phase[i] >= decay_phase[i + 1]
                     for i in range(len(decay_phase) - 1)
-                ), f"Period {period_idx + 1} decay phase should be monotonically decreasing"
+                ), (
+                    f"Period {period_idx + 1} decay phase should be monotonically decreasing"
+                )
 
     # Verify overall structure
     # 1. Learning rate never goes below minimum
     min_lr = lr_max * continued_scheduler.lr_min
-    assert all(
-        lr >= min_lr for lr in continued_lrs
-    ), f"Learning rate should never go below {min_lr}"
+    assert all(lr >= min_lr for lr in continued_lrs), (
+        f"Learning rate should never go below {min_lr}"
+    )
 
     # 2. Verify checkpoint spacing follows geometric progression
     ratios = [
         c2 / c1 for c1, c2 in zip(continued_checkpoints[:-1], continued_checkpoints[1:])
     ]
-    assert all(
-        abs(r1 - r2) < 0.1 for r1, r2 in zip(ratios[:-1], ratios[1:])
-    ), "Checkpoints should maintain geometric progression"
+    assert all(abs(r1 - r2) < 0.1 for r1, r2 in zip(ratios[:-1], ratios[1:])), (
+        "Checkpoints should maintain geometric progression"
+    )
 
 
 def test_wsd_continuation_validation():
@@ -821,17 +823,17 @@ def test_wsd_continuation_state():
 
     # Verify checkpoint behavior after continuation
     continued_checkpoints = continued_scheduler.get_checkpoint_steps()
-    assert (
-        len(continued_checkpoints) == state["num_checkpoints"]
-    ), "Should maintain same number of checkpoints"
+    assert len(continued_checkpoints) == state["num_checkpoints"], (
+        "Should maintain same number of checkpoints"
+    )
 
     # Verify checkpoints are properly spaced for new length
     ratios = [
         c2 / c1 for c1, c2 in zip(continued_checkpoints[:-1], continued_checkpoints[1:])
     ]
-    assert all(
-        abs(r1 - r2) < 0.1 for r1, r2 in zip(ratios[:-1], ratios[1:])
-    ), "Continued checkpoints should maintain geometric progression"
+    assert all(abs(r1 - r2) < 0.1 for r1, r2 in zip(ratios[:-1], ratios[1:])), (
+        "Continued checkpoints should maintain geometric progression"
+    )
 
 
 def test_phase_transitions():
@@ -878,9 +880,9 @@ def test_phase_transitions():
 
         assert abs(stable_end_lr - lr_max) < 1e-4, "Should maintain max lr until decay"
         assert abs(decay_start_lr - lr_max) < 1e-4, "Decay start point should be max lr"
-        assert (
-            one_step_into_decay < lr_max
-        ), "Should decrease one step after decay starts"
+        assert one_step_into_decay < lr_max, (
+            "Should decrease one step after decay starts"
+        )
 
     # 3. Test checkpoint period transitions
     for i in range(len(checkpoints) - 1):
@@ -902,6 +904,6 @@ def test_phase_transitions():
     # 4. Test approach to final minimum lr
     final_lr = group_1_lrs[-1]
     target_min_lr = lr_max * lr_min
-    assert (
-        abs(final_lr - target_min_lr) / target_min_lr < 0.1
-    ), "Should approach target minimum lr"
+    assert abs(final_lr - target_min_lr) / target_min_lr < 0.1, (
+        "Should approach target minimum lr"
+    )

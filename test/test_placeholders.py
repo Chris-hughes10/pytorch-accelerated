@@ -41,6 +41,7 @@ def create_run_config(
         mixed_precision="fp16",
         num_processes=1,
         num_update_steps_per_epoch=num_update_steps_per_epoch,
+        num_local_update_steps_per_epoch=num_update_steps_per_epoch / num_processes,
     )
 
 
