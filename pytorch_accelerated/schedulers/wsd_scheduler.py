@@ -93,8 +93,10 @@ class WSDLrScheduler(StatefulSchedulerBase):
         groups.
 
         :param optimizer: PyTorch optimizer
-        :param total_steps: Total number of training steps
+        :param num_epochs: Total number of training epochs
+        :param num_update_steps_per_epoch: The number of update steps per epoch per process
         :param num_warmup_steps: Number of warmup steps. If None is passed, this will be set to 10% of the total steps
+        :param total_steps: Total number of training steps per process
         :param decay_phase_ratio: Fraction of steps to use for decay before each checkpoint
         :param lr_min: The minimum learning rate as a fraction of the base learning rate. For example, 0.1 means decay to 1% of the base learning rate.
         :param warmup_starting_lr: Starting learning rate for warmup
@@ -357,8 +359,8 @@ class WSDLrScheduler(StatefulSchedulerBase):
     def create_scheduler_fn(
         cls,
         total_num_epochs: int = TrainerPlaceholderValues.NUM_EPOCHS,
-        num_update_steps_per_epoch: int = TrainerPlaceholderValues.NUM_UPDATE_STEPS_PER_EPOCH,
-        num_warmup_steps: int = None,
+        num_update_steps_per_epoch: int = TrainerPlaceholderValues.PER_PROCESS_NUM_UPDATE_STEPS_PER_EPOCH,
+        num_warmup_epochs: int = None,
         decay_phase_ratio: float = 0.1,
         lr_min: float = 1e-6,
         warmup_starting_lr: float = 1e-6,
@@ -390,7 +392,16 @@ class WSDLrScheduler(StatefulSchedulerBase):
 
         By default, the ``total_num_epochs`` and ``num_iterations_per_epoch`` arguments will be set by the
         :class:`~pytorch_accelerated.trainer.Trainer` with the correct values at runtime.
+        if the number of warmup epochs is not set, this will be set to 10% of the total steps
         """
+
+        if num_warmup_epochs is not None:
+            num_warmup_steps = (
+                TrainerPlaceholderValues.PER_PROCESS_NUM_UPDATE_STEPS_PER_EPOCH
+                * num_warmup_epochs
+            )
+        else:
+            num_warmup_steps = None
 
         return partial(
             cls,
