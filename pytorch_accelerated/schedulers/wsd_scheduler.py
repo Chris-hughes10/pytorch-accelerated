@@ -359,7 +359,7 @@ class WSDLrScheduler(StatefulSchedulerBase):
     def create_scheduler_fn(
         cls,
         total_num_epochs: int = TrainerPlaceholderValues.NUM_EPOCHS,
-        num_update_steps_per_epoch: int = TrainerPlaceholderValues.NUM_LOCAL_UPDATE_STEPS_PER_EPOCH,
+        num_update_steps_per_epoch: int = TrainerPlaceholderValues.PER_PROCESS_NUM_UPDATE_STEPS_PER_EPOCH,
         num_warmup_epochs: int = None,
         decay_phase_ratio: float = 0.1,
         lr_min: float = 1e-6,

@@ -808,6 +808,7 @@ class Trainer:
             self,
         )
 
+        # updates across all processes
         max_total_update_steps = self.run_config.max_num_train_steps
 
         updates_completed = (
@@ -849,9 +850,11 @@ class Trainer:
                     + (step + 1) // self.run_config.gradient_accumulation_steps
                 )
 
+                global_process_updates = process_updates * self._accelerator.num_processes
+
                 if (
                     self.run_config.max_num_train_steps is not None
-                    and process_updates >= max_total_update_steps
+                    and global_process_updates >= max_total_update_steps
                 ):
                     reached_max_steps = True
                     # Synchronize reached_max_steps across processes
@@ -860,7 +863,7 @@ class Trainer:
                             [reached_max_steps], device=self.device
                         )
                         reached_max_steps = (
-                            self.gather(reached_max_steps_tensor).all().item()
+                            self.gather(reached_max_steps_tensor).any().item()
                         )
                     break
 
