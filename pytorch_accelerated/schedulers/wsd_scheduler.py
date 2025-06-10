@@ -217,6 +217,23 @@ class WSDLrScheduler(StatefulSchedulerBase):
         """
         return self.checkpoint_decay_info
 
+    def get_current_step(self) -> int:
+        """Get the current step count of the scheduler.
+        
+        Returns:
+            int: The current number of optimizer updates completed
+        """
+        return self._num_updates
+
+    def get_current_phase_info(self) -> dict:
+        """Get phase information for the current step.
+        
+        Returns:
+            dict: Phase information containing period_start, period_end, 
+                decay_steps, and pre_decay_step for current position
+        """
+        return self.get_phase_info(self._num_updates)
+
     @lru_cache(maxsize=1)
     def _get_checkpoint_info(self, num_updates):
         """Get information about the current checkpoint period."""

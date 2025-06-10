@@ -834,12 +834,7 @@ class WSDCheckpointCallback(TrainerCallback):
     def on_train_step_end(self, trainer, step: int, **kwargs):
         """Handle checkpoint saving and progress logging"""
 
-        # Calculate global step accounting for distributed training and gradient accumulation
-        total_steps = (
-            (trainer.run_history.current_epoch - 1)
-            * trainer.run_config.num_update_steps_per_epoch
-            + step // trainer.run_config.gradient_accumulation_steps
-        )
+        total_steps = trainer.scheduler.get_current_step() + 1
 
         # Skip if we've already saved at this step
         if total_steps == self.last_checkpoint_step:
@@ -866,7 +861,7 @@ class WSDCheckpointCallback(TrainerCallback):
     def on_training_run_end(self, trainer, **kwargs):
         """Save final checkpoint if we haven't already"""
         # Get the final step number
-        total_steps = trainer.run_config.max_num_train_steps
+        total_steps = trainer.scheduler.get_current_step() + 1
 
         # If we haven't saved the final checkpoint yet
         if self.last_checkpoint_step != total_steps:
