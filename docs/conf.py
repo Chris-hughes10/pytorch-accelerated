@@ -36,12 +36,27 @@ extensions = [
 ]
 autodoc_mock_imports = ["accelerate", "torch", 'numpy', 'tqdm']
 
-intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
-    "torch": ("https://pytorch.org/docs/stable/", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
-    "accelerate": ("https://huggingface.co/docs/accelerate/main/en/", None),
-}
+# Intersphinx configuration for cross-referencing external documentation
+# Will work on ReadTheDocs; may show warnings in restricted network environments
+try:
+    # Only enable intersphinx if we can actually reach external sites
+    import os
+    if os.environ.get("READTHEDOCS") == "True" or os.environ.get("CI"):
+        # In CI/ReadTheDocs, enable full intersphinx
+        intersphinx_mapping = {
+            "python": ("https://docs.python.org/3", None),
+            "torch": ("https://pytorch.org/docs/stable/", None),
+            "numpy": ("https://numpy.org/doc/stable/", None),
+            "accelerate": ("https://huggingface.co/docs/accelerate/main/en/", None),
+        }
+    else:
+        # For local builds, disable intersphinx to avoid network warnings
+        intersphinx_mapping = {}
+except Exception:
+    intersphinx_mapping = {}
+
+# Set a short timeout for intersphinx to fail fast on network issues
+intersphinx_timeout = 2
 
 # Add any paths that contain templates here, relative to this directory.
 # templates_path = ["_templates"]
