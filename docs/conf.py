@@ -34,7 +34,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
 ]
-# autodoc_mock_imports = ["accelerate", "torch", 'numpy', 'tqdm']
+autodoc_mock_imports = ["accelerate", "torch", 'numpy', 'tqdm']
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
