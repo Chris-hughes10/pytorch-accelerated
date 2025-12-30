@@ -296,7 +296,25 @@ class Trainer:
         Any additional values returned will be available in the :meth:`~callbacks.TrainerCallback.on_train_step_end` callback method.
 
         :param batch: the output of the train dataloader
-        :return: A dictionary containing the training loss, model outputs and batch size. Can include any keys, but must include the keys 'loss', 'model_outputs' and 'batch_size'
+        :return: A dictionary containing the training loss, model outputs and batch size. Can include any keys, but must include the keys 'loss', 'model_outputs' and 'batch_size'.
+
+            Optionally, for autoregressive models with token-level loss normalization (e.g., language models),
+            include 'num_items_in_batch' with the number of non-padded tokens in the batch. When this key is
+            present and distributed training is used with gradient accumulation, the loss will be automatically
+            scaled to compensate for DDP gradient averaging. This prevents the double-normalization issue
+            described at https://huggingface.co/blog/gradient_accumulation.
+
+            Example for autoregressive models::
+
+                def calculate_train_batch_loss(self, batch):
+                    outputs = self.model(**batch)
+                    num_items = (batch["labels"] != -100).sum()  # Count non-padding tokens
+                    return {
+                        "loss": outputs.loss,
+                        "model_outputs": outputs,
+                        "batch_size": batch["input_ids"].size(0),
+                        "num_items_in_batch": num_items,
+                    }
         """
         xb, yb = batch[0], batch[1]
 
@@ -883,6 +901,15 @@ class Trainer:
         """
         batch_output = self.calculate_train_batch_loss(batch)
         if self.run_config.gradient_accumulation_steps > 1:
+            # For autoregressive models with token-level loss normalization,
+            # the loss is already divided by the total number of tokens across all devices.
+            # DDP will also average gradients across processes, causing double-normalization.
+            # When num_items_in_batch is provided, compensate by multiplying by num_processes.
+            # See: https://huggingface.co/blog/gradient_accumulation
+            if "num_items_in_batch" in batch_output and self.run_config.is_distributed:
+                batch_output["loss"] = (
+                    batch_output["loss"] * self.run_config.num_processes
+                )
             batch_output["loss"] /= self.run_config.gradient_accumulation_steps
 
         self._update_loss_tracker(batch_output["loss"], batch_output["batch_size"])

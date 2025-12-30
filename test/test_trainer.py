@@ -210,6 +210,125 @@ def test_gradient_accumulation():
     pass
 
 
+class GradAccumTrainer(Trainer):
+    """Trainer for testing gradient accumulation with num_items_in_batch"""
+
+    def __init__(self, return_num_items=False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.return_num_items = return_num_items
+        self.recorded_losses = []
+
+    def calculate_train_batch_loss(self, batch):
+        # Simulate a token-level loss that's already normalized
+        loss = torch.tensor(1.0, requires_grad=True)
+        result = {
+            "loss": loss,
+            "model_outputs": None,
+            "batch_size": 1,
+        }
+        if self.return_num_items:
+            result["num_items_in_batch"] = 100  # Simulated token count
+        return result
+
+    def backward_step(self, loss):
+        # Record the loss value before backward
+        self.recorded_losses.append(loss.item())
+        # Don't actually do backward pass in test
+
+    def _prepare_model_optimizer_and_dataloaders(self):
+        pass
+
+    def create_train_dataloader(self, batch_size, train_dl_kwargs):
+        return DummyDataloader(4)  # 4 batches
+
+
+def test_gradient_accumulation_with_num_items_in_batch():
+    """Test that num_items_in_batch triggers DDP compensation"""
+    from pytorch_accelerated.run_config import TrainerRunConfig
+
+    model = SimpleModel(10, 1)
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
+
+    # Test WITHOUT num_items_in_batch
+    trainer_without = GradAccumTrainer(
+        return_num_items=False, model=model, optimizer=optimizer, loss_func=Mock()
+    )
+    # Manually set run_config to simulate distributed training with grad accumulation
+    trainer_without.run_config = TrainerRunConfig(
+        num_epochs=1,
+        train_per_device_batch_size=1,
+        train_dl_kwargs={},
+        eval_per_device_batch_size=1,
+        eval_dl_kwargs={},
+        gradient_accumulation_steps=2,
+        num_update_steps_per_epoch=2,
+        num_local_update_steps_per_epoch=2,
+        max_num_train_steps=2,
+        is_distributed=True,
+        num_processes=4,
+    )
+    trainer_without._perform_forward_and_backward_passes({}, 0)
+    loss_without = trainer_without.recorded_losses[0]
+
+    # Test WITH num_items_in_batch
+    trainer_with = GradAccumTrainer(
+        return_num_items=True, model=model, optimizer=optimizer, loss_func=Mock()
+    )
+    trainer_with.run_config = TrainerRunConfig(
+        num_epochs=1,
+        train_per_device_batch_size=1,
+        train_dl_kwargs={},
+        eval_per_device_batch_size=1,
+        eval_dl_kwargs={},
+        gradient_accumulation_steps=2,
+        num_update_steps_per_epoch=2,
+        num_local_update_steps_per_epoch=2,
+        max_num_train_steps=2,
+        is_distributed=True,
+        num_processes=4,
+    )
+    trainer_with._perform_forward_and_backward_passes({}, 0)
+    loss_with = trainer_with.recorded_losses[0]
+
+    # With num_items_in_batch, loss should be scaled by num_processes (4)
+    # Both divide by grad_accum_steps (2), but with num_items also multiplies by 4
+    # Without: 1.0 / 2 = 0.5
+    # With: 1.0 * 4 / 2 = 2.0
+    assert loss_without == pytest.approx(0.5)
+    assert loss_with == pytest.approx(2.0)
+
+
+def test_gradient_accumulation_no_scaling_without_distributed():
+    """Test that num_items_in_batch doesn't scale when not distributed"""
+    from pytorch_accelerated.run_config import TrainerRunConfig
+
+    model = SimpleModel(10, 1)
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
+
+    trainer = GradAccumTrainer(
+        return_num_items=True, model=model, optimizer=optimizer, loss_func=Mock()
+    )
+    # Simulate non-distributed training
+    trainer.run_config = TrainerRunConfig(
+        num_epochs=1,
+        train_per_device_batch_size=1,
+        train_dl_kwargs={},
+        eval_per_device_batch_size=1,
+        eval_dl_kwargs={},
+        gradient_accumulation_steps=2,
+        num_update_steps_per_epoch=2,
+        num_local_update_steps_per_epoch=2,
+        max_num_train_steps=2,
+        is_distributed=False,  # Not distributed
+        num_processes=1,
+    )
+    trainer._perform_forward_and_backward_passes({}, 0)
+
+    # Without distributed, should just divide by grad_accum_steps
+    # 1.0 / 2 = 0.5
+    assert trainer.recorded_losses[0] == pytest.approx(0.5)
+
+
 def test_can_create_scheduler():
     pass
 
