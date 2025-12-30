@@ -882,10 +882,13 @@ class Trainer:
         :param step: the current step in the training loop
         """
         batch_output = self.calculate_train_batch_loss(batch)
-        if self.run_config.gradient_accumulation_steps > 1:
-            batch_output["loss"] /= self.run_config.gradient_accumulation_steps
 
+        # Track the unscaled loss for accurate reporting
         self._update_loss_tracker(batch_output["loss"], batch_output["batch_size"])
+
+        # Scale loss for gradient accumulation (for backward pass only)
+        if self.run_config.gradient_accumulation_steps > 1:
+            batch_output["loss"] = batch_output["loss"] / self.run_config.gradient_accumulation_steps
 
         self.callback_handler.call_event(
             "on_train_step_end", self, batch_output=batch_output, batch=batch, step=step
