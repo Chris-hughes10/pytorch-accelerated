@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytorch-accelerated"
+description = "A lightweight library designed to accelerate the process of training PyTorch models by providing a minimal, but extensible training loop which is flexible enough to handle the majority of use cases, and capable of utilizing different hardware options with no code changes required."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "Apache Software License"}
+authors = [
+    {name = "Chris Hughes", email = "31883449+Chris-hughes10@users.noreply.github.com"}
+]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+dynamic = ["version"]
+dependencies = [
+    "accelerate>=1.3.0",
+]
+
+[project.optional-dependencies]
+examples = [
+    "torchvision~=0.18.0",
+    "torchmetrics~=1.3.0",
+    "timm~=0.9.0",
+    "datasets~=2.19.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Chris-hughes10/pytorch-accelerated"
+Repository = "https://github.com/Chris-hughes10/pytorch-accelerated"
+Issues = "https://github.com/Chris-hughes10/pytorch-accelerated/issues"
+
+[tool.setuptools]
+packages = {find = {exclude = ["tests", "*.tests", "*.tests.*", "tests.*", "test"]}}
+include-package-data = true
+
+[tool.setuptools_scm]
+# Use setuptools_scm for version management from git tags
+write_to = "pytorch_accelerated/_version.py"
+version_scheme = "python-simplified-semver"
+local_scheme = "no-local-version"
