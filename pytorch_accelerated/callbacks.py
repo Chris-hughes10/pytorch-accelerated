@@ -827,8 +827,9 @@ class WSDCheckpointCallback(TrainerCallback):
             trainer.print(f"\nLoading checkpoint from {self.initial_checkpoint}")
             checkpoint = trainer.load_checkpoint(self.initial_checkpoint)
             self.last_checkpoint_step = checkpoint.get("step")
+            checkpoint_type = checkpoint.get("checkpoint_type", "")
             trainer.print(
-                f"Loaded {checkpoint['checkpoint_type']} checkpoint from step {self.last_checkpoint_step}"
+                f"Loaded {checkpoint_type} checkpoint from step {self.last_checkpoint_step}"
             )
 
     def on_train_step_end(self, trainer, step: int, **kwargs):
