@@ -47,7 +47,7 @@ include-package-data = true
 [tool.setuptools_scm]
 # Use setuptools_scm for version management from git tags
 write_to = "pytorch_accelerated/_version.py"
-version_scheme = "python-simplified-semver"
+# Use default version/local schemes for reliable tag recognition
 local_scheme = "no-local-version"
 # Strip 'v' prefix from tags (e.g., v0.1.56 -> 0.1.56)
 tag_regex = "^v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)$"
