@@ -6,13 +6,9 @@ on:
     types: [published]
 
 jobs:
-  build-and-publish:
-    name: Build and publish distribution to PyPI
+  build:
+    name: Build distribution
     runs-on: ubuntu-latest
-    # Required for Trusted Publishing
-    permissions:
-      id-token: write
-      contents: read
 
     steps:
       - name: Checkout source
@@ -33,24 +29,54 @@ jobs:
       - name: Build distributions
         run: python -m build
 
-      - name: Publish distribution to Test PyPI
-        # Optional: publish to Test PyPI first to verify the package
-        # Remove this step if you don't want to publish to Test PyPI
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-to-testpypi:
+    name: Publish to Test PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to Test PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
-        continue-on-error: true  # Don't fail if already exists on Test PyPI
 
-      - name: Publish distribution to PyPI
+  publish-to-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        # Note: This uses Trusted Publishing (OIDC)
-        # You need to configure this on PyPI:
-        # 1. Go to your project on PyPI
-        # 2. Navigate to "Publishing" settings
-        # 3. Add a new publisher with:
-        #    - PyPI Project Name: pytorch-accelerated
-        #    - Owner: Chris-hughes10
-        #    - Repository name: pytorch-accelerated
-        #    - Workflow name: release.yaml
-        #    - Environment name: (leave blank)
+        # Trusted Publishing (OIDC) is configured via PyPI:
+        # Project Settings -> Publishing -> Add a new publisher:
+        #   - Repository: Chris-hughes10/pytorch-accelerated
+        #   - Workflow: release.yaml
+        #   - Environment: pypi
