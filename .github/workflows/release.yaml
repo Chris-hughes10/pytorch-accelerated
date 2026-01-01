@@ -14,6 +14,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.release.tag_name }}  # Checkout the tag, not the default branch
           fetch-depth: 0  # Required for setuptools-scm to get version from git tags
 
       - name: Set up Python
