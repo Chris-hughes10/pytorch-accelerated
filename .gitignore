@@ -1,5 +1,8 @@
 .idea/*
 *.pyc
+
+# setuptools_scm generated version file (don't track in version control)
+pytorch_accelerated/_version.py
 pytorch_accelerated.egg-info/*
 # Byte-compiled / optimized / DLL files
 __pycache__/
