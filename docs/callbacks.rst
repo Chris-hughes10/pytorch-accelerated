@@ -64,8 +64,15 @@ Implemented Callbacks
 .. autoclass:: LimitEvalStepsCallback
     :show-inheritance:
 
+.. autoclass:: SaveTrainingStateCallback
+    :show-inheritance:
+
+    .. automethod:: __init__
+
 .. autoclass:: WSDCheckpointCallback
     :show-inheritance:
+
+    .. automethod:: __init__
 
 
 Creating New Callbacks
