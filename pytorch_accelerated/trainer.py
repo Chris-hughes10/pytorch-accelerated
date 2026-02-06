@@ -3,6 +3,7 @@ import math
 import os
 from enum import Enum
 from functools import partial
+from pathlib import Path
 from typing import Iterable
 import warnings
 
@@ -87,7 +88,7 @@ class TrainerPlaceholderValues(Enum):
         return self.__create_new_enum(self, other, "+")
 
     def __sub__(self, other):
-        raise NotImplemented(
+        raise NotImplementedError(
             "Subtraction is not supported, please re-write the expression in terms of addition"
         )
 
@@ -433,6 +434,7 @@ class Trainer:
         eval_dataloader_kwargs: dict = None,
         reset_run_history=True,
         collate_fn=None,
+        resume_from=None,
     ):
         """
         Start a training run. If an evaluation dataset is provided, this routine will include both training and evaluation epochs.
@@ -454,11 +456,30 @@ class Trainer:
         :param eval_dataloader_kwargs: a dictionary of keyword arguments to pass to the evaluation dataloader constructor, for details see :class:`torch.utils.data.DataLoader`
         :param reset_run_history: reset any run history saved by the trainer from previous training runs
         :param collate_fn: the collate function to be used by the training and evaluation dataloaders
+        :param resume_from: path to a training state directory saved by :meth:`save_training_state`.
+            When provided, model weights, optimizer state, scheduler state, RNG states, and the
+            mixed-precision scaler are all restored, and training resumes from the saved epoch.
+            This overrides ``reset_run_history`` to ``False``.
+
+        Example::
+
+            # Initial training (interrupted at epoch 5)
+            trainer.train(train_dataset=ds, num_epochs=10)
+
+            # Resume from saved state
+            trainer.train(
+                train_dataset=ds,
+                num_epochs=10,
+                resume_from="checkpoints/step_5000",
+            )
         """
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.create_scheduler_fn = create_scheduler_fn
         self.collate_fn = collate_fn
+
+        if resume_from is not None:
+            reset_run_history = False
 
         if reset_run_history:
             self.run_history.reset()
@@ -486,6 +507,12 @@ class Trainer:
 
         if self.create_scheduler_fn is not None:
             self.scheduler = self.create_scheduler()
+
+        if resume_from is not None:
+            metadata = self.load_training_state(resume_from)
+            resume_epoch = metadata.get("current_epoch", 0)
+            self.run_history._set_epoch(resume_epoch)
+            self.print(f"Resumed training state from {resume_from} (epoch {resume_epoch})")
 
         self._run_training()
 
@@ -983,23 +1010,24 @@ class Trainer:
             with self._accelerator.join_uneven_inputs(
                 [self.model], even_batches=self._pad_uneven_eval_batches
             ):
-                for batch in valid_dl:
-                    self.callback_handler.call_event(
-                        "on_eval_step_start",
-                        self,
-                    )
-                    batch_output = self.calculate_eval_batch_loss(batch)
+                with torch.no_grad():
+                    for batch in valid_dl:
+                        self.callback_handler.call_event(
+                            "on_eval_step_start",
+                            self,
+                        )
+                        batch_output = self.calculate_eval_batch_loss(batch)
 
-                    self._update_loss_tracker(
-                        batch_output["loss"], batch_output["batch_size"]
-                    )
+                        self._update_loss_tracker(
+                            batch_output["loss"], batch_output["batch_size"]
+                        )
 
-                    self.callback_handler.call_event(
-                        "on_eval_step_end",
-                        self,
-                        batch_output=batch_output,
-                        batch=batch,
-                    )
+                        self.callback_handler.call_event(
+                            "on_eval_step_end",
+                            self,
+                            batch_output=batch_output,
+                            batch=batch,
+                        )
 
         self.eval_epoch_end()
 
@@ -1065,7 +1093,16 @@ class Trainer:
         save_per_node=True,
     ):
         """
-        Save the model, optimizer and specified args as a checkpoint file.
+        Save the model, optimizer and specified args as a single checkpoint file.
+
+        This is the "model export" checkpoint method — it saves a portable ``.pt`` file
+        containing the model weights (and optionally optimizer/scheduler state) that can
+        be loaded independently of the distributed setup. For complete training resume
+        (including RNG states, mixed-precision scaler, and FSDP-sharded state), use
+        :meth:`save_training_state` instead.
+
+        Handles ``torch.compile`` transparently by stripping the compilation wrapper
+        before saving, so checkpoints can be loaded into non-compiled models.
 
         :param save_path: the path where to save the checkpoint, this should end in '.pt'
         :param checkpoint_kwargs: additional objects to include in the checkpoint
@@ -1073,10 +1110,11 @@ class Trainer:
         :param save_scheduler: flag to indicate whether to include the scheduler in the checkpoint
         :param save_per_node: flag to indicate whether to save the checkpoint once per machine, if False, the checkpoint will only be saved from the world process zero. This is True by default.
         """
-        # TODO: add save method for run history?
 
         checkpoint = {
-            "model_state_dict": self.get_model().state_dict(),
+            "model_state_dict": self.get_model(
+                keep_torch_compile=False
+            ).state_dict(),
         }
 
         if save_optimizer:
@@ -1111,20 +1149,22 @@ class Trainer:
         self, checkpoint_path, load_optimizer=True, load_scheduler=True
     ):
         """
-        Load the model and optimizer from a checkpoint file.
+        Load the model and optimizer from a checkpoint file created by :meth:`save_checkpoint`.
 
         :param checkpoint_path: the path of the checkpoint file to load
         :param load_optimizer: flag to indicate whether to load the optimizer if it is included in the checkpoint
-        :param load_optimizer: flag to indicate whether to load the scheduler if it is included in the checkpoint
+        :param load_scheduler: flag to indicate whether to load the scheduler if it is included in the checkpoint
         """
         self._accelerator.wait_for_everyone()
-        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-        self.get_model().load_state_dict(checkpoint["model_state_dict"])
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+        self.get_model(keep_torch_compile=False).load_state_dict(
+            checkpoint["model_state_dict"]
+        )
         if load_optimizer and "optimizer_state_dict" in checkpoint:
             if self.optimizer is None:
                 raise ValueError(
-                    "You are trying to load an optimizer from a checkpoint, but no optimizer"
-                    "has been set in the Trainer. Either pass the correct optimizer instance when"
+                    "You are trying to load an optimizer from a checkpoint, but no optimizer "
+                    "has been set in the Trainer. Either pass the correct optimizer instance when "
                     "creating the trainer, or specify load_optimizer=False when loading the checkpoint."
                 )
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -1132,22 +1172,109 @@ class Trainer:
         if load_scheduler and "scheduler_state_dict" in checkpoint:
             if self.scheduler is None:
                 raise ValueError(
-                    "You are trying to load a scheduler from a checkpoint, but no scheduler"
-                    "has been set in the Trainer. Either pass the correct scheduler instance when"
+                    "You are trying to load a scheduler from a checkpoint, but no scheduler "
+                    "has been set in the Trainer. Either pass the correct scheduler instance when "
                     "creating the trainer, or specify load_scheduler=False when loading the checkpoint."
                 )
             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
         return checkpoint
 
-    def get_model(self):
+    def save_training_state(self, output_dir, checkpoint_kwargs=None):
+        """
+        Save the complete training state to a directory using Accelerate's :meth:`~accelerate.Accelerator.save_state`.
+
+        This saves everything needed for an exact training resume: model weights,
+        optimizer state, scheduler state, RNG states, and the mixed-precision scaler.
+        It handles FSDP-sharded models and ``torch.compile`` automatically.
+
+        For simple model export (a single portable ``.pt`` file), use :meth:`save_checkpoint` instead.
+
+        The training state directory will contain:
+
+        - ``pytorch_model.bin`` or ``model.safetensors`` — model weights
+        - ``optimizer.bin`` — optimizer state (handles FSDP sharding)
+        - ``scheduler.bin`` — scheduler state (if registered)
+        - ``random_states.pkl`` — RNG states for ``torch``, ``cuda``, ``numpy``, and ``python``
+        - ``scaler.bin`` — mixed-precision scaler (if applicable)
+        - ``trainer_metadata.pt`` — epoch, step count, and any custom kwargs
+
+        :param output_dir: the directory to save the training state to
+        :param checkpoint_kwargs: additional metadata to save alongside the training state
+
+        Example::
+
+            # Save during training (e.g. in a callback)
+            trainer.save_training_state("checkpoints/step_5000")
+
+            # Resume later
+            trainer.train(
+                train_dataset=dataset,
+                num_epochs=10,
+                resume_from="checkpoints/step_5000",
+            )
+        """
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Register scheduler for checkpointing if it exists
+        if self.scheduler is not None:
+            self._accelerator.register_for_checkpointing(self.scheduler)
+
+        self._accelerator.save_state(str(output_dir))
+
+        # Save trainer-specific metadata (epoch, custom kwargs)
+        metadata = {
+            "current_epoch": self.run_history.current_epoch,
+        }
+        if checkpoint_kwargs is not None:
+            metadata.update(checkpoint_kwargs)
+
+        if self.run_config.is_world_process_zero:
+            torch.save(metadata, output_dir / "trainer_metadata.pt")
+
+        self._accelerator.wait_for_everyone()
+
+    def load_training_state(self, input_dir):
+        """
+        Load a complete training state from a directory saved by :meth:`save_training_state`.
+
+        Restores model weights, optimizer state, scheduler state, RNG states, and the
+        mixed-precision scaler. Works with FSDP-sharded models and ``torch.compile``.
+
+        :param input_dir: the directory containing the saved training state
+        :return: a dictionary containing the saved trainer metadata (epoch, custom kwargs)
+        """
+        input_dir = Path(input_dir)
+
+        # Register scheduler for checkpointing if it exists
+        if self.scheduler is not None:
+            self._accelerator.register_for_checkpointing(self.scheduler)
+
+        self._accelerator.load_state(str(input_dir))
+
+        # Load trainer metadata
+        metadata_path = input_dir / "trainer_metadata.pt"
+        metadata = {}
+        if metadata_path.exists():
+            metadata = torch.load(metadata_path, map_location="cpu", weights_only=True)
+
+        return metadata
+
+    def get_model(self, keep_torch_compile=True):
         """
         Extract the model in :class:`Trainer` from its distributed containers.
         Useful before saving a model.
 
+        :param keep_torch_compile: if ``True``, the ``torch.compile`` wrapper is preserved.
+            Set to ``False`` when saving weights, to avoid ``_orig_mod.`` key prefixes
+            in the state dict.
+
         :return: the model in :class:`Trainer`, subclassed from :class:`~torch.nn.Module`
         """
-        return self._accelerator.unwrap_model(self.model)
+        return self._accelerator.unwrap_model(
+            self.model, keep_torch_compile=keep_torch_compile
+        )
 
 
 class TrainerWithTimmScheduler(Trainer):

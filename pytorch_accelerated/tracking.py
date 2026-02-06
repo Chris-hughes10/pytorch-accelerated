@@ -92,6 +92,15 @@ class RunHistory(ABC):
         pass
 
     @abstractmethod
+    def _set_epoch(self, epoch: int):
+        """
+        Set the current epoch to a specific value. Used when resuming training.
+
+        :param epoch: the epoch number to set
+        """
+        pass
+
+    @abstractmethod
     def reset(self):
         """
         Reset the state of the :class:`RunHistory`
@@ -142,6 +151,9 @@ class InMemoryRunHistory(RunHistory):
 
     def _increment_epoch(self):
         self._current_epoch += 1
+
+    def _set_epoch(self, epoch: int):
+        self._current_epoch = epoch
 
     def reset(self):
         self._current_epoch = 1

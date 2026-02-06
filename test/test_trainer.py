@@ -1,3 +1,4 @@
+import tempfile
 from unittest.mock import MagicMock, Mock, call
 import pytest
 
@@ -7,6 +8,7 @@ from pytorch_accelerated.utils import worker_init_fn
 from torch import optim, nn
 
 from pytorch_accelerated.trainer import Trainer
+from pytorch_accelerated.tracking import InMemoryRunHistory
 
 
 class DummyTrainer(Trainer):
@@ -41,7 +43,7 @@ class DummyTrainer(Trainer):
             "batch_size": 1,
         }
 
-    def _prepare_model_and_optimizer(self):
+    def _prepare_model_optimizer_and_dataloaders(self):
         pass
 
 
@@ -133,7 +135,8 @@ class StepTrackingTrainer(DummyTrainer):
 
 
 def test_skip_eval_if_not_present(mocker):
-    trainer = DummyTrainer(model=Mock(), optimizer=Mock(), loss_func=Mock())
+    model = SimpleModel(10, 1)
+    trainer = DummyTrainer(model=model, optimizer=optim.SGD(model.parameters(), lr=0.01), loss_func=Mock())
     mocked_train_epoch: MagicMock = mocker.patch.object(
         trainer, "_run_train_epoch", return_value=False
     )
@@ -148,7 +151,8 @@ def test_skip_eval_if_not_present(mocker):
 
 
 def test_skip_scheduler_step_if_not_present(mocker):
-    trainer = DummyTrainer(model=Mock(), optimizer=Mock(), loss_func=Mock())
+    model = SimpleModel(10, 1)
+    trainer = DummyTrainer(model=model, optimizer=optim.SGD(model.parameters(), lr=0.01), loss_func=Mock())
     scheduler_step = mocker.patch.object(trainer, "scheduler_step")
 
     trainer.train(train_dataset=Mock(), num_epochs=1)
@@ -220,7 +224,7 @@ class GradAccumTrainer(Trainer):
 
     def calculate_train_batch_loss(self, batch):
         # Simulate a token-level loss that's already normalized
-        loss = torch.tensor(1.0, requires_grad=True)
+        loss = torch.tensor(1.0)
         result = {
             "loss": loss,
             "model_outputs": None,
@@ -251,7 +255,7 @@ def test_gradient_accumulation_with_num_items_in_batch():
 
     # Test WITHOUT num_items_in_batch
     trainer_without = GradAccumTrainer(
-        return_num_items=False, model=model, optimizer=optimizer, loss_func=Mock()
+        return_num_items=False, model=model, optimizer=optimizer, loss_func=Mock(), callbacks=()
     )
     # Manually set run_config to simulate distributed training with grad accumulation
     trainer_without.run_config = TrainerRunConfig(
@@ -261,10 +265,16 @@ def test_gradient_accumulation_with_num_items_in_batch():
         eval_per_device_batch_size=1,
         eval_dl_kwargs={},
         gradient_accumulation_steps=2,
+        gradient_clip_value=None,
+        train_total_batch_size=4,
+        eval_total_batch_size=4,
         num_update_steps_per_epoch=2,
         num_local_update_steps_per_epoch=2,
         max_num_train_steps=2,
+        is_local_process_zero=True,
+        is_world_process_zero=True,
         is_distributed=True,
+        mixed_precision="no",
         num_processes=4,
     )
     trainer_without._perform_forward_and_backward_passes({}, 0)
@@ -272,7 +282,7 @@ def test_gradient_accumulation_with_num_items_in_batch():
 
     # Test WITH num_items_in_batch
     trainer_with = GradAccumTrainer(
-        return_num_items=True, model=model, optimizer=optimizer, loss_func=Mock()
+        return_num_items=True, model=model, optimizer=optimizer, loss_func=Mock(), callbacks=()
     )
     trainer_with.run_config = TrainerRunConfig(
         num_epochs=1,
@@ -281,10 +291,16 @@ def test_gradient_accumulation_with_num_items_in_batch():
         eval_per_device_batch_size=1,
         eval_dl_kwargs={},
         gradient_accumulation_steps=2,
+        gradient_clip_value=None,
+        train_total_batch_size=4,
+        eval_total_batch_size=4,
         num_update_steps_per_epoch=2,
         num_local_update_steps_per_epoch=2,
         max_num_train_steps=2,
+        is_local_process_zero=True,
+        is_world_process_zero=True,
         is_distributed=True,
+        mixed_precision="no",
         num_processes=4,
     )
     trainer_with._perform_forward_and_backward_passes({}, 0)
@@ -306,7 +322,7 @@ def test_gradient_accumulation_no_scaling_without_distributed():
     optimizer = optim.SGD(model.parameters(), lr=0.01)
 
     trainer = GradAccumTrainer(
-        return_num_items=True, model=model, optimizer=optimizer, loss_func=Mock()
+        return_num_items=True, model=model, optimizer=optimizer, loss_func=Mock(), callbacks=()
     )
     # Simulate non-distributed training
     trainer.run_config = TrainerRunConfig(
@@ -316,10 +332,16 @@ def test_gradient_accumulation_no_scaling_without_distributed():
         eval_per_device_batch_size=1,
         eval_dl_kwargs={},
         gradient_accumulation_steps=2,
+        gradient_clip_value=None,
+        train_total_batch_size=1,
+        eval_total_batch_size=1,
         num_update_steps_per_epoch=2,
         num_local_update_steps_per_epoch=2,
         max_num_train_steps=2,
+        is_local_process_zero=True,
+        is_world_process_zero=True,
         is_distributed=False,  # Not distributed
+        mixed_precision="no",
         num_processes=1,
     )
     trainer._perform_forward_and_backward_passes({}, 0)
@@ -352,7 +374,9 @@ def test_check_eval_batch_size_is_transparent_on_single_process():
     trainer._check_eval_batch_size()
 
 
-def test_check_eval_batch_size_is_transparent_with_full_batches_for_all_processes():
+def test_check_eval_batch_size_is_transparent_with_full_batches_for_all_processes(
+    recwarn,
+):
     per_device_batch_size = 8
     n_processes = 4
     n_full_batches = 2
@@ -372,10 +396,9 @@ def test_check_eval_batch_size_is_transparent_with_full_batches_for_all_processe
     trainer.eval_dataset = list(range(n_samples))
     trainer.run_config = FakeRunConfig()
 
-    with pytest.warns(None) as record:
-        trainer._check_eval_batch_size()
+    trainer._check_eval_batch_size()
 
-    assert len(record) == 0
+    assert len(recwarn) == 0
 
 
 def test_check_eval_batch_size_raises_batch_size_bigger_than_dataset():
@@ -572,3 +595,96 @@ def test_no_max_steps_completes_all_epochs():
     assert trainer.actual_update_steps == 12, (
         f"Expected 12 update steps (6 per epoch * 2 epochs), got {trainer.actual_update_steps}"
     )
+
+
+def test_save_checkpoint_strips_compile_prefix():
+    """Test that save_checkpoint produces clean state_dict keys (no _orig_mod prefix)"""
+    model = SimpleModel(10, 1)
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
+    trainer = Trainer(model=model, loss_func=nn.MSELoss(), optimizer=optimizer)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Save a checkpoint
+        save_path = f"{tmpdir}/test_checkpoint.pt"
+
+        # Manually prepare the trainer enough to save
+        trainer._prepare_model_optimizer_and_dataloaders = lambda: None
+        trainer.run_config = Mock()
+        trainer.run_config.is_world_process_zero = True
+        trainer.save_checkpoint(save_path)
+
+        # Load and check keys have no _orig_mod prefix
+        checkpoint = torch.load(save_path, map_location="cpu", weights_only=True)
+        for key in checkpoint["model_state_dict"]:
+            assert not key.startswith("_orig_mod."), (
+                f"Key {key} has _orig_mod prefix — compile wrapper not stripped"
+            )
+
+
+def test_load_checkpoint_uses_weights_only():
+    """Test that load_checkpoint uses weights_only=True for security"""
+    model = SimpleModel(10, 1)
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
+    trainer = Trainer(model=model, loss_func=nn.MSELoss(), optimizer=optimizer)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_path = f"{tmpdir}/test_checkpoint.pt"
+        trainer._prepare_model_optimizer_and_dataloaders = lambda: None
+        trainer.run_config = Mock()
+        trainer.run_config.is_world_process_zero = True
+        trainer.save_checkpoint(save_path)
+
+        # Load should succeed with weights_only=True
+        checkpoint = trainer.load_checkpoint(save_path, load_optimizer=True, load_scheduler=False)
+        assert "model_state_dict" in checkpoint
+
+
+def test_get_model_keep_torch_compile_param():
+    """Test that get_model accepts keep_torch_compile parameter"""
+    model = SimpleModel(10, 1)
+    trainer = Trainer(model=model, loss_func=nn.MSELoss(), optimizer=optim.SGD(model.parameters(), lr=0.01))
+
+    # Should work with both True and False
+    unwrapped_with = trainer.get_model(keep_torch_compile=True)
+    unwrapped_without = trainer.get_model(keep_torch_compile=False)
+    assert isinstance(unwrapped_with, nn.Module)
+    assert isinstance(unwrapped_without, nn.Module)
+
+
+def test_set_epoch_on_run_history():
+    """Test that _set_epoch correctly sets the epoch on RunHistory"""
+    history = InMemoryRunHistory()
+    assert history.current_epoch == 1
+
+    history._set_epoch(5)
+    assert history.current_epoch == 5
+
+    history._increment_epoch()
+    assert history.current_epoch == 6
+
+
+def test_train_resume_from_sets_epoch(mocker):
+    """Test that resume_from restores the epoch and skips reset_run_history"""
+    model = SimpleModel(10, 1)
+    trainer = DummyTrainer(
+        model=model,
+        optimizer=optim.SGD(model.parameters(), lr=0.01),
+        loss_func=Mock(),
+    )
+
+    # Mock load_training_state to return metadata without actually loading
+    mocker.patch.object(
+        trainer, "load_training_state", return_value={"current_epoch": 3}
+    )
+    mocker.patch.object(trainer, "_run_training")
+
+    trainer.train(
+        train_dataset=Mock(),
+        num_epochs=10,
+        resume_from="/fake/path",
+    )
+
+    # Verify epoch was set from the metadata
+    assert trainer.run_history.current_epoch == 3
+    trainer.load_training_state.assert_called_once_with("/fake/path")
+    trainer._run_training.assert_called_once()

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 
-import numpy as np
+import operator as op
 import torch
 from pytorch_accelerated.tracking import LossTracker
 from pytorch_accelerated.utils import DataLoaderSlice, ModelEma
@@ -197,7 +197,7 @@ class CallbackHandler:
         self.callbacks.append(cb)
 
     def __iter__(self):
-        return self.callbacks
+        return iter(self.callbacks)
 
     def clear_callbacks(self):
         self.callbacks = []
@@ -359,7 +359,7 @@ class SaveBestModelCallback(TrainerCallback):
         """
         self.watch_metric = watch_metric
         self.greater_is_better = greater_is_better
-        self.operator = np.greater if self.greater_is_better else np.less
+        self.operator = op.gt if self.greater_is_better else op.lt
         self.best_metric = None
         self.best_metric_epoch = None
         self.save_path = save_path
@@ -430,7 +430,7 @@ class EarlyStoppingCallback(TrainerCallback):
         self.greater_is_better = greater_is_better
         self.early_stopping_patience_counter = 0
         self.best_metric = None
-        self.operator = np.greater if self.greater_is_better else np.less
+        self.operator = op.gt if self.greater_is_better else op.lt
         self.reset_on_train = reset_on_train
 
     def on_training_run_start(self, args, **kwargs):
