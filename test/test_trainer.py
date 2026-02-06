@@ -842,3 +842,147 @@ class TestSaveTrainingStateCallback:
 
         callback.on_training_run_end(trainer)
         trainer.save_training_state.assert_not_called()
+
+
+class TestWSDCheckpointCallback:
+    """Tests for WSDCheckpointCallback with split save strategy"""
+
+    def _make_trainer_and_scheduler(self):
+        """Helper to create a mock trainer with WSD scheduler."""
+        trainer = Mock()
+        trainer.save_checkpoint = Mock()
+        trainer.save_training_state = Mock()
+        trainer.load_checkpoint = Mock(return_value={"step": 100, "checkpoint_type": "wsd_post_decay"})
+        trainer.load_training_state = Mock(return_value={"step": 90, "checkpoint_type": "wsd_pre_decay"})
+        trainer.print = Mock()
+        trainer.run_config.max_num_train_steps = 100
+
+        scheduler = Mock()
+        scheduler.get_checkpoint_steps.return_value = [90, 100]
+        scheduler.decay_phase_ratio = 0.1
+        scheduler.get_decay_info.return_value = {}
+        trainer.scheduler = scheduler
+
+        return trainer, scheduler
+
+    def test_pre_decay_uses_save_training_state(self, mocker):
+        """Pre-decay checkpoint should use save_training_state (full state for continuation)"""
+        from pytorch_accelerated.callbacks import WSDCheckpointCallback
+
+        mocker.patch("pathlib.Path.mkdir")
+        callback = WSDCheckpointCallback(save_dir="/tmp/wsd_test")
+        trainer, scheduler = self._make_trainer_and_scheduler()
+
+        callback.on_training_run_start(trainer)
+
+        # Simulate reaching the pre-decay step
+        scheduler.get_current_step.return_value = 89  # total_steps = 90
+        scheduler.get_phase_info.return_value = {
+            "pre_decay_step": 90,
+            "period_end": 100,
+        }
+
+        callback.on_train_step_end(trainer, step=89)
+
+        # Should use save_training_state, NOT save_checkpoint
+        trainer.save_training_state.assert_called_once()
+        trainer.save_checkpoint.assert_not_called()
+
+        # Verify the path is a directory (no .pt extension)
+        call_args = trainer.save_training_state.call_args
+        save_path = call_args[0][0]
+        assert not save_path.endswith(".pt")
+        assert "wsd_pre_decay" in save_path
+
+    def test_post_decay_uses_save_checkpoint(self, mocker):
+        """Post-decay checkpoint should use save_checkpoint (model export)"""
+        from pytorch_accelerated.callbacks import WSDCheckpointCallback
+
+        mocker.patch("pathlib.Path.mkdir")
+        callback = WSDCheckpointCallback(save_dir="/tmp/wsd_test")
+        trainer, scheduler = self._make_trainer_and_scheduler()
+
+        callback.on_training_run_start(trainer)
+
+        # Simulate reaching the post-decay step (period end)
+        scheduler.get_current_step.return_value = 99  # total_steps = 100
+        scheduler.get_phase_info.return_value = {
+            "pre_decay_step": 90,
+            "period_end": 100,
+        }
+
+        callback.on_train_step_end(trainer, step=99)
+
+        # Should use save_checkpoint, NOT save_training_state
+        trainer.save_checkpoint.assert_called_once()
+        trainer.save_training_state.assert_not_called()
+
+        # Verify the path has .pt extension
+        call_args = trainer.save_checkpoint.call_args
+        save_path = str(call_args[0][0])
+        assert save_path.endswith(".pt")
+        assert "wsd_post_decay" in save_path
+
+    def test_load_directory_uses_load_training_state(self, mocker):
+        """Loading a directory checkpoint should use load_training_state"""
+        from pytorch_accelerated.callbacks import WSDCheckpointCallback
+
+        mocker.patch("pathlib.Path.mkdir")
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        mocker.patch("pathlib.Path.is_dir", return_value=True)
+
+        callback = WSDCheckpointCallback(
+            save_dir="/tmp/wsd_test",
+            initial_checkpoint="/tmp/wsd_test/checkpoint_90_wsd_pre_decay",
+        )
+        trainer, scheduler = self._make_trainer_and_scheduler()
+
+        callback.on_training_run_start(trainer)
+
+        trainer.load_training_state.assert_called_once()
+        trainer.load_checkpoint.assert_not_called()
+        assert callback.last_checkpoint_step == 90
+
+    def test_load_file_uses_load_checkpoint(self, mocker):
+        """Loading a .pt file checkpoint should use load_checkpoint"""
+        from pytorch_accelerated.callbacks import WSDCheckpointCallback
+
+        mocker.patch("pathlib.Path.mkdir")
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        mocker.patch("pathlib.Path.is_dir", return_value=False)
+
+        callback = WSDCheckpointCallback(
+            save_dir="/tmp/wsd_test",
+            initial_checkpoint="/tmp/wsd_test/checkpoint_100_wsd_post_decay.pt",
+        )
+        trainer, scheduler = self._make_trainer_and_scheduler()
+
+        callback.on_training_run_start(trainer)
+
+        trainer.load_checkpoint.assert_called_once()
+        trainer.load_training_state.assert_not_called()
+        assert callback.last_checkpoint_step == 100
+
+    def test_training_run_end_saves_post_decay(self, mocker):
+        """Final checkpoint at end of training should be a post-decay export"""
+        from pytorch_accelerated.callbacks import WSDCheckpointCallback
+
+        mocker.patch("pathlib.Path.mkdir")
+        callback = WSDCheckpointCallback(save_dir="/tmp/wsd_test")
+        trainer, scheduler = self._make_trainer_and_scheduler()
+
+        callback.on_training_run_start(trainer)
+        callback.last_checkpoint_step = None
+
+        # Simulate end of training at period_end
+        scheduler.get_current_step.return_value = 99  # total_steps = 100
+        scheduler.get_phase_info.return_value = {
+            "pre_decay_step": 90,
+            "period_end": 100,
+        }
+
+        callback.on_training_run_end(trainer)
+
+        # Should use save_checkpoint (post-decay export)
+        trainer.save_checkpoint.assert_called_once()
+        trainer.save_training_state.assert_not_called()

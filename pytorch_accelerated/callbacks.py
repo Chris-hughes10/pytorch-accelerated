@@ -837,6 +837,16 @@ class WSDCheckpointCallback(TrainerCallback):
     This callback saves both pre-decay and post-decay checkpoints during training with WSD-style
     schedules and automatically syncs with :class:`~pytorch_accelerated.schedulers.wsd_scheduler.WSDLrScheduler` for checkpoint timing.
 
+    **Pre-decay checkpoints** are saved as full training states (using
+    :meth:`~pytorch_accelerated.trainer.Trainer.save_training_state`) because they are
+    designed for continuation training — loading a pre-decay checkpoint to begin a new
+    decay phase. This preserves RNG states, optimizer momentum, the mixed-precision
+    scaler, and handles FSDP sharding automatically.
+
+    **Post-decay checkpoints** are saved as portable model exports (using
+    :meth:`~pytorch_accelerated.trainer.Trainer.save_checkpoint`) because the decay phase
+    is complete and the model is ready for deployment or fine-tuning.
+
     For single checkpoint configurations:
         - Pre-decay checkpoint is saved just before learning rate decay starts
         - Post-decay checkpoint is saved at the end of training
@@ -851,12 +861,13 @@ class WSDCheckpointCallback(TrainerCallback):
 
     :param save_dir: Directory to save checkpoints
     :type save_dir: str
-    :param save_optimizer: Whether to save optimizer state
+    :param save_optimizer: Whether to save optimizer state in post-decay (export) checkpoints
     :type save_optimizer: bool
-    :param save_scheduler: Whether to save scheduler state
+    :param save_scheduler: Whether to save scheduler state in post-decay (export) checkpoints
     :type save_scheduler: bool
-    :param initial_checkpoint: Path to checkpoint to load at start of training. For WSD-S,
-        use post-decay checkpoint. For WSD, use pre-decay checkpoint.
+    :param initial_checkpoint: Path to checkpoint to load at start of training.
+        If this is a directory, it is loaded as a full training state (pre-decay).
+        If this is a ``.pt`` file, it is loaded as a model export (post-decay).
     :type initial_checkpoint: Union[str, Path], optional
 
     :raises ValueError: If trainer's scheduler doesn't implement get_checkpoint_steps()
@@ -867,16 +878,16 @@ class WSDCheckpointCallback(TrainerCallback):
             ...     save_dir="checkpoints",
             ... )
 
-        WSD-S usage:
+        WSD-S usage (load post-decay export):
             >>> callback = WSDCheckpointCallback(
             ...     save_dir="checkpoints",
-            ...     initial_checkpoint="checkpoint_50000_post_decay.pt"
+            ...     initial_checkpoint="checkpoints/checkpoint_50000_wsd_post_decay.pt"
             ... )
 
-        WSD usage:
+        WSD usage (load pre-decay training state):
             >>> callback = WSDCheckpointCallback(
             ...     save_dir="checkpoints",
-            ...     initial_checkpoint="checkpoint_45000_pre_decay.pt"
+            ...     initial_checkpoint="checkpoints/checkpoint_45000_wsd_pre_decay"
             ... )
     """
 
@@ -889,9 +900,10 @@ class WSDCheckpointCallback(TrainerCallback):
     ):
         """
         :param save_dir: Directory to save checkpoints
-        :param save_optimizer: Whether to save optimizer state
-        :param save_scheduler: Whether to save scheduler state
-        :param initial_checkpoint: Optional path to checkpoint to load at start of training
+        :param save_optimizer: Whether to save optimizer state in post-decay (export) checkpoints
+        :param save_scheduler: Whether to save scheduler state in post-decay (export) checkpoints
+        :param initial_checkpoint: Optional path to checkpoint to load at start of training.
+            Directories are loaded as training states, files as model exports.
         """
         self.save_dir = Path(save_dir)
         self.save_optimizer = save_optimizer
@@ -909,24 +921,45 @@ class WSDCheckpointCallback(TrainerCallback):
         # Create save directory if it doesn't exist
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
-    def _get_checkpoint_path(self, step: int, checkpoint_type: str) -> Path:
+    def _get_export_checkpoint_path(self, step: int, checkpoint_type: str) -> Path:
+        """Get path for a post-decay model export checkpoint (.pt file)."""
         return self.save_dir / f"checkpoint_{step}_{checkpoint_type}.pt"
 
-    def _save_checkpoint(self, trainer, step: int, checkpoint_type: str):
-        checkpoint_path = self._get_checkpoint_path(step, checkpoint_type)
+    def _get_training_state_path(self, step: int, checkpoint_type: str) -> Path:
+        """Get path for a pre-decay training state checkpoint (directory)."""
+        return self.save_dir / f"checkpoint_{step}_{checkpoint_type}"
+
+    def _save_pre_decay(self, trainer, step: int):
+        """Save a pre-decay checkpoint as a full training state for continuation."""
+        state_dir = self._get_training_state_path(step, "wsd_pre_decay")
+        trainer.save_training_state(
+            str(state_dir),
+            checkpoint_kwargs={
+                "step": step,
+                "checkpoint_type": "wsd_pre_decay",
+                "total_steps": trainer.run_config.max_num_train_steps,
+                "decay_fraction": self.decay_fraction,
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
+        trainer.print(f"\nSaved wsd_pre_decay training state at step {step}")
+
+    def _save_post_decay(self, trainer, step: int):
+        """Save a post-decay checkpoint as a portable model export."""
+        checkpoint_path = self._get_export_checkpoint_path(step, "wsd_post_decay")
         trainer.save_checkpoint(
             checkpoint_path,
             save_optimizer=self.save_optimizer,
             save_scheduler=self.save_scheduler,
             checkpoint_kwargs={
                 "step": step,
-                "checkpoint_type": checkpoint_type,
+                "checkpoint_type": "wsd_post_decay",
                 "total_steps": trainer.run_config.max_num_train_steps,
                 "decay_fraction": self.decay_fraction,
                 "timestamp": datetime.now().isoformat(),
             },
         )
-        trainer.print(f"\nSaved {checkpoint_type} checkpoint at step {step}")
+        trainer.print(f"\nSaved wsd_post_decay checkpoint at step {step}")
 
     def on_training_run_start(self, trainer, **kwargs):
         """Initialize checkpoint tracking state and load initial checkpoint if specified."""
@@ -944,12 +977,23 @@ class WSDCheckpointCallback(TrainerCallback):
         # Load initial checkpoint if specified
         if self.initial_checkpoint and self.initial_checkpoint.exists():
             trainer.print(f"\nLoading checkpoint from {self.initial_checkpoint}")
-            checkpoint = trainer.load_checkpoint(self.initial_checkpoint)
-            self.last_checkpoint_step = checkpoint.get("step")
-            checkpoint_type = checkpoint.get("checkpoint_type", "")
-            trainer.print(
-                f"Loaded {checkpoint_type} checkpoint from step {self.last_checkpoint_step}"
-            )
+
+            if self.initial_checkpoint.is_dir():
+                # Directory = full training state (pre-decay checkpoint)
+                metadata = trainer.load_training_state(str(self.initial_checkpoint))
+                self.last_checkpoint_step = metadata.get("step")
+                checkpoint_type = metadata.get("checkpoint_type", "wsd_pre_decay")
+                trainer.print(
+                    f"Loaded {checkpoint_type} training state from step {self.last_checkpoint_step}"
+                )
+            else:
+                # File = model export (post-decay checkpoint)
+                checkpoint = trainer.load_checkpoint(self.initial_checkpoint)
+                self.last_checkpoint_step = checkpoint.get("step")
+                checkpoint_type = checkpoint.get("checkpoint_type", "wsd_post_decay")
+                trainer.print(
+                    f"Loaded {checkpoint_type} checkpoint from step {self.last_checkpoint_step}"
+                )
 
     def on_train_step_end(self, trainer, step: int, **kwargs):
         """Handle checkpoint saving and progress logging"""
@@ -965,17 +1009,17 @@ class WSDCheckpointCallback(TrainerCallback):
         pre_decay_step = phase_info["pre_decay_step"]
         period_end = phase_info["period_end"]
 
-        # Save pre-decay checkpoint when entering decay phase
+        # Save pre-decay checkpoint as full training state (for continuation)
         if total_steps == pre_decay_step:
             trainer.print(
                 f"\nWSD Lr Scheduler entering decay phase at step {total_steps}"
             )
-            self._save_checkpoint(trainer, total_steps, "wsd_pre_decay")
+            self._save_pre_decay(trainer, total_steps)
             self.last_checkpoint_step = total_steps
 
-        # If we've completed the decay phase
+        # Save post-decay checkpoint as model export (decay is complete)
         elif total_steps == period_end:
-            self._save_checkpoint(trainer, total_steps, "wsd_post_decay")
+            self._save_post_decay(trainer, total_steps)
             self.last_checkpoint_step = total_steps
 
     def on_training_run_end(self, trainer, **kwargs):
@@ -991,5 +1035,5 @@ class WSDCheckpointCallback(TrainerCallback):
 
             # Verify this is actually the end of a period
             if total_steps == period_end:
-                self._save_checkpoint(trainer, total_steps, "wsd_post_decay")
+                self._save_post_decay(trainer, total_steps)
                 self.last_checkpoint_step = total_steps
