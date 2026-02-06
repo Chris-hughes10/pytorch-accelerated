@@ -778,6 +778,13 @@ class SaveTrainingStateCallback(TrainerCallback):
         save_at_end: bool = True,
         max_checkpoints: Optional[int] = None,
     ):
+        """
+        :param save_dir: directory to save training states to
+        :param save_every_n_epochs: save a training state every N epochs. If ``None``, no epoch-based saves.
+        :param save_every_n_steps: save a training state every N training steps. If ``None``, no step-based saves.
+        :param save_at_end: if ``True``, save a final training state at the end of training
+        :param max_checkpoints: maximum number of training states to keep. When exceeded, the oldest is deleted. If ``None``, all states are kept.
+        """
         self.save_dir = Path(save_dir)
         self.save_every_n_epochs = save_every_n_epochs
         self.save_every_n_steps = save_every_n_steps

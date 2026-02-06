@@ -1154,6 +1154,7 @@ class Trainer:
         :param checkpoint_path: the path of the checkpoint file to load
         :param load_optimizer: flag to indicate whether to load the optimizer if it is included in the checkpoint
         :param load_scheduler: flag to indicate whether to load the scheduler if it is included in the checkpoint
+        :return: the full checkpoint dictionary, including any custom kwargs that were saved via ``checkpoint_kwargs``
         """
         self._accelerator.wait_for_everyone()
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
