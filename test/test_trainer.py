@@ -688,3 +688,157 @@ def test_train_resume_from_sets_epoch(mocker):
     assert trainer.run_history.current_epoch == 3
     trainer.load_training_state.assert_called_once_with("/fake/path")
     trainer._run_training.assert_called_once()
+
+
+class TestSaveTrainingStateCallback:
+    """Tests for SaveTrainingStateCallback"""
+
+    def test_saves_at_end_by_default(self, mocker):
+        """Default config saves only at the end of training"""
+        from pytorch_accelerated.callbacks import SaveTrainingStateCallback
+
+        callback = SaveTrainingStateCallback(save_dir="/tmp/test_states")
+        trainer = Mock()
+        trainer.run_history.current_epoch = 1
+        trainer.save_training_state = Mock()
+        trainer.print = Mock()
+        callback._saved_checkpoints = []
+
+        mocker.patch("pathlib.Path.mkdir")
+        callback.on_training_run_start(trainer)
+
+        # Step ends should NOT trigger a save
+        callback.on_train_step_end(trainer, step=0)
+        callback.on_train_step_end(trainer, step=1)
+        trainer.save_training_state.assert_not_called()
+
+        # Epoch end should NOT trigger a save (no save_every_n_epochs set)
+        callback.on_train_epoch_end(trainer)
+        trainer.save_training_state.assert_not_called()
+
+        # Training end SHOULD trigger a save
+        callback.on_training_run_end(trainer)
+        trainer.save_training_state.assert_called_once()
+
+    def test_saves_every_n_epochs(self, mocker):
+        """Saves at configured epoch intervals"""
+        from pytorch_accelerated.callbacks import SaveTrainingStateCallback
+
+        callback = SaveTrainingStateCallback(
+            save_dir="/tmp/test_states",
+            save_every_n_epochs=2,
+            save_at_end=False,
+        )
+        trainer = Mock()
+        trainer.save_training_state = Mock()
+        trainer.print = Mock()
+        callback._saved_checkpoints = []
+
+        mocker.patch("pathlib.Path.mkdir")
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        callback.on_training_run_start(trainer)
+
+        # Epoch 1 - no save
+        trainer.run_history.current_epoch = 1
+        callback.on_train_epoch_end(trainer)
+        assert trainer.save_training_state.call_count == 0
+
+        # Epoch 2 - save
+        trainer.run_history.current_epoch = 2
+        callback.on_train_epoch_end(trainer)
+        assert trainer.save_training_state.call_count == 1
+
+        # Epoch 3 - no save
+        trainer.run_history.current_epoch = 3
+        callback.on_train_epoch_end(trainer)
+        assert trainer.save_training_state.call_count == 1
+
+        # Epoch 4 - save
+        trainer.run_history.current_epoch = 4
+        callback.on_train_epoch_end(trainer)
+        assert trainer.save_training_state.call_count == 2
+
+    def test_saves_every_n_steps(self, mocker):
+        """Saves at configured step intervals"""
+        from pytorch_accelerated.callbacks import SaveTrainingStateCallback
+
+        callback = SaveTrainingStateCallback(
+            save_dir="/tmp/test_states",
+            save_every_n_steps=3,
+            save_at_end=False,
+        )
+        trainer = Mock()
+        trainer.save_training_state = Mock()
+        trainer.print = Mock()
+        callback._saved_checkpoints = []
+
+        mocker.patch("pathlib.Path.mkdir")
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        callback.on_training_run_start(trainer)
+
+        # Steps 1, 2 - no save
+        callback.on_train_step_end(trainer, step=0)
+        callback.on_train_step_end(trainer, step=1)
+        assert trainer.save_training_state.call_count == 0
+
+        # Step 3 - save
+        callback.on_train_step_end(trainer, step=2)
+        assert trainer.save_training_state.call_count == 1
+
+        # Steps 4, 5 - no save
+        callback.on_train_step_end(trainer, step=3)
+        callback.on_train_step_end(trainer, step=4)
+        assert trainer.save_training_state.call_count == 1
+
+        # Step 6 - save
+        callback.on_train_step_end(trainer, step=5)
+        assert trainer.save_training_state.call_count == 2
+
+    def test_max_checkpoints_cleanup(self, mocker):
+        """Old checkpoints are removed when max_checkpoints is exceeded"""
+        from pytorch_accelerated.callbacks import SaveTrainingStateCallback
+
+        callback = SaveTrainingStateCallback(
+            save_dir="/tmp/test_states",
+            save_every_n_epochs=1,
+            save_at_end=False,
+            max_checkpoints=2,
+        )
+        trainer = Mock()
+        trainer.save_training_state = Mock()
+        trainer.print = Mock()
+        callback._saved_checkpoints = []
+
+        mocker.patch("pathlib.Path.mkdir")
+        mock_rmtree = mocker.patch("shutil.rmtree")
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        callback.on_training_run_start(trainer)
+
+        # Save epoch 1, 2 - both kept
+        trainer.run_history.current_epoch = 1
+        callback.on_train_epoch_end(trainer)
+        trainer.run_history.current_epoch = 2
+        callback.on_train_epoch_end(trainer)
+        assert len(callback._saved_checkpoints) == 2
+        mock_rmtree.assert_not_called()
+
+        # Save epoch 3 - epoch 1 should be cleaned up
+        trainer.run_history.current_epoch = 3
+        callback.on_train_epoch_end(trainer)
+        assert len(callback._saved_checkpoints) == 2
+        mock_rmtree.assert_called_once()
+
+    def test_no_save_at_end_when_disabled(self, mocker):
+        """No save at end of training when save_at_end=False"""
+        from pytorch_accelerated.callbacks import SaveTrainingStateCallback
+
+        callback = SaveTrainingStateCallback(
+            save_dir="/tmp/test_states",
+            save_at_end=False,
+        )
+        trainer = Mock()
+        trainer.save_training_state = Mock()
+        trainer.print = Mock()
+
+        callback.on_training_run_end(trainer)
+        trainer.save_training_state.assert_not_called()

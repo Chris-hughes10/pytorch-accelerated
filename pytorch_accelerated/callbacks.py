@@ -712,6 +712,125 @@ class LimitEvalStepsCallback(TrainerCallback):
             trainer._eval_dataloader = self._original_eval_dataloader
 
 
+class SaveTrainingStateCallback(TrainerCallback):
+    """
+    A callback that saves the complete training state at configurable intervals.
+
+    This uses :meth:`~pytorch_accelerated.trainer.Trainer.save_training_state` to save
+    everything needed for an exact resume: model weights, optimizer state, scheduler state,
+    RNG states, and the mixed-precision scaler. It handles FSDP-sharded models and
+    ``torch.compile`` automatically.
+
+    By default, the training state is saved at the end of training only. You can also
+    configure it to save every N epochs or every N training steps.
+
+    Old checkpoints are automatically removed when ``max_checkpoints`` is set, keeping
+    only the most recent ones to limit disk usage.
+
+    For saving the *best* model weights based on a metric, use :class:`SaveBestModelCallback`
+    instead. Both callbacks can be used together.
+
+    :param save_dir: Directory to save training state checkpoints to.
+    :param save_every_n_epochs: If set, save a checkpoint every N epochs.
+    :param save_every_n_steps: If set, save a checkpoint every N training steps.
+    :param save_at_end: Whether to save a checkpoint at the end of training. Defaults to ``True``.
+    :param max_checkpoints: If set, only keep the most recent N checkpoints. Older ones
+        are deleted automatically. If ``None``, all checkpoints are kept.
+
+    Example::
+
+        # Save every 5 epochs, keep only the last 3
+        callback = SaveTrainingStateCallback(
+            save_dir="checkpoints",
+            save_every_n_epochs=5,
+            max_checkpoints=3,
+        )
+
+        # Save every 1000 steps and at the end of training
+        callback = SaveTrainingStateCallback(
+            save_dir="checkpoints",
+            save_every_n_steps=1000,
+        )
+
+        # Just save at end of training (default)
+        callback = SaveTrainingStateCallback(save_dir="checkpoints")
+
+        trainer = Trainer(
+            model=model,
+            loss_func=loss_func,
+            optimizer=optimizer,
+            callbacks=[SaveTrainingStateCallback, ...],
+        )
+
+        # Resume from saved state
+        trainer.train(
+            train_dataset=dataset,
+            num_epochs=10,
+            resume_from="checkpoints/epoch_5",
+        )
+    """
+
+    def __init__(
+        self,
+        save_dir: str = "training_states",
+        save_every_n_epochs: Optional[int] = None,
+        save_every_n_steps: Optional[int] = None,
+        save_at_end: bool = True,
+        max_checkpoints: Optional[int] = None,
+    ):
+        self.save_dir = Path(save_dir)
+        self.save_every_n_epochs = save_every_n_epochs
+        self.save_every_n_steps = save_every_n_steps
+        self.save_at_end = save_at_end
+        self.max_checkpoints = max_checkpoints
+        self._saved_checkpoints = []
+        self._global_step = 0
+
+    def _save(self, trainer, name):
+        output_dir = self.save_dir / name
+        trainer.save_training_state(
+            str(output_dir),
+            checkpoint_kwargs={"global_step": self._global_step},
+        )
+        self._saved_checkpoints.append(output_dir)
+        trainer.print(f"\nSaved training state to {output_dir}")
+        self._cleanup_old_checkpoints(trainer)
+
+    def _cleanup_old_checkpoints(self, trainer):
+        if self.max_checkpoints is None:
+            return
+        while len(self._saved_checkpoints) > self.max_checkpoints:
+            old_dir = self._saved_checkpoints.pop(0)
+            if old_dir.exists():
+                import shutil
+                shutil.rmtree(old_dir)
+                trainer.print(f"Removed old training state: {old_dir}")
+
+    def on_training_run_start(self, trainer, **kwargs):
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+        self._global_step = 0
+
+    def on_train_step_end(self, trainer, step, **kwargs):
+        self._global_step += 1
+        if (
+            self.save_every_n_steps is not None
+            and self._global_step % self.save_every_n_steps == 0
+        ):
+            self._save(trainer, f"step_{self._global_step}")
+
+    def on_train_epoch_end(self, trainer, **kwargs):
+        epoch = trainer.run_history.current_epoch
+        if (
+            self.save_every_n_epochs is not None
+            and epoch % self.save_every_n_epochs == 0
+        ):
+            self._save(trainer, f"epoch_{epoch}")
+
+    def on_training_run_end(self, trainer, **kwargs):
+        if self.save_at_end:
+            self._save(trainer, "final")
+
+
 class WSDCheckpointCallback(TrainerCallback):
     """Manages checkpointing for WSD and WSD-S learning rate schedules.
 
