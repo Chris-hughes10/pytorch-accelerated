@@ -986,3 +986,328 @@ class TestWSDCheckpointCallback:
         # Should use save_checkpoint (post-decay export)
         trainer.save_checkpoint.assert_called_once()
         trainer.save_training_state.assert_not_called()
+
+
+class TestCheckpointRoundTrip:
+    """Integration tests for save/load checkpoint round-trips with real data"""
+
+    def _make_trainer(self):
+        """Create a real trainer with model, optimizer, and scheduler."""
+        model = SimpleModel(10, 1)
+        optimizer = optim.SGD(model.parameters(), lr=0.05, momentum=0.9)
+        trainer = Trainer(
+            model=model,
+            loss_func=nn.MSELoss(),
+            optimizer=optimizer,
+        )
+        # Minimal setup so save/load works without running train()
+        trainer._prepare_model_optimizer_and_dataloaders = lambda: None
+        trainer.run_config = Mock()
+        trainer.run_config.is_world_process_zero = True
+        return trainer
+
+    def test_save_load_checkpoint_weights_roundtrip(self):
+        """Model weights survive a save/load round-trip"""
+        trainer = self._make_trainer()
+
+        # Record original weights
+        original_weights = {
+            k: v.clone() for k, v in trainer.model.state_dict().items()
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path)
+
+            # Corrupt the model weights to prove load actually restores them
+            with torch.no_grad():
+                for param in trainer.model.parameters():
+                    param.fill_(999.0)
+
+            trainer.load_checkpoint(path)
+
+            # Verify weights match the original
+            for key, original_val in original_weights.items():
+                loaded_val = trainer.model.state_dict()[key]
+                assert torch.equal(original_val, loaded_val), (
+                    f"Weight mismatch for {key} after round-trip"
+                )
+
+    def test_save_load_checkpoint_optimizer_roundtrip(self):
+        """Optimizer state (momentum buffers, etc.) survives a save/load round-trip"""
+        trainer = self._make_trainer()
+
+        # Do a few fake steps so the optimizer accumulates momentum state
+        x = torch.randn(4, 10)
+        y = torch.randn(4, 1)
+        for _ in range(3):
+            trainer.optimizer.zero_grad()
+            loss = trainer.loss_func(trainer.model(x), y)
+            loss.backward()
+            trainer.optimizer.step()
+
+        # Record optimizer state after the steps
+        original_opt_state = {
+            k: {
+                sk: sv.clone() if isinstance(sv, torch.Tensor) else sv
+                for sk, sv in v.items()
+            }
+            for k, v in trainer.optimizer.state_dict()["state"].items()
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path, save_optimizer=True)
+
+            # Reset optimizer to fresh state
+            trainer.optimizer = optim.SGD(
+                trainer.model.parameters(), lr=0.05, momentum=0.9
+            )
+            assert len(trainer.optimizer.state_dict()["state"]) == 0
+
+            trainer.load_checkpoint(path, load_optimizer=True)
+
+            # Verify optimizer state was restored
+            loaded_state = trainer.optimizer.state_dict()["state"]
+            assert len(loaded_state) > 0, "Optimizer state not restored"
+            for key, original_param_state in original_opt_state.items():
+                loaded_param_state = loaded_state[key]
+                for sk, sv in original_param_state.items():
+                    if isinstance(sv, torch.Tensor):
+                        assert torch.equal(sv, loaded_param_state[sk]), (
+                            f"Optimizer state mismatch: param {key}, field {sk}"
+                        )
+
+    def test_save_load_checkpoint_scheduler_roundtrip(self):
+        """Scheduler state survives a save/load round-trip"""
+        from pytorch_accelerated.schedulers import CosineLrScheduler
+
+        trainer = self._make_trainer()
+        scheduler = CosineLrScheduler(
+            optimizer=trainer.optimizer,
+            total_num_epochs=10,
+            num_update_steps_per_epoch=100,
+        )
+        trainer.scheduler = scheduler
+
+        # Step the scheduler forward to change its state
+        for _ in range(50):
+            scheduler.step()
+
+        original_state = scheduler.state_dict()
+        assert original_state["num_updates"] == 49  # 0-indexed, 50 steps
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path, save_scheduler=True)
+
+            # Reset scheduler
+            trainer.scheduler = CosineLrScheduler(
+                optimizer=trainer.optimizer,
+                total_num_epochs=10,
+                num_update_steps_per_epoch=100,
+            )
+            assert trainer.scheduler.state_dict()["num_updates"] == -1
+
+            trainer.load_checkpoint(path, load_scheduler=True)
+
+            # Verify scheduler state was restored
+            loaded_state = trainer.scheduler.state_dict()
+            assert loaded_state["num_updates"] == 49
+
+    def test_save_load_checkpoint_custom_kwargs_roundtrip(self):
+        """Custom checkpoint_kwargs are preserved through save/load"""
+        trainer = self._make_trainer()
+
+        custom_kwargs = {
+            "step": 42,
+            "checkpoint_type": "wsd_post_decay",
+            "decay_fraction": 0.1,
+            "total_steps": 1000,
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path, checkpoint_kwargs=custom_kwargs)
+
+            checkpoint = trainer.load_checkpoint(path)
+
+            for key, expected_val in custom_kwargs.items():
+                assert key in checkpoint, f"Missing custom kwarg: {key}"
+                assert checkpoint[key] == expected_val, (
+                    f"Custom kwarg {key}: expected {expected_val}, got {checkpoint[key]}"
+                )
+
+    def test_load_checkpoint_skip_optimizer(self):
+        """load_optimizer=False skips optimizer even when checkpoint has one"""
+        trainer = self._make_trainer()
+
+        # Do a step to create optimizer state
+        x = torch.randn(4, 10)
+        y = torch.randn(4, 1)
+        trainer.optimizer.zero_grad()
+        loss = trainer.loss_func(trainer.model(x), y)
+        loss.backward()
+        trainer.optimizer.step()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path, save_optimizer=True)
+
+            # Reset optimizer
+            trainer.optimizer = optim.SGD(
+                trainer.model.parameters(), lr=0.05, momentum=0.9
+            )
+            assert len(trainer.optimizer.state_dict()["state"]) == 0
+
+            trainer.load_checkpoint(path, load_optimizer=False)
+
+            # Optimizer should still be empty
+            assert len(trainer.optimizer.state_dict()["state"]) == 0
+
+    def test_load_checkpoint_skip_scheduler(self):
+        """load_scheduler=False skips scheduler even when checkpoint has one"""
+        from pytorch_accelerated.schedulers import CosineLrScheduler
+
+        trainer = self._make_trainer()
+        scheduler = CosineLrScheduler(
+            optimizer=trainer.optimizer,
+            total_num_epochs=10,
+            num_update_steps_per_epoch=100,
+        )
+        trainer.scheduler = scheduler
+
+        for _ in range(50):
+            scheduler.step()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path, save_scheduler=True)
+
+            # Reset scheduler
+            trainer.scheduler = CosineLrScheduler(
+                optimizer=trainer.optimizer,
+                total_num_epochs=10,
+                num_update_steps_per_epoch=100,
+            )
+            assert trainer.scheduler.state_dict()["num_updates"] == -1
+
+            trainer.load_checkpoint(path, load_scheduler=False)
+
+            # Scheduler should still be at initial state
+            assert trainer.scheduler.state_dict()["num_updates"] == -1
+
+    def test_save_checkpoint_without_optimizer_or_scheduler(self):
+        """Checkpoint without optimizer/scheduler only contains model weights"""
+        trainer = self._make_trainer()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(
+                path, save_optimizer=False, save_scheduler=False
+            )
+
+            checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+            assert "model_state_dict" in checkpoint
+            assert "optimizer_state_dict" not in checkpoint
+            assert "scheduler_state_dict" not in checkpoint
+
+    def test_wsd_metadata_roundtrip(self):
+        """WSD-style metadata (step, checkpoint_type, decay_fraction) survives round-trip"""
+        trainer = self._make_trainer()
+
+        wsd_kwargs = {
+            "step": 9000,
+            "checkpoint_type": "wsd_post_decay",
+            "total_steps": 10000,
+            "decay_fraction": 0.1,
+            "timestamp": "2026-02-09T12:00:00",
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/wsd_checkpoint.pt"
+            trainer.save_checkpoint(
+                path,
+                save_optimizer=True,
+                save_scheduler=False,
+                checkpoint_kwargs=wsd_kwargs,
+            )
+
+            checkpoint = trainer.load_checkpoint(path, load_scheduler=False)
+
+            # All WSD metadata should be present and correct
+            assert checkpoint["step"] == 9000
+            assert checkpoint["checkpoint_type"] == "wsd_post_decay"
+            assert checkpoint["total_steps"] == 10000
+            assert checkpoint["decay_fraction"] == 0.1
+            assert checkpoint["timestamp"] == "2026-02-09T12:00:00"
+
+            # Model weights should also be there
+            assert "model_state_dict" in checkpoint
+
+    def test_full_roundtrip_weights_and_training_resume(self):
+        """End-to-end: save everything, corrupt state, load, verify all restored"""
+        from pytorch_accelerated.schedulers import CosineLrScheduler
+
+        trainer = self._make_trainer()
+        scheduler = CosineLrScheduler(
+            optimizer=trainer.optimizer,
+            total_num_epochs=10,
+            num_update_steps_per_epoch=100,
+        )
+        trainer.scheduler = scheduler
+
+        # Train a few steps to accumulate state
+        x = torch.randn(4, 10)
+        y = torch.randn(4, 1)
+        for _ in range(25):
+            trainer.optimizer.zero_grad()
+            loss = trainer.loss_func(trainer.model(x), y)
+            loss.backward()
+            trainer.optimizer.step()
+            scheduler.step()
+
+        # Snapshot everything
+        original_weights = {
+            k: v.clone() for k, v in trainer.model.state_dict().items()
+        }
+        original_lr = trainer.optimizer.param_groups[0]["lr"]
+        original_scheduler_updates = scheduler.state_dict()["num_updates"]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/full_checkpoint.pt"
+            trainer.save_checkpoint(
+                path,
+                save_optimizer=True,
+                save_scheduler=True,
+                checkpoint_kwargs={"epoch": 3},
+            )
+
+            # Corrupt everything
+            with torch.no_grad():
+                for param in trainer.model.parameters():
+                    param.fill_(0.0)
+            trainer.optimizer = optim.SGD(
+                trainer.model.parameters(), lr=0.05, momentum=0.9
+            )
+            trainer.scheduler = CosineLrScheduler(
+                optimizer=trainer.optimizer,
+                total_num_epochs=10,
+                num_update_steps_per_epoch=100,
+            )
+
+            # Load and verify
+            checkpoint = trainer.load_checkpoint(path)
+
+            # Weights restored
+            for key, original_val in original_weights.items():
+                assert torch.equal(original_val, trainer.model.state_dict()[key])
+
+            # Optimizer has state
+            assert len(trainer.optimizer.state_dict()["state"]) > 0
+
+            # Scheduler restored
+            assert trainer.scheduler.state_dict()["num_updates"] == original_scheduler_updates
+
+            # Custom metadata preserved
+            assert checkpoint["epoch"] == 3
