@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 
-import numpy as np
+import operator as op
 import torch
 from pytorch_accelerated.tracking import LossTracker
 from pytorch_accelerated.utils import DataLoaderSlice, ModelEma
@@ -197,7 +197,7 @@ class CallbackHandler:
         self.callbacks.append(cb)
 
     def __iter__(self):
-        return self.callbacks
+        return iter(self.callbacks)
 
     def clear_callbacks(self):
         self.callbacks = []
@@ -359,7 +359,7 @@ class SaveBestModelCallback(TrainerCallback):
         """
         self.watch_metric = watch_metric
         self.greater_is_better = greater_is_better
-        self.operator = np.greater if self.greater_is_better else np.less
+        self.operator = op.gt if self.greater_is_better else op.lt
         self.best_metric = None
         self.best_metric_epoch = None
         self.save_path = save_path
@@ -430,7 +430,7 @@ class EarlyStoppingCallback(TrainerCallback):
         self.greater_is_better = greater_is_better
         self.early_stopping_patience_counter = 0
         self.best_metric = None
-        self.operator = np.greater if self.greater_is_better else np.less
+        self.operator = op.gt if self.greater_is_better else op.lt
         self.reset_on_train = reset_on_train
 
     def on_training_run_start(self, args, **kwargs):
@@ -712,11 +712,147 @@ class LimitEvalStepsCallback(TrainerCallback):
             trainer._eval_dataloader = self._original_eval_dataloader
 
 
+class SaveTrainingStateCallback(TrainerCallback):
+    """
+    A callback that saves the complete training state at configurable intervals.
+
+    This uses :meth:`~pytorch_accelerated.trainer.Trainer.save_training_state` to save
+    everything needed for an exact resume: model weights, optimizer state, scheduler state,
+    RNG states, and the mixed-precision scaler. It handles FSDP-sharded models and
+    ``torch.compile`` automatically.
+
+    By default, the training state is saved at the end of training only. You can also
+    configure it to save every N epochs or every N training steps.
+
+    Old checkpoints are automatically removed when ``max_checkpoints`` is set, keeping
+    only the most recent ones to limit disk usage.
+
+    For saving the *best* model weights based on a metric, use :class:`SaveBestModelCallback`
+    instead. Both callbacks can be used together.
+
+    :param save_dir: Directory to save training state checkpoints to.
+    :param save_every_n_epochs: If set, save a checkpoint every N epochs.
+    :param save_every_n_steps: If set, save a checkpoint every N training steps.
+    :param save_at_end: Whether to save a checkpoint at the end of training. Defaults to ``True``.
+    :param max_checkpoints: If set, only keep the most recent N checkpoints. Older ones
+        are deleted automatically. If ``None``, all checkpoints are kept.
+
+    Example::
+
+        # Save every 5 epochs, keep only the last 3
+        callback = SaveTrainingStateCallback(
+            save_dir="checkpoints",
+            save_every_n_epochs=5,
+            max_checkpoints=3,
+        )
+
+        # Save every 1000 steps and at the end of training
+        callback = SaveTrainingStateCallback(
+            save_dir="checkpoints",
+            save_every_n_steps=1000,
+        )
+
+        # Just save at end of training (default)
+        callback = SaveTrainingStateCallback(save_dir="checkpoints")
+
+        trainer = Trainer(
+            model=model,
+            loss_func=loss_func,
+            optimizer=optimizer,
+            callbacks=[SaveTrainingStateCallback, ...],
+        )
+
+        # Resume from saved state
+        trainer.train(
+            train_dataset=dataset,
+            num_epochs=10,
+            resume_from="checkpoints/epoch_5",
+        )
+    """
+
+    def __init__(
+        self,
+        save_dir: str = "training_states",
+        save_every_n_epochs: Optional[int] = None,
+        save_every_n_steps: Optional[int] = None,
+        save_at_end: bool = True,
+        max_checkpoints: Optional[int] = None,
+    ):
+        """
+        :param save_dir: directory to save training states to
+        :param save_every_n_epochs: save a training state every N epochs. If ``None``, no epoch-based saves.
+        :param save_every_n_steps: save a training state every N training steps. If ``None``, no step-based saves.
+        :param save_at_end: if ``True``, save a final training state at the end of training
+        :param max_checkpoints: maximum number of training states to keep. When exceeded, the oldest is deleted. If ``None``, all states are kept.
+        """
+        self.save_dir = Path(save_dir)
+        self.save_every_n_epochs = save_every_n_epochs
+        self.save_every_n_steps = save_every_n_steps
+        self.save_at_end = save_at_end
+        self.max_checkpoints = max_checkpoints
+        self._saved_checkpoints = []
+        self._global_step = 0
+
+    def _save(self, trainer, name):
+        output_dir = self.save_dir / name
+        trainer.save_training_state(
+            str(output_dir),
+            checkpoint_kwargs={"global_step": self._global_step},
+        )
+        self._saved_checkpoints.append(output_dir)
+        trainer.print(f"\nSaved training state to {output_dir}")
+        self._cleanup_old_checkpoints(trainer)
+
+    def _cleanup_old_checkpoints(self, trainer):
+        if self.max_checkpoints is None:
+            return
+        while len(self._saved_checkpoints) > self.max_checkpoints:
+            old_dir = self._saved_checkpoints.pop(0)
+            if old_dir.exists():
+                import shutil
+                shutil.rmtree(old_dir)
+                trainer.print(f"Removed old training state: {old_dir}")
+
+    def on_training_run_start(self, trainer, **kwargs):
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+        self._global_step = 0
+
+    def on_train_step_end(self, trainer, step, **kwargs):
+        self._global_step += 1
+        if (
+            self.save_every_n_steps is not None
+            and self._global_step % self.save_every_n_steps == 0
+        ):
+            self._save(trainer, f"step_{self._global_step}")
+
+    def on_train_epoch_end(self, trainer, **kwargs):
+        epoch = trainer.run_history.current_epoch
+        if (
+            self.save_every_n_epochs is not None
+            and epoch % self.save_every_n_epochs == 0
+        ):
+            self._save(trainer, f"epoch_{epoch}")
+
+    def on_training_run_end(self, trainer, **kwargs):
+        if self.save_at_end:
+            self._save(trainer, "final")
+
+
 class WSDCheckpointCallback(TrainerCallback):
     """Manages checkpointing for WSD and WSD-S learning rate schedules.
 
     This callback saves both pre-decay and post-decay checkpoints during training with WSD-style
     schedules and automatically syncs with :class:`~pytorch_accelerated.schedulers.wsd_scheduler.WSDLrScheduler` for checkpoint timing.
+
+    **Pre-decay checkpoints** are saved as full training states (using
+    :meth:`~pytorch_accelerated.trainer.Trainer.save_training_state`) because they are
+    designed for continuation training — loading a pre-decay checkpoint to begin a new
+    decay phase. This preserves RNG states, optimizer momentum, the mixed-precision
+    scaler, and handles FSDP sharding automatically.
+
+    **Post-decay checkpoints** are saved as portable model exports (using
+    :meth:`~pytorch_accelerated.trainer.Trainer.save_checkpoint`) because the decay phase
+    is complete and the model is ready for deployment or fine-tuning.
 
     For single checkpoint configurations:
         - Pre-decay checkpoint is saved just before learning rate decay starts
@@ -732,12 +868,13 @@ class WSDCheckpointCallback(TrainerCallback):
 
     :param save_dir: Directory to save checkpoints
     :type save_dir: str
-    :param save_optimizer: Whether to save optimizer state
+    :param save_optimizer: Whether to save optimizer state in post-decay (export) checkpoints
     :type save_optimizer: bool
-    :param save_scheduler: Whether to save scheduler state
+    :param save_scheduler: Whether to save scheduler state in post-decay (export) checkpoints
     :type save_scheduler: bool
-    :param initial_checkpoint: Path to checkpoint to load at start of training. For WSD-S,
-        use post-decay checkpoint. For WSD, use pre-decay checkpoint.
+    :param initial_checkpoint: Path to checkpoint to load at start of training.
+        If this is a directory, it is loaded as a full training state (pre-decay).
+        If this is a ``.pt`` file, it is loaded as a model export (post-decay).
     :type initial_checkpoint: Union[str, Path], optional
 
     :raises ValueError: If trainer's scheduler doesn't implement get_checkpoint_steps()
@@ -748,16 +885,16 @@ class WSDCheckpointCallback(TrainerCallback):
             ...     save_dir="checkpoints",
             ... )
 
-        WSD-S usage:
+        WSD-S usage (load post-decay export):
             >>> callback = WSDCheckpointCallback(
             ...     save_dir="checkpoints",
-            ...     initial_checkpoint="checkpoint_50000_post_decay.pt"
+            ...     initial_checkpoint="checkpoints/checkpoint_50000_wsd_post_decay.pt"
             ... )
 
-        WSD usage:
+        WSD usage (load pre-decay training state):
             >>> callback = WSDCheckpointCallback(
             ...     save_dir="checkpoints",
-            ...     initial_checkpoint="checkpoint_45000_pre_decay.pt"
+            ...     initial_checkpoint="checkpoints/checkpoint_45000_wsd_pre_decay"
             ... )
     """
 
@@ -770,9 +907,10 @@ class WSDCheckpointCallback(TrainerCallback):
     ):
         """
         :param save_dir: Directory to save checkpoints
-        :param save_optimizer: Whether to save optimizer state
-        :param save_scheduler: Whether to save scheduler state
-        :param initial_checkpoint: Optional path to checkpoint to load at start of training
+        :param save_optimizer: Whether to save optimizer state in post-decay (export) checkpoints
+        :param save_scheduler: Whether to save scheduler state in post-decay (export) checkpoints
+        :param initial_checkpoint: Optional path to checkpoint to load at start of training.
+            Directories are loaded as training states, files as model exports.
         """
         self.save_dir = Path(save_dir)
         self.save_optimizer = save_optimizer
@@ -790,24 +928,45 @@ class WSDCheckpointCallback(TrainerCallback):
         # Create save directory if it doesn't exist
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
-    def _get_checkpoint_path(self, step: int, checkpoint_type: str) -> Path:
+    def _get_export_checkpoint_path(self, step: int, checkpoint_type: str) -> Path:
+        """Get path for a post-decay model export checkpoint (.pt file)."""
         return self.save_dir / f"checkpoint_{step}_{checkpoint_type}.pt"
 
-    def _save_checkpoint(self, trainer, step: int, checkpoint_type: str):
-        checkpoint_path = self._get_checkpoint_path(step, checkpoint_type)
+    def _get_training_state_path(self, step: int, checkpoint_type: str) -> Path:
+        """Get path for a pre-decay training state checkpoint (directory)."""
+        return self.save_dir / f"checkpoint_{step}_{checkpoint_type}"
+
+    def _save_pre_decay(self, trainer, step: int):
+        """Save a pre-decay checkpoint as a full training state for continuation."""
+        state_dir = self._get_training_state_path(step, "wsd_pre_decay")
+        trainer.save_training_state(
+            str(state_dir),
+            checkpoint_kwargs={
+                "step": step,
+                "checkpoint_type": "wsd_pre_decay",
+                "total_steps": trainer.run_config.max_num_train_steps,
+                "decay_fraction": self.decay_fraction,
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
+        trainer.print(f"\nSaved wsd_pre_decay training state at step {step}")
+
+    def _save_post_decay(self, trainer, step: int):
+        """Save a post-decay checkpoint as a portable model export."""
+        checkpoint_path = self._get_export_checkpoint_path(step, "wsd_post_decay")
         trainer.save_checkpoint(
             checkpoint_path,
             save_optimizer=self.save_optimizer,
             save_scheduler=self.save_scheduler,
             checkpoint_kwargs={
                 "step": step,
-                "checkpoint_type": checkpoint_type,
+                "checkpoint_type": "wsd_post_decay",
                 "total_steps": trainer.run_config.max_num_train_steps,
                 "decay_fraction": self.decay_fraction,
                 "timestamp": datetime.now().isoformat(),
             },
         )
-        trainer.print(f"\nSaved {checkpoint_type} checkpoint at step {step}")
+        trainer.print(f"\nSaved wsd_post_decay checkpoint at step {step}")
 
     def on_training_run_start(self, trainer, **kwargs):
         """Initialize checkpoint tracking state and load initial checkpoint if specified."""
@@ -825,12 +984,23 @@ class WSDCheckpointCallback(TrainerCallback):
         # Load initial checkpoint if specified
         if self.initial_checkpoint and self.initial_checkpoint.exists():
             trainer.print(f"\nLoading checkpoint from {self.initial_checkpoint}")
-            checkpoint = trainer.load_checkpoint(self.initial_checkpoint)
-            self.last_checkpoint_step = checkpoint.get("step")
-            checkpoint_type = checkpoint.get("checkpoint_type", "")
-            trainer.print(
-                f"Loaded {checkpoint_type} checkpoint from step {self.last_checkpoint_step}"
-            )
+
+            if self.initial_checkpoint.is_dir():
+                # Directory = full training state (pre-decay checkpoint)
+                metadata = trainer.load_training_state(str(self.initial_checkpoint))
+                self.last_checkpoint_step = metadata.get("step")
+                checkpoint_type = metadata.get("checkpoint_type", "wsd_pre_decay")
+                trainer.print(
+                    f"Loaded {checkpoint_type} training state from step {self.last_checkpoint_step}"
+                )
+            else:
+                # File = model export (post-decay checkpoint)
+                checkpoint = trainer.load_checkpoint(self.initial_checkpoint)
+                self.last_checkpoint_step = checkpoint.get("step")
+                checkpoint_type = checkpoint.get("checkpoint_type", "wsd_post_decay")
+                trainer.print(
+                    f"Loaded {checkpoint_type} checkpoint from step {self.last_checkpoint_step}"
+                )
 
     def on_train_step_end(self, trainer, step: int, **kwargs):
         """Handle checkpoint saving and progress logging"""
@@ -846,17 +1016,17 @@ class WSDCheckpointCallback(TrainerCallback):
         pre_decay_step = phase_info["pre_decay_step"]
         period_end = phase_info["period_end"]
 
-        # Save pre-decay checkpoint when entering decay phase
+        # Save pre-decay checkpoint as full training state (for continuation)
         if total_steps == pre_decay_step:
             trainer.print(
                 f"\nWSD Lr Scheduler entering decay phase at step {total_steps}"
             )
-            self._save_checkpoint(trainer, total_steps, "wsd_pre_decay")
+            self._save_pre_decay(trainer, total_steps)
             self.last_checkpoint_step = total_steps
 
-        # If we've completed the decay phase
+        # Save post-decay checkpoint as model export (decay is complete)
         elif total_steps == period_end:
-            self._save_checkpoint(trainer, total_steps, "wsd_post_decay")
+            self._save_post_decay(trainer, total_steps)
             self.last_checkpoint_step = total_steps
 
     def on_training_run_end(self, trainer, **kwargs):
@@ -872,5 +1042,5 @@ class WSDCheckpointCallback(TrainerCallback):
 
             # Verify this is actually the end of a period
             if total_steps == period_end:
-                self._save_checkpoint(trainer, total_steps, "wsd_post_decay")
+                self._save_post_decay(trainer, total_steps)
                 self.last_checkpoint_step = total_steps

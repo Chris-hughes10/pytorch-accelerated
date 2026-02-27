@@ -120,8 +120,42 @@ consists of running a single epoch, using the :class:`Trainer`'s evaluation loop
 Utility Methods
 ==================
 
+Saving and loading checkpoints
+---------------------------------
+
+The :class:`Trainer` provides two approaches to checkpointing:
+
+**Model export** (``save_checkpoint`` / ``load_checkpoint``): Saves a single portable ``.pt`` file
+containing model weights and optionally optimizer/scheduler state. Best for model selection, deployment,
+and sharing weights across different setups. Used by :class:`~pytorch_accelerated.callbacks.SaveBestModelCallback`.
+
+**Training state** (``save_training_state`` / ``load_training_state``): Saves a complete directory
+containing everything needed for an exact resume: model weights, optimizer state, scheduler state,
+RNG states, and the mixed-precision scaler. Handles FSDP-sharded models and ``torch.compile``
+automatically. Used by :class:`~pytorch_accelerated.callbacks.SaveTrainingStateCallback` and
+:class:`~pytorch_accelerated.callbacks.WSDCheckpointCallback` (for pre-decay checkpoints).
+
+To resume training from a saved training state, pass the directory path as the ``resume_from``
+parameter to :meth:`~Trainer.train`::
+
+    # Save during training (e.g. via SaveTrainingStateCallback)
+    trainer.save_training_state("checkpoints/step_5000")
+
+    # Resume later
+    trainer.train(
+        train_dataset=dataset,
+        num_epochs=10,
+        resume_from="checkpoints/step_5000",
+    )
+
 .. automethod:: Trainer.save_checkpoint
 .. automethod:: Trainer.load_checkpoint
+.. automethod:: Trainer.save_training_state
+.. automethod:: Trainer.load_training_state
+
+Other utilities
+---------------------------------
+
 .. automethod:: Trainer.print
 .. automethod:: Trainer.gather
 .. automethod:: Trainer.get_model

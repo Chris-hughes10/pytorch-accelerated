@@ -1,3 +1,4 @@
+import tempfile
 from unittest.mock import MagicMock, Mock, call
 import pytest
 
@@ -7,6 +8,7 @@ from pytorch_accelerated.utils import worker_init_fn
 from torch import optim, nn
 
 from pytorch_accelerated.trainer import Trainer
+from pytorch_accelerated.tracking import InMemoryRunHistory
 
 
 class DummyTrainer(Trainer):
@@ -41,7 +43,7 @@ class DummyTrainer(Trainer):
             "batch_size": 1,
         }
 
-    def _prepare_model_and_optimizer(self):
+    def _prepare_model_optimizer_and_dataloaders(self):
         pass
 
 
@@ -133,7 +135,8 @@ class StepTrackingTrainer(DummyTrainer):
 
 
 def test_skip_eval_if_not_present(mocker):
-    trainer = DummyTrainer(model=Mock(), optimizer=Mock(), loss_func=Mock())
+    model = SimpleModel(10, 1)
+    trainer = DummyTrainer(model=model, optimizer=optim.SGD(model.parameters(), lr=0.01), loss_func=Mock())
     mocked_train_epoch: MagicMock = mocker.patch.object(
         trainer, "_run_train_epoch", return_value=False
     )
@@ -148,7 +151,8 @@ def test_skip_eval_if_not_present(mocker):
 
 
 def test_skip_scheduler_step_if_not_present(mocker):
-    trainer = DummyTrainer(model=Mock(), optimizer=Mock(), loss_func=Mock())
+    model = SimpleModel(10, 1)
+    trainer = DummyTrainer(model=model, optimizer=optim.SGD(model.parameters(), lr=0.01), loss_func=Mock())
     scheduler_step = mocker.patch.object(trainer, "scheduler_step")
 
     trainer.train(train_dataset=Mock(), num_epochs=1)
@@ -220,7 +224,7 @@ class GradAccumTrainer(Trainer):
 
     def calculate_train_batch_loss(self, batch):
         # Simulate a token-level loss that's already normalized
-        loss = torch.tensor(1.0, requires_grad=True)
+        loss = torch.tensor(1.0)
         result = {
             "loss": loss,
             "model_outputs": None,
@@ -251,7 +255,7 @@ def test_gradient_accumulation_with_num_items_in_batch():
 
     # Test WITHOUT num_items_in_batch
     trainer_without = GradAccumTrainer(
-        return_num_items=False, model=model, optimizer=optimizer, loss_func=Mock()
+        return_num_items=False, model=model, optimizer=optimizer, loss_func=Mock(), callbacks=()
     )
     # Manually set run_config to simulate distributed training with grad accumulation
     trainer_without.run_config = TrainerRunConfig(
@@ -261,10 +265,16 @@ def test_gradient_accumulation_with_num_items_in_batch():
         eval_per_device_batch_size=1,
         eval_dl_kwargs={},
         gradient_accumulation_steps=2,
+        gradient_clip_value=None,
+        train_total_batch_size=4,
+        eval_total_batch_size=4,
         num_update_steps_per_epoch=2,
         num_local_update_steps_per_epoch=2,
         max_num_train_steps=2,
+        is_local_process_zero=True,
+        is_world_process_zero=True,
         is_distributed=True,
+        mixed_precision="no",
         num_processes=4,
     )
     trainer_without._perform_forward_and_backward_passes({}, 0)
@@ -272,7 +282,7 @@ def test_gradient_accumulation_with_num_items_in_batch():
 
     # Test WITH num_items_in_batch
     trainer_with = GradAccumTrainer(
-        return_num_items=True, model=model, optimizer=optimizer, loss_func=Mock()
+        return_num_items=True, model=model, optimizer=optimizer, loss_func=Mock(), callbacks=()
     )
     trainer_with.run_config = TrainerRunConfig(
         num_epochs=1,
@@ -281,10 +291,16 @@ def test_gradient_accumulation_with_num_items_in_batch():
         eval_per_device_batch_size=1,
         eval_dl_kwargs={},
         gradient_accumulation_steps=2,
+        gradient_clip_value=None,
+        train_total_batch_size=4,
+        eval_total_batch_size=4,
         num_update_steps_per_epoch=2,
         num_local_update_steps_per_epoch=2,
         max_num_train_steps=2,
+        is_local_process_zero=True,
+        is_world_process_zero=True,
         is_distributed=True,
+        mixed_precision="no",
         num_processes=4,
     )
     trainer_with._perform_forward_and_backward_passes({}, 0)
@@ -306,7 +322,7 @@ def test_gradient_accumulation_no_scaling_without_distributed():
     optimizer = optim.SGD(model.parameters(), lr=0.01)
 
     trainer = GradAccumTrainer(
-        return_num_items=True, model=model, optimizer=optimizer, loss_func=Mock()
+        return_num_items=True, model=model, optimizer=optimizer, loss_func=Mock(), callbacks=()
     )
     # Simulate non-distributed training
     trainer.run_config = TrainerRunConfig(
@@ -316,10 +332,16 @@ def test_gradient_accumulation_no_scaling_without_distributed():
         eval_per_device_batch_size=1,
         eval_dl_kwargs={},
         gradient_accumulation_steps=2,
+        gradient_clip_value=None,
+        train_total_batch_size=1,
+        eval_total_batch_size=1,
         num_update_steps_per_epoch=2,
         num_local_update_steps_per_epoch=2,
         max_num_train_steps=2,
+        is_local_process_zero=True,
+        is_world_process_zero=True,
         is_distributed=False,  # Not distributed
+        mixed_precision="no",
         num_processes=1,
     )
     trainer._perform_forward_and_backward_passes({}, 0)
@@ -352,7 +374,9 @@ def test_check_eval_batch_size_is_transparent_on_single_process():
     trainer._check_eval_batch_size()
 
 
-def test_check_eval_batch_size_is_transparent_with_full_batches_for_all_processes():
+def test_check_eval_batch_size_is_transparent_with_full_batches_for_all_processes(
+    recwarn,
+):
     per_device_batch_size = 8
     n_processes = 4
     n_full_batches = 2
@@ -372,10 +396,9 @@ def test_check_eval_batch_size_is_transparent_with_full_batches_for_all_processe
     trainer.eval_dataset = list(range(n_samples))
     trainer.run_config = FakeRunConfig()
 
-    with pytest.warns(None) as record:
-        trainer._check_eval_batch_size()
+    trainer._check_eval_batch_size()
 
-    assert len(record) == 0
+    assert len(recwarn) == 0
 
 
 def test_check_eval_batch_size_raises_batch_size_bigger_than_dataset():
@@ -572,3 +595,719 @@ def test_no_max_steps_completes_all_epochs():
     assert trainer.actual_update_steps == 12, (
         f"Expected 12 update steps (6 per epoch * 2 epochs), got {trainer.actual_update_steps}"
     )
+
+
+def test_save_checkpoint_strips_compile_prefix():
+    """Test that save_checkpoint produces clean state_dict keys (no _orig_mod prefix)"""
+    model = SimpleModel(10, 1)
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
+    trainer = Trainer(model=model, loss_func=nn.MSELoss(), optimizer=optimizer)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Save a checkpoint
+        save_path = f"{tmpdir}/test_checkpoint.pt"
+
+        # Manually prepare the trainer enough to save
+        trainer._prepare_model_optimizer_and_dataloaders = lambda: None
+        trainer.run_config = Mock()
+        trainer.run_config.is_world_process_zero = True
+        trainer.save_checkpoint(save_path)
+
+        # Load and check keys have no _orig_mod prefix
+        checkpoint = torch.load(save_path, map_location="cpu", weights_only=True)
+        for key in checkpoint["model_state_dict"]:
+            assert not key.startswith("_orig_mod."), (
+                f"Key {key} has _orig_mod prefix — compile wrapper not stripped"
+            )
+
+
+def test_load_checkpoint_uses_weights_only():
+    """Test that load_checkpoint uses weights_only=True for security"""
+    model = SimpleModel(10, 1)
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
+    trainer = Trainer(model=model, loss_func=nn.MSELoss(), optimizer=optimizer)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_path = f"{tmpdir}/test_checkpoint.pt"
+        trainer._prepare_model_optimizer_and_dataloaders = lambda: None
+        trainer.run_config = Mock()
+        trainer.run_config.is_world_process_zero = True
+        trainer.save_checkpoint(save_path)
+
+        # Load should succeed with weights_only=True
+        checkpoint = trainer.load_checkpoint(save_path, load_optimizer=True, load_scheduler=False)
+        assert "model_state_dict" in checkpoint
+
+
+def test_get_model_keep_torch_compile_param():
+    """Test that get_model accepts keep_torch_compile parameter"""
+    model = SimpleModel(10, 1)
+    trainer = Trainer(model=model, loss_func=nn.MSELoss(), optimizer=optim.SGD(model.parameters(), lr=0.01))
+
+    # Should work with both True and False
+    unwrapped_with = trainer.get_model(keep_torch_compile=True)
+    unwrapped_without = trainer.get_model(keep_torch_compile=False)
+    assert isinstance(unwrapped_with, nn.Module)
+    assert isinstance(unwrapped_without, nn.Module)
+
+
+def test_set_epoch_on_run_history():
+    """Test that _set_epoch correctly sets the epoch on RunHistory"""
+    history = InMemoryRunHistory()
+    assert history.current_epoch == 1
+
+    history._set_epoch(5)
+    assert history.current_epoch == 5
+
+    history._increment_epoch()
+    assert history.current_epoch == 6
+
+
+def test_train_resume_from_sets_epoch(mocker):
+    """Test that resume_from restores the epoch and skips reset_run_history"""
+    model = SimpleModel(10, 1)
+    trainer = DummyTrainer(
+        model=model,
+        optimizer=optim.SGD(model.parameters(), lr=0.01),
+        loss_func=Mock(),
+    )
+
+    # Mock load_training_state to return metadata without actually loading
+    mocker.patch.object(
+        trainer, "load_training_state", return_value={"current_epoch": 3}
+    )
+    mocker.patch.object(trainer, "_run_training")
+
+    trainer.train(
+        train_dataset=Mock(),
+        num_epochs=10,
+        resume_from="/fake/path",
+    )
+
+    # Verify epoch was set from the metadata
+    assert trainer.run_history.current_epoch == 3
+    trainer.load_training_state.assert_called_once_with("/fake/path")
+    trainer._run_training.assert_called_once()
+
+
+class TestSaveTrainingStateCallback:
+    """Tests for SaveTrainingStateCallback"""
+
+    def test_saves_at_end_by_default(self, mocker):
+        """Default config saves only at the end of training"""
+        from pytorch_accelerated.callbacks import SaveTrainingStateCallback
+
+        callback = SaveTrainingStateCallback(save_dir="/tmp/test_states")
+        trainer = Mock()
+        trainer.run_history.current_epoch = 1
+        trainer.save_training_state = Mock()
+        trainer.print = Mock()
+        callback._saved_checkpoints = []
+
+        mocker.patch("pathlib.Path.mkdir")
+        callback.on_training_run_start(trainer)
+
+        # Step ends should NOT trigger a save
+        callback.on_train_step_end(trainer, step=0)
+        callback.on_train_step_end(trainer, step=1)
+        trainer.save_training_state.assert_not_called()
+
+        # Epoch end should NOT trigger a save (no save_every_n_epochs set)
+        callback.on_train_epoch_end(trainer)
+        trainer.save_training_state.assert_not_called()
+
+        # Training end SHOULD trigger a save
+        callback.on_training_run_end(trainer)
+        trainer.save_training_state.assert_called_once()
+
+    def test_saves_every_n_epochs(self, mocker):
+        """Saves at configured epoch intervals"""
+        from pytorch_accelerated.callbacks import SaveTrainingStateCallback
+
+        callback = SaveTrainingStateCallback(
+            save_dir="/tmp/test_states",
+            save_every_n_epochs=2,
+            save_at_end=False,
+        )
+        trainer = Mock()
+        trainer.save_training_state = Mock()
+        trainer.print = Mock()
+        callback._saved_checkpoints = []
+
+        mocker.patch("pathlib.Path.mkdir")
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        callback.on_training_run_start(trainer)
+
+        # Epoch 1 - no save
+        trainer.run_history.current_epoch = 1
+        callback.on_train_epoch_end(trainer)
+        assert trainer.save_training_state.call_count == 0
+
+        # Epoch 2 - save
+        trainer.run_history.current_epoch = 2
+        callback.on_train_epoch_end(trainer)
+        assert trainer.save_training_state.call_count == 1
+
+        # Epoch 3 - no save
+        trainer.run_history.current_epoch = 3
+        callback.on_train_epoch_end(trainer)
+        assert trainer.save_training_state.call_count == 1
+
+        # Epoch 4 - save
+        trainer.run_history.current_epoch = 4
+        callback.on_train_epoch_end(trainer)
+        assert trainer.save_training_state.call_count == 2
+
+    def test_saves_every_n_steps(self, mocker):
+        """Saves at configured step intervals"""
+        from pytorch_accelerated.callbacks import SaveTrainingStateCallback
+
+        callback = SaveTrainingStateCallback(
+            save_dir="/tmp/test_states",
+            save_every_n_steps=3,
+            save_at_end=False,
+        )
+        trainer = Mock()
+        trainer.save_training_state = Mock()
+        trainer.print = Mock()
+        callback._saved_checkpoints = []
+
+        mocker.patch("pathlib.Path.mkdir")
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        callback.on_training_run_start(trainer)
+
+        # Steps 1, 2 - no save
+        callback.on_train_step_end(trainer, step=0)
+        callback.on_train_step_end(trainer, step=1)
+        assert trainer.save_training_state.call_count == 0
+
+        # Step 3 - save
+        callback.on_train_step_end(trainer, step=2)
+        assert trainer.save_training_state.call_count == 1
+
+        # Steps 4, 5 - no save
+        callback.on_train_step_end(trainer, step=3)
+        callback.on_train_step_end(trainer, step=4)
+        assert trainer.save_training_state.call_count == 1
+
+        # Step 6 - save
+        callback.on_train_step_end(trainer, step=5)
+        assert trainer.save_training_state.call_count == 2
+
+    def test_max_checkpoints_cleanup(self, mocker):
+        """Old checkpoints are removed when max_checkpoints is exceeded"""
+        from pytorch_accelerated.callbacks import SaveTrainingStateCallback
+
+        callback = SaveTrainingStateCallback(
+            save_dir="/tmp/test_states",
+            save_every_n_epochs=1,
+            save_at_end=False,
+            max_checkpoints=2,
+        )
+        trainer = Mock()
+        trainer.save_training_state = Mock()
+        trainer.print = Mock()
+        callback._saved_checkpoints = []
+
+        mocker.patch("pathlib.Path.mkdir")
+        mock_rmtree = mocker.patch("shutil.rmtree")
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        callback.on_training_run_start(trainer)
+
+        # Save epoch 1, 2 - both kept
+        trainer.run_history.current_epoch = 1
+        callback.on_train_epoch_end(trainer)
+        trainer.run_history.current_epoch = 2
+        callback.on_train_epoch_end(trainer)
+        assert len(callback._saved_checkpoints) == 2
+        mock_rmtree.assert_not_called()
+
+        # Save epoch 3 - epoch 1 should be cleaned up
+        trainer.run_history.current_epoch = 3
+        callback.on_train_epoch_end(trainer)
+        assert len(callback._saved_checkpoints) == 2
+        mock_rmtree.assert_called_once()
+
+    def test_no_save_at_end_when_disabled(self, mocker):
+        """No save at end of training when save_at_end=False"""
+        from pytorch_accelerated.callbacks import SaveTrainingStateCallback
+
+        callback = SaveTrainingStateCallback(
+            save_dir="/tmp/test_states",
+            save_at_end=False,
+        )
+        trainer = Mock()
+        trainer.save_training_state = Mock()
+        trainer.print = Mock()
+
+        callback.on_training_run_end(trainer)
+        trainer.save_training_state.assert_not_called()
+
+
+class TestWSDCheckpointCallback:
+    """Tests for WSDCheckpointCallback with split save strategy"""
+
+    def _make_trainer_and_scheduler(self):
+        """Helper to create a mock trainer with WSD scheduler."""
+        trainer = Mock()
+        trainer.save_checkpoint = Mock()
+        trainer.save_training_state = Mock()
+        trainer.load_checkpoint = Mock(return_value={"step": 100, "checkpoint_type": "wsd_post_decay"})
+        trainer.load_training_state = Mock(return_value={"step": 90, "checkpoint_type": "wsd_pre_decay"})
+        trainer.print = Mock()
+        trainer.run_config.max_num_train_steps = 100
+
+        scheduler = Mock()
+        scheduler.get_checkpoint_steps.return_value = [90, 100]
+        scheduler.decay_phase_ratio = 0.1
+        scheduler.get_decay_info.return_value = {}
+        trainer.scheduler = scheduler
+
+        return trainer, scheduler
+
+    def test_pre_decay_uses_save_training_state(self, mocker):
+        """Pre-decay checkpoint should use save_training_state (full state for continuation)"""
+        from pytorch_accelerated.callbacks import WSDCheckpointCallback
+
+        mocker.patch("pathlib.Path.mkdir")
+        callback = WSDCheckpointCallback(save_dir="/tmp/wsd_test")
+        trainer, scheduler = self._make_trainer_and_scheduler()
+
+        callback.on_training_run_start(trainer)
+
+        # Simulate reaching the pre-decay step
+        scheduler.get_current_step.return_value = 89  # total_steps = 90
+        scheduler.get_phase_info.return_value = {
+            "pre_decay_step": 90,
+            "period_end": 100,
+        }
+
+        callback.on_train_step_end(trainer, step=89)
+
+        # Should use save_training_state, NOT save_checkpoint
+        trainer.save_training_state.assert_called_once()
+        trainer.save_checkpoint.assert_not_called()
+
+        # Verify the path is a directory (no .pt extension)
+        call_args = trainer.save_training_state.call_args
+        save_path = call_args[0][0]
+        assert not save_path.endswith(".pt")
+        assert "wsd_pre_decay" in save_path
+
+    def test_post_decay_uses_save_checkpoint(self, mocker):
+        """Post-decay checkpoint should use save_checkpoint (model export)"""
+        from pytorch_accelerated.callbacks import WSDCheckpointCallback
+
+        mocker.patch("pathlib.Path.mkdir")
+        callback = WSDCheckpointCallback(save_dir="/tmp/wsd_test")
+        trainer, scheduler = self._make_trainer_and_scheduler()
+
+        callback.on_training_run_start(trainer)
+
+        # Simulate reaching the post-decay step (period end)
+        scheduler.get_current_step.return_value = 99  # total_steps = 100
+        scheduler.get_phase_info.return_value = {
+            "pre_decay_step": 90,
+            "period_end": 100,
+        }
+
+        callback.on_train_step_end(trainer, step=99)
+
+        # Should use save_checkpoint, NOT save_training_state
+        trainer.save_checkpoint.assert_called_once()
+        trainer.save_training_state.assert_not_called()
+
+        # Verify the path has .pt extension
+        call_args = trainer.save_checkpoint.call_args
+        save_path = str(call_args[0][0])
+        assert save_path.endswith(".pt")
+        assert "wsd_post_decay" in save_path
+
+    def test_load_directory_uses_load_training_state(self, mocker):
+        """Loading a directory checkpoint should use load_training_state"""
+        from pytorch_accelerated.callbacks import WSDCheckpointCallback
+
+        mocker.patch("pathlib.Path.mkdir")
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        mocker.patch("pathlib.Path.is_dir", return_value=True)
+
+        callback = WSDCheckpointCallback(
+            save_dir="/tmp/wsd_test",
+            initial_checkpoint="/tmp/wsd_test/checkpoint_90_wsd_pre_decay",
+        )
+        trainer, scheduler = self._make_trainer_and_scheduler()
+
+        callback.on_training_run_start(trainer)
+
+        trainer.load_training_state.assert_called_once()
+        trainer.load_checkpoint.assert_not_called()
+        assert callback.last_checkpoint_step == 90
+
+    def test_load_file_uses_load_checkpoint(self, mocker):
+        """Loading a .pt file checkpoint should use load_checkpoint"""
+        from pytorch_accelerated.callbacks import WSDCheckpointCallback
+
+        mocker.patch("pathlib.Path.mkdir")
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        mocker.patch("pathlib.Path.is_dir", return_value=False)
+
+        callback = WSDCheckpointCallback(
+            save_dir="/tmp/wsd_test",
+            initial_checkpoint="/tmp/wsd_test/checkpoint_100_wsd_post_decay.pt",
+        )
+        trainer, scheduler = self._make_trainer_and_scheduler()
+
+        callback.on_training_run_start(trainer)
+
+        trainer.load_checkpoint.assert_called_once()
+        trainer.load_training_state.assert_not_called()
+        assert callback.last_checkpoint_step == 100
+
+    def test_training_run_end_saves_post_decay(self, mocker):
+        """Final checkpoint at end of training should be a post-decay export"""
+        from pytorch_accelerated.callbacks import WSDCheckpointCallback
+
+        mocker.patch("pathlib.Path.mkdir")
+        callback = WSDCheckpointCallback(save_dir="/tmp/wsd_test")
+        trainer, scheduler = self._make_trainer_and_scheduler()
+
+        callback.on_training_run_start(trainer)
+        callback.last_checkpoint_step = None
+
+        # Simulate end of training at period_end
+        scheduler.get_current_step.return_value = 99  # total_steps = 100
+        scheduler.get_phase_info.return_value = {
+            "pre_decay_step": 90,
+            "period_end": 100,
+        }
+
+        callback.on_training_run_end(trainer)
+
+        # Should use save_checkpoint (post-decay export)
+        trainer.save_checkpoint.assert_called_once()
+        trainer.save_training_state.assert_not_called()
+
+
+class TestCheckpointRoundTrip:
+    """Integration tests for save/load checkpoint round-trips with real data"""
+
+    def _make_trainer(self):
+        """Create a real trainer with model, optimizer, and scheduler."""
+        model = SimpleModel(10, 1)
+        optimizer = optim.SGD(model.parameters(), lr=0.05, momentum=0.9)
+        trainer = Trainer(
+            model=model,
+            loss_func=nn.MSELoss(),
+            optimizer=optimizer,
+        )
+        # Minimal setup so save/load works without running train()
+        trainer._prepare_model_optimizer_and_dataloaders = lambda: None
+        trainer.run_config = Mock()
+        trainer.run_config.is_world_process_zero = True
+        return trainer
+
+    def test_save_load_checkpoint_weights_roundtrip(self):
+        """Model weights survive a save/load round-trip"""
+        trainer = self._make_trainer()
+
+        # Record original weights
+        original_weights = {
+            k: v.clone() for k, v in trainer.model.state_dict().items()
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path)
+
+            # Corrupt the model weights to prove load actually restores them
+            with torch.no_grad():
+                for param in trainer.model.parameters():
+                    param.fill_(999.0)
+
+            trainer.load_checkpoint(path)
+
+            # Verify weights match the original
+            for key, original_val in original_weights.items():
+                loaded_val = trainer.model.state_dict()[key]
+                assert torch.equal(original_val, loaded_val), (
+                    f"Weight mismatch for {key} after round-trip"
+                )
+
+    def test_save_load_checkpoint_optimizer_roundtrip(self):
+        """Optimizer state (momentum buffers, etc.) survives a save/load round-trip"""
+        trainer = self._make_trainer()
+
+        # Do a few fake steps so the optimizer accumulates momentum state
+        x = torch.randn(4, 10)
+        y = torch.randn(4, 1)
+        for _ in range(3):
+            trainer.optimizer.zero_grad()
+            loss = trainer.loss_func(trainer.model(x), y)
+            loss.backward()
+            trainer.optimizer.step()
+
+        # Record optimizer state after the steps
+        original_opt_state = {
+            k: {
+                sk: sv.clone() if isinstance(sv, torch.Tensor) else sv
+                for sk, sv in v.items()
+            }
+            for k, v in trainer.optimizer.state_dict()["state"].items()
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path, save_optimizer=True)
+
+            # Reset optimizer to fresh state
+            trainer.optimizer = optim.SGD(
+                trainer.model.parameters(), lr=0.05, momentum=0.9
+            )
+            assert len(trainer.optimizer.state_dict()["state"]) == 0
+
+            trainer.load_checkpoint(path, load_optimizer=True)
+
+            # Verify optimizer state was restored
+            loaded_state = trainer.optimizer.state_dict()["state"]
+            assert len(loaded_state) > 0, "Optimizer state not restored"
+            for key, original_param_state in original_opt_state.items():
+                loaded_param_state = loaded_state[key]
+                for sk, sv in original_param_state.items():
+                    if isinstance(sv, torch.Tensor):
+                        assert torch.equal(sv, loaded_param_state[sk]), (
+                            f"Optimizer state mismatch: param {key}, field {sk}"
+                        )
+
+    def test_save_load_checkpoint_scheduler_roundtrip(self):
+        """Scheduler state survives a save/load round-trip"""
+        from pytorch_accelerated.schedulers import CosineLrScheduler
+
+        trainer = self._make_trainer()
+        scheduler = CosineLrScheduler(
+            optimizer=trainer.optimizer,
+            total_num_epochs=10,
+            num_update_steps_per_epoch=100,
+        )
+        trainer.scheduler = scheduler
+
+        # Step the scheduler forward to change its state
+        for _ in range(50):
+            scheduler.step()
+
+        original_state = scheduler.state_dict()
+        assert original_state["num_updates"] == 49  # 0-indexed, 50 steps
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path, save_scheduler=True)
+
+            # Reset scheduler
+            trainer.scheduler = CosineLrScheduler(
+                optimizer=trainer.optimizer,
+                total_num_epochs=10,
+                num_update_steps_per_epoch=100,
+            )
+            assert trainer.scheduler.state_dict()["num_updates"] == -1
+
+            trainer.load_checkpoint(path, load_scheduler=True)
+
+            # Verify scheduler state was restored
+            loaded_state = trainer.scheduler.state_dict()
+            assert loaded_state["num_updates"] == 49
+
+    def test_save_load_checkpoint_custom_kwargs_roundtrip(self):
+        """Custom checkpoint_kwargs are preserved through save/load"""
+        trainer = self._make_trainer()
+
+        custom_kwargs = {
+            "step": 42,
+            "checkpoint_type": "wsd_post_decay",
+            "decay_fraction": 0.1,
+            "total_steps": 1000,
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path, checkpoint_kwargs=custom_kwargs)
+
+            checkpoint = trainer.load_checkpoint(path)
+
+            for key, expected_val in custom_kwargs.items():
+                assert key in checkpoint, f"Missing custom kwarg: {key}"
+                assert checkpoint[key] == expected_val, (
+                    f"Custom kwarg {key}: expected {expected_val}, got {checkpoint[key]}"
+                )
+
+    def test_load_checkpoint_skip_optimizer(self):
+        """load_optimizer=False skips optimizer even when checkpoint has one"""
+        trainer = self._make_trainer()
+
+        # Do a step to create optimizer state
+        x = torch.randn(4, 10)
+        y = torch.randn(4, 1)
+        trainer.optimizer.zero_grad()
+        loss = trainer.loss_func(trainer.model(x), y)
+        loss.backward()
+        trainer.optimizer.step()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path, save_optimizer=True)
+
+            # Reset optimizer
+            trainer.optimizer = optim.SGD(
+                trainer.model.parameters(), lr=0.05, momentum=0.9
+            )
+            assert len(trainer.optimizer.state_dict()["state"]) == 0
+
+            trainer.load_checkpoint(path, load_optimizer=False)
+
+            # Optimizer should still be empty
+            assert len(trainer.optimizer.state_dict()["state"]) == 0
+
+    def test_load_checkpoint_skip_scheduler(self):
+        """load_scheduler=False skips scheduler even when checkpoint has one"""
+        from pytorch_accelerated.schedulers import CosineLrScheduler
+
+        trainer = self._make_trainer()
+        scheduler = CosineLrScheduler(
+            optimizer=trainer.optimizer,
+            total_num_epochs=10,
+            num_update_steps_per_epoch=100,
+        )
+        trainer.scheduler = scheduler
+
+        for _ in range(50):
+            scheduler.step()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(path, save_scheduler=True)
+
+            # Reset scheduler
+            trainer.scheduler = CosineLrScheduler(
+                optimizer=trainer.optimizer,
+                total_num_epochs=10,
+                num_update_steps_per_epoch=100,
+            )
+            assert trainer.scheduler.state_dict()["num_updates"] == -1
+
+            trainer.load_checkpoint(path, load_scheduler=False)
+
+            # Scheduler should still be at initial state
+            assert trainer.scheduler.state_dict()["num_updates"] == -1
+
+    def test_save_checkpoint_without_optimizer_or_scheduler(self):
+        """Checkpoint without optimizer/scheduler only contains model weights"""
+        trainer = self._make_trainer()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/checkpoint.pt"
+            trainer.save_checkpoint(
+                path, save_optimizer=False, save_scheduler=False
+            )
+
+            checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+            assert "model_state_dict" in checkpoint
+            assert "optimizer_state_dict" not in checkpoint
+            assert "scheduler_state_dict" not in checkpoint
+
+    def test_wsd_metadata_roundtrip(self):
+        """WSD-style metadata (step, checkpoint_type, decay_fraction) survives round-trip"""
+        trainer = self._make_trainer()
+
+        wsd_kwargs = {
+            "step": 9000,
+            "checkpoint_type": "wsd_post_decay",
+            "total_steps": 10000,
+            "decay_fraction": 0.1,
+            "timestamp": "2026-02-09T12:00:00",
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/wsd_checkpoint.pt"
+            trainer.save_checkpoint(
+                path,
+                save_optimizer=True,
+                save_scheduler=False,
+                checkpoint_kwargs=wsd_kwargs,
+            )
+
+            checkpoint = trainer.load_checkpoint(path, load_scheduler=False)
+
+            # All WSD metadata should be present and correct
+            assert checkpoint["step"] == 9000
+            assert checkpoint["checkpoint_type"] == "wsd_post_decay"
+            assert checkpoint["total_steps"] == 10000
+            assert checkpoint["decay_fraction"] == 0.1
+            assert checkpoint["timestamp"] == "2026-02-09T12:00:00"
+
+            # Model weights should also be there
+            assert "model_state_dict" in checkpoint
+
+    def test_full_roundtrip_weights_and_training_resume(self):
+        """End-to-end: save everything, corrupt state, load, verify all restored"""
+        from pytorch_accelerated.schedulers import CosineLrScheduler
+
+        trainer = self._make_trainer()
+        scheduler = CosineLrScheduler(
+            optimizer=trainer.optimizer,
+            total_num_epochs=10,
+            num_update_steps_per_epoch=100,
+        )
+        trainer.scheduler = scheduler
+
+        # Train a few steps to accumulate state
+        x = torch.randn(4, 10)
+        y = torch.randn(4, 1)
+        for _ in range(25):
+            trainer.optimizer.zero_grad()
+            loss = trainer.loss_func(trainer.model(x), y)
+            loss.backward()
+            trainer.optimizer.step()
+            scheduler.step()
+
+        # Snapshot everything
+        original_weights = {
+            k: v.clone() for k, v in trainer.model.state_dict().items()
+        }
+        original_lr = trainer.optimizer.param_groups[0]["lr"]
+        original_scheduler_updates = scheduler.state_dict()["num_updates"]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = f"{tmpdir}/full_checkpoint.pt"
+            trainer.save_checkpoint(
+                path,
+                save_optimizer=True,
+                save_scheduler=True,
+                checkpoint_kwargs={"epoch": 3},
+            )
+
+            # Corrupt everything
+            with torch.no_grad():
+                for param in trainer.model.parameters():
+                    param.fill_(0.0)
+            trainer.optimizer = optim.SGD(
+                trainer.model.parameters(), lr=0.05, momentum=0.9
+            )
+            trainer.scheduler = CosineLrScheduler(
+                optimizer=trainer.optimizer,
+                total_num_epochs=10,
+                num_update_steps_per_epoch=100,
+            )
+
+            # Load and verify
+            checkpoint = trainer.load_checkpoint(path)
+
+            # Weights restored
+            for key, original_val in original_weights.items():
+                assert torch.equal(original_val, trainer.model.state_dict()[key])
+
+            # Optimizer has state
+            assert len(trainer.optimizer.state_dict()["state"]) > 0
+
+            # Scheduler restored
+            assert trainer.scheduler.state_dict()["num_updates"] == original_scheduler_updates
+
+            # Custom metadata preserved
+            assert checkpoint["epoch"] == 3
